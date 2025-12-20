@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../data/models/models.dart';
 
 /// 媒体库卡片组件（标题在卡片下方）
-class LibraryPosterCard extends StatelessWidget {
+class LibraryPosterCard extends StatefulWidget {
   final MediaItem item;
   final VoidCallback? onTap;
   final double width;
@@ -16,94 +16,112 @@ class LibraryPosterCard extends StatelessWidget {
   });
 
   @override
+  State<LibraryPosterCard> createState() => _LibraryPosterCardState();
+}
+
+class _LibraryPosterCardState extends State<LibraryPosterCard> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     // 海报宽高比 2:3
-    final posterHeight = width * 1.5;
+    final posterHeight = widget.width * 1.5;
 
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: width,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // 海报图片
-            Container(
-              width: width,
-              height: posterHeight,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedScale(
+          scale: _isHovered ? 1.05 : 1.0,
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: SizedBox(
+            width: widget.width,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 海报图片
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: widget.width,
+                  height: posterHeight,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: _isHovered ? 0.3 : 0.15),
+                        blurRadius: _isHovered ? 16 : 8,
+                        offset: Offset(0, _isHovered ? 8 : 4),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    // 海报图片
-                    _buildPosterImage(),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        // 海报图片
+                        _buildPosterImage(),
 
-                    // 评分角标（右下角）
-                    if (item.rating != null && item.rating! > 0)
-                      Positioned(
-                        bottom: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _getRatingColor(item.rating!),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            item.rating!.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                        // 评分角标（右下角）
+                        if (widget.item.rating != null && widget.item.rating! > 0)
+                          Positioned(
+                            bottom: 8,
+                            right: 8,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _getRatingColor(widget.item.rating!),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                widget.item.rating!.toStringAsFixed(1),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+
+                const SizedBox(height: 8),
+
+                // 标题
+                Text(
+                  widget.item.title,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+
+                const SizedBox(height: 2),
+
+                // 副标题：电影显示日期，电视剧显示季数
+                Text(
+                  _getSubtitle(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-
-            const SizedBox(height: 8),
-
-            // 标题
-            Text(
-              item.title,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-
-            const SizedBox(height: 2),
-
-            // 副标题：电影显示日期，电视剧显示季数
-            Text(
-              _getSubtitle(),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.outline,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -122,29 +140,29 @@ class LibraryPosterCard extends StatelessWidget {
 
   /// 获取副标题
   String _getSubtitle() {
-    if (item.type == MediaType.movie) {
+    if (widget.item.type == MediaType.movie) {
       // 电影显示上映日期
-      if (item.releaseDate != null) {
-        return item.releaseDate!.toString().split(' ')[0];
-      } else if (item.year != null) {
-        return '${item.year}';
+      if (widget.item.releaseDate != null) {
+        return widget.item.releaseDate!.toString().split(' ')[0];
+      } else if (widget.item.year != null) {
+        return '${widget.item.year}';
       }
       return '';
     } else {
       // 电视剧显示季数
-      if (item.numberOfSeasons != null && item.numberOfSeasons! > 0) {
-        return '共${item.numberOfSeasons}季';
-      } else if (item.year != null) {
-        return '${item.year}';
+      if (widget.item.numberOfSeasons != null && widget.item.numberOfSeasons! > 0) {
+        return '共${widget.item.numberOfSeasons}季';
+      } else if (widget.item.year != null) {
+        return '${widget.item.year}';
       }
       return '';
     }
   }
 
   Widget _buildPosterImage() {
-    if (item.posterPath != null && item.posterPath!.isNotEmpty) {
+    if (widget.item.posterPath != null && widget.item.posterPath!.isNotEmpty) {
       return CachedNetworkImage(
-        imageUrl: item.posterPath!,
+        imageUrl: widget.item.posterPath!,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),
