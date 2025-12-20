@@ -107,7 +107,42 @@ class MediaService {
   Future<ApiResponse<TvShow>> getTvShowDetail(int id) async {
     return _client.get<TvShow>(
       ApiConstants.tvShowDetail(id),
-      fromJson: (json) => TvShow.fromJson(json as Map<String, dynamic>),
+      fromJson: (json) {
+        final data = json as Map<String, dynamic>;
+        // API 返回格式: {"tv_show": {...}, "seasons": [{"season": {...}, "episodes": [...]}]}
+        final tvShowData = data['tv_show'] as Map<String, dynamic>?;
+        final seasonsData = data['seasons'] as List<dynamic>?;
+
+        if (tvShowData == null) {
+          throw Exception('Invalid response: tv_show is null');
+        }
+
+        // 解析 seasons，将嵌套的 season 对象和 episodes 提取出来
+        List<Season>? seasons;
+        if (seasonsData != null) {
+          seasons = seasonsData.map((item) {
+            final seasonItem = item as Map<String, dynamic>;
+            final seasonData = seasonItem['season'] as Map<String, dynamic>;
+            final episodesData = seasonItem['episodes'] as List<dynamic>?;
+
+            // 将 episodes 注入到 season 数据中
+            final seasonWithEpisodes = Map<String, dynamic>.from(seasonData);
+            if (episodesData != null) {
+              seasonWithEpisodes['episodes'] = episodesData;
+            }
+
+            return Season.fromJson(seasonWithEpisodes);
+          }).toList();
+        }
+
+        // 创建 TvShow 并注入 seasons
+        final tvShowWithSeasons = Map<String, dynamic>.from(tvShowData);
+        if (seasons != null) {
+          tvShowWithSeasons['seasons'] = seasons.map((s) => s.toJson()).toList();
+        }
+
+        return TvShow.fromJson(tvShowWithSeasons);
+      },
     );
   }
 
