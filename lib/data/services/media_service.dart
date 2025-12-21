@@ -75,6 +75,8 @@ class MediaService {
   Future<ApiResponse<Movie>> scrapeMovie(int id) async {
     return _client.post<Movie>(
       ApiConstants.movieScrape(id),
+      // 后端电影刮削接口当前要求 body 为合法 JSON（允许空对象）。
+      data: const {},
       fromJson: (json) => Movie.fromJson(json as Map<String, dynamic>),
     );
   }
@@ -196,6 +198,7 @@ class MediaService {
   Future<ApiResponse<TvShow>> scrapeTvShow(int id) async {
     return _client.post<TvShow>(
       ApiConstants.tvShowScrape(id),
+      data: const {},
       fromJson: (json) => TvShow.fromJson(json as Map<String, dynamic>),
     );
   }

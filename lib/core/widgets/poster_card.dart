@@ -1,9 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../utils/image_proxy.dart';
 import '../../data/models/models.dart';
+import '../../providers/server_provider.dart';
 
 /// 海报卡片组件
-class PosterCard extends StatelessWidget {
+class PosterCard extends ConsumerWidget {
   final MediaItem item;
   final VoidCallback? onTap;
   final double? width;
@@ -18,8 +21,9 @@ class PosterCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return GestureDetector(
       onTap: onTap,
@@ -42,7 +46,7 @@ class PosterCard extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // 海报图片
-              _buildPosterImage(),
+              _buildPosterImage(serverBaseUrl),
 
               // 渐变遮罩
               Positioned(
@@ -95,11 +99,7 @@ class PosterCard extends StatelessWidget {
                           const SizedBox(width: 8),
                         ],
                         if (item.rating != null && item.rating! > 0) ...[
-                          const Icon(
-                            Icons.star,
-                            size: 14,
-                            color: Colors.amber,
-                          ),
+                          const Icon(Icons.star, size: 14, color: Colors.amber),
                           const SizedBox(width: 2),
                           Text(
                             item.rating!.toStringAsFixed(1),
@@ -119,11 +119,15 @@ class PosterCard extends StatelessWidget {
                 top: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
-                    color: item.type == MediaType.movie
-                        ? Colors.blue.withValues(alpha: 0.8)
-                        : Colors.purple.withValues(alpha: 0.8),
+                    color:
+                        item.type == MediaType.movie
+                            ? Colors.blue.withValues(alpha: 0.8)
+                            : Colors.purple.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -143,10 +147,14 @@ class PosterCard extends StatelessWidget {
     );
   }
 
-  Widget _buildPosterImage() {
+  Widget _buildPosterImage(String? serverBaseUrl) {
     if (item.posterPath != null && item.posterPath!.isNotEmpty) {
+      final posterUrl = ImageProxy.proxyTMDBIfNeeded(
+        item.posterPath!,
+        serverBaseUrl,
+      );
       return CachedNetworkImage(
-        imageUrl: item.posterPath!,
+        imageUrl: posterUrl,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),
@@ -159,11 +167,7 @@ class PosterCard extends StatelessWidget {
     return Container(
       color: Colors.grey[800],
       child: const Center(
-        child: Icon(
-          Icons.movie_outlined,
-          size: 48,
-          color: Colors.white30,
-        ),
+        child: Icon(Icons.movie_outlined, size: 48, color: Colors.white30),
       ),
     );
   }

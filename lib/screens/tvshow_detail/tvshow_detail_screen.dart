@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -29,6 +31,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
+    final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -72,6 +75,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                       leading: AppBackButton(onPressed: () => context.pop()),
                       title: Text(tvShow?.name ?? '剧集详情'),
                       actions: [
+                        if (tvShow != null)
+                          IconButton(
+                            tooltip: '重新刮削',
+                            icon: const Icon(Icons.auto_fix_high),
+                            onPressed:
+                                () => _scrapeTvShow(context, widget.tvShowId),
+                          ),
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           onPressed:
@@ -96,6 +106,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             return const AppErrorWidget(message: '剧集不存在');
           }
 
+          final cast =
+              (tvShow.castDetail != null && tvShow.castDetail!.isNotEmpty)
+                  ? tvShow.castDetail!
+                  : (tvShow.cast != null
+                      ? tvShow.cast!
+                          .where((e) => e.trim().isNotEmpty)
+                          .map((e) => CastMember(name: e.trim()))
+                          .toList()
+                      : const <CastMember>[]);
+
           // 默认选中第一季
           if (_selectedSeasonId == null &&
               tvShow.seasons != null &&
@@ -117,7 +137,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
               // 背景图区域 - 作为滚动内容的一部分
               SliverToBoxAdapter(
-                child: _buildBackgroundImage(tvShow, screenSize),
+                child: _buildBackgroundImage(tvShow, screenSize, serverBaseUrl),
               ),
 
               // Hero Section
@@ -145,6 +165,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     episodes: selectedSeason.episodes!,
                     tvShowId: widget.tvShowId,
                     seasonId: selectedSeason.id,
+                    serverBaseUrl: serverBaseUrl,
                   ),
                 )
               else if (_selectedSeasonId != null)
@@ -156,7 +177,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 ),
 
               // 相关演员区
-              SliverToBoxAdapter(child: _buildCastSection(context, theme)),
+              if (cast.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _buildCastSection(context, theme, cast, serverBaseUrl),
+                ),
 
               // 文件信息区
               SliverToBoxAdapter(
@@ -173,16 +197,24 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建背景图 - 清晰展示90%，底部渐变过渡
-  Widget _buildBackgroundImage(TvShow tvShow, Size screenSize) {
+  Widget _buildBackgroundImage(
+    TvShow tvShow,
+    Size screenSize,
+    String? serverBaseUrl,
+  ) {
     final imagePath = tvShow.backdropPath ?? tvShow.posterPath;
     final imageHeight = screenSize.height * 0.7;
+    final imageUrl =
+        imagePath != null && imagePath.isNotEmpty
+            ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
+            : null;
 
     return Stack(
       children: [
         // 背景图 - 清晰显示
-        if (imagePath != null && imagePath.isNotEmpty)
+        if (imageUrl != null && imageUrl.isNotEmpty)
           CachedNetworkImage(
-            imageUrl: imagePath,
+            imageUrl: imageUrl,
             width: double.infinity,
             height: imageHeight,
             fit: BoxFit.cover,
@@ -241,6 +273,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       ),
       actions: [
+        IconButton(
+          icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),
+          onPressed: () => _scrapeTvShow(context, widget.tvShowId),
+        ),
         IconButton(
           icon: const Icon(Icons.refresh, color: Colors.black, size: 20),
           onPressed:
@@ -502,16 +538,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建相关演员区
-  Widget _buildCastSection(BuildContext context, ThemeData theme) {
-    // 模拟演员数据 - 实际项目中应从 API 获取
-    final castMembers = <Map<String, String>>[
-      {'name': '演员1', 'role': '角色1'},
-      {'name': '演员2', 'role': '角色2'},
-      {'name': '演员3', 'role': '角色3'},
-      {'name': '演员4', 'role': '角色4'},
-      {'name': '演员5', 'role': '角色5'},
-    ];
-
+  Widget _buildCastSection(
+    BuildContext context,
+    ThemeData theme,
+    List<CastMember> cast,
+    String? serverBaseUrl,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Column(
@@ -537,11 +569,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             child: ListView.separated(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               scrollDirection: Axis.horizontal,
-              itemCount: castMembers.length,
+              itemCount: cast.length,
               separatorBuilder: (_, __) => const SizedBox(width: 20),
               itemBuilder: (context, index) {
-                final cast = castMembers[index];
-                return _buildCastCard(cast['name']!, cast['role']!);
+                return _buildCastCard(cast[index], serverBaseUrl);
               },
             ),
           ),
@@ -551,7 +582,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建演员卡片
-  Widget _buildCastCard(String name, String role) {
+  Widget _buildCastCard(CastMember member, String? serverBaseUrl) {
+    final name = member.name;
+    final role = member.character;
+    final profileUrl = member.profilePath;
+
     return SizedBox(
       width: 80,
       child: Column(
@@ -568,10 +603,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 width: 2,
               ),
             ),
-            child: Icon(
-              Icons.person,
-              color: Colors.white.withValues(alpha: 0.5),
-              size: 32,
+            child: ClipOval(
+              child: CastAvatar(
+                size: 64,
+                imageUrl: profileUrl,
+                serverBaseUrl: serverBaseUrl,
+                iconColor: Colors.white.withValues(alpha: 0.5),
+                iconSize: 32,
+              ),
             ),
           ),
           const SizedBox(height: 8),
@@ -589,20 +628,90 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             textAlign: TextAlign.center,
           ),
 
-          // 角色
-          Text(
-            '饰 $role',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
-              fontSize: 10,
+          // 角色信息（TMDB credits 可提供 character；其它来源可能为空）
+          if (role != null && role.isNotEmpty)
+            Text(
+              '饰 $role',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 10,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
         ],
       ),
     );
+  }
+
+  Future<void> _scrapeTvShow(BuildContext context, int id) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('未连接到服务器')));
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder:
+          (context) => AlertDialog(
+            title: const Text('重新刮削'),
+            content: const Text('将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('开始'),
+              ),
+            ],
+          ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => const AlertDialog(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('正在刮削...'),
+              ],
+            ),
+          ),
+    );
+
+    final resp = await service.scrapeTvShow(id);
+
+    if (context.mounted) {
+      Navigator.pop(context);
+    }
+    if (!context.mounted) return;
+
+    if (resp.isSuccess) {
+      ref.invalidate(tvShowDetailProvider(id));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('刮削完成')));
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(resp.error ?? '刮削失败')));
   }
 
   /// 构建文件信息区
@@ -670,11 +779,13 @@ class _EpisodesCarouselDirect extends StatelessWidget {
   final List<Episode> episodes;
   final int tvShowId;
   final int seasonId;
+  final String? serverBaseUrl;
 
   const _EpisodesCarouselDirect({
     required this.episodes,
     required this.tvShowId,
     required this.seasonId,
+    required this.serverBaseUrl,
   });
 
   @override
@@ -692,6 +803,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
             episode: episode,
             tvShowId: tvShowId,
             seasonId: seasonId,
+            serverBaseUrl: serverBaseUrl,
           );
         },
       ),
@@ -708,6 +820,7 @@ class _EpisodesCarousel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final serverBaseUrl = ref.watch(serverUrlProvider);
     final episodesAsync = ref.watch(
       seasonEpisodesProvider((tvShowId: tvShowId, seasonId: seasonId)),
     );
@@ -752,6 +865,7 @@ class _EpisodesCarousel extends ConsumerWidget {
                 episode: episode,
                 tvShowId: tvShowId,
                 seasonId: seasonId,
+                serverBaseUrl: serverBaseUrl,
               );
             },
           ),
@@ -766,11 +880,13 @@ class _EpisodeCard extends StatelessWidget {
   final Episode episode;
   final int tvShowId;
   final int seasonId;
+  final String? serverBaseUrl;
 
   const _EpisodeCard({
     required this.episode,
     required this.tvShowId,
     required this.seasonId,
+    required this.serverBaseUrl,
   });
 
   @override
@@ -795,7 +911,10 @@ class _EpisodeCard extends StatelessWidget {
                   child:
                       episode.stillPath != null && episode.stillPath!.isNotEmpty
                           ? CachedNetworkImage(
-                            imageUrl: episode.stillPath!,
+                            imageUrl: ImageProxy.proxyTMDBIfNeeded(
+                              episode.stillPath!,
+                              serverBaseUrl,
+                            ),
                             width: 160,
                             height: 90,
                             fit: BoxFit.cover,

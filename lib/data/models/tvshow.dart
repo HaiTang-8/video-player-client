@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'season.dart';
+import 'cast_member.dart';
 
 /// 剧集模型
 class TvShow {
@@ -16,6 +17,10 @@ class TvShow {
   final int? numberOfSeasons;
   final int? numberOfEpisodes;
   final List<String>? genres;
+  /// 演员表（按展示顺序）
+  final List<String>? cast;
+  /// 演员详情（含头像/角色等）
+  final List<CastMember>? castDetail;
   final String? tmdbId;
   final String? imdbId;
   final String? status;
@@ -37,6 +42,8 @@ class TvShow {
     this.numberOfSeasons,
     this.numberOfEpisodes,
     this.genres,
+    this.cast,
+    this.castDetail,
     this.tmdbId,
     this.imdbId,
     this.status,
@@ -64,6 +71,8 @@ class TvShow {
       numberOfSeasons: (json['number_of_seasons'] as num?)?.toInt(),
       numberOfEpisodes: (json['number_of_episodes'] as num?)?.toInt(),
       genres: _parseGenres(json['genres']),
+      cast: _parseGenres(json['cast']),
+      castDetail: _parseCastDetail(json['cast_detail']),
       tmdbId: json['tmdb_id']?.toString(),
       imdbId: json['imdb_id']?.toString(),
       status: json['status'] as String?,
@@ -91,6 +100,8 @@ class TvShow {
         'number_of_seasons': numberOfSeasons,
         'number_of_episodes': numberOfEpisodes,
         'genres': genres,
+        'cast': cast,
+        'cast_detail': castDetail?.map((e) => e.toJson()).toList(),
         'tmdb_id': tmdbId,
         'imdb_id': imdbId,
         'status': status,
@@ -142,6 +153,35 @@ class TvShow {
         }
       } catch (_) {}
     }
+    return null;
+  }
+
+  static List<CastMember>? _parseCastDetail(dynamic value) {
+    if (value == null) return null;
+    dynamic decoded = value;
+    if (value is String && value.isNotEmpty) {
+      try {
+        decoded = jsonDecode(value);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (decoded is List) {
+      final out = <CastMember>[];
+      for (final item in decoded) {
+        if (item is Map) {
+          out.add(CastMember.fromJson(Map<String, dynamic>.from(item)));
+          continue;
+        }
+        final name = item?.toString() ?? '';
+        if (name.isNotEmpty) {
+          out.add(CastMember(name: name));
+        }
+      }
+      return out.isEmpty ? null : out;
+    }
+
     return null;
   }
 }

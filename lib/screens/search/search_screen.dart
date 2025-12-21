@@ -7,6 +7,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -113,6 +114,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildBody(SearchState state, ThemeData theme) {
+    final serverBaseUrl = ref.watch(serverUrlProvider);
     if (state.query.isEmpty) {
       return const EmptyWidget(message: '输入关键词搜索电影或剧集', icon: Icons.search);
     }
@@ -144,7 +146,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          ...state.movies.map((movie) => _MovieSearchItem(movie: movie)),
+          ...state.movies.map(
+            (movie) =>
+                _MovieSearchItem(movie: movie, serverBaseUrl: serverBaseUrl),
+          ),
           const SizedBox(height: 24),
         ],
 
@@ -157,7 +162,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          ...state.tvShows.map((tvShow) => _TvShowSearchItem(tvShow: tvShow)),
+          ...state.tvShows.map(
+            (tvShow) =>
+                _TvShowSearchItem(tvShow: tvShow, serverBaseUrl: serverBaseUrl),
+          ),
         ],
       ],
     );
@@ -167,8 +175,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 /// 电影搜索结果项
 class _MovieSearchItem extends StatelessWidget {
   final Movie movie;
+  final String? serverBaseUrl;
 
-  const _MovieSearchItem({required this.movie});
+  const _MovieSearchItem({required this.movie, required this.serverBaseUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -189,7 +198,10 @@ class _MovieSearchItem extends StatelessWidget {
                 child:
                     movie.posterPath != null && movie.posterPath!.isNotEmpty
                         ? CachedNetworkImage(
-                          imageUrl: movie.posterPath!,
+                          imageUrl: ImageProxy.proxyTMDBIfNeeded(
+                            movie.posterPath!,
+                            serverBaseUrl,
+                          ),
                           width: 60,
                           height: 90,
                           fit: BoxFit.cover,
@@ -274,8 +286,9 @@ class _MovieSearchItem extends StatelessWidget {
 /// 剧集搜索结果项
 class _TvShowSearchItem extends StatelessWidget {
   final TvShow tvShow;
+  final String? serverBaseUrl;
 
-  const _TvShowSearchItem({required this.tvShow});
+  const _TvShowSearchItem({required this.tvShow, required this.serverBaseUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -296,7 +309,10 @@ class _TvShowSearchItem extends StatelessWidget {
                 child:
                     tvShow.posterPath != null && tvShow.posterPath!.isNotEmpty
                         ? CachedNetworkImage(
-                          imageUrl: tvShow.posterPath!,
+                          imageUrl: ImageProxy.proxyTMDBIfNeeded(
+                            tvShow.posterPath!,
+                            serverBaseUrl,
+                          ),
                           width: 60,
                           height: 90,
                           fit: BoxFit.cover,

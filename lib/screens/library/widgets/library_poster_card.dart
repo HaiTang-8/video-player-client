@@ -1,9 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/models.dart';
+import '../../../core/utils/image_proxy.dart';
+import '../../../providers/server_provider.dart';
 
 /// 媒体库卡片组件（标题在卡片下方）
-class LibraryPosterCard extends StatefulWidget {
+class LibraryPosterCard extends ConsumerStatefulWidget {
   final MediaItem item;
   final VoidCallback? onTap;
   final double width;
@@ -16,15 +19,16 @@ class LibraryPosterCard extends StatefulWidget {
   });
 
   @override
-  State<LibraryPosterCard> createState() => _LibraryPosterCardState();
+  ConsumerState<LibraryPosterCard> createState() => _LibraryPosterCardState();
 }
 
-class _LibraryPosterCardState extends State<LibraryPosterCard> {
+class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
   bool _isHovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final serverBaseUrl = ref.watch(serverUrlProvider);
     // 海报宽高比 2:3
     final posterHeight = widget.width * 1.5;
 
@@ -53,7 +57,9 @@ class _LibraryPosterCardState extends State<LibraryPosterCard> {
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: _isHovered ? 0.3 : 0.15),
+                        color: Colors.black.withValues(
+                          alpha: _isHovered ? 0.3 : 0.15,
+                        ),
                         blurRadius: _isHovered ? 16 : 8,
                         offset: Offset(0, _isHovered ? 8 : 4),
                       ),
@@ -65,10 +71,11 @@ class _LibraryPosterCardState extends State<LibraryPosterCard> {
                       fit: StackFit.expand,
                       children: [
                         // 海报图片
-                        _buildPosterImage(),
+                        _buildPosterImage(serverBaseUrl),
 
                         // 评分角标（右下角）
-                        if (widget.item.rating != null && widget.item.rating! > 0)
+                        if (widget.item.rating != null &&
+                            widget.item.rating! > 0)
                           Positioned(
                             bottom: 8,
                             right: 8,
@@ -150,7 +157,8 @@ class _LibraryPosterCardState extends State<LibraryPosterCard> {
       return '';
     } else {
       // 电视剧显示季数
-      if (widget.item.numberOfSeasons != null && widget.item.numberOfSeasons! > 0) {
+      if (widget.item.numberOfSeasons != null &&
+          widget.item.numberOfSeasons! > 0) {
         return '共${widget.item.numberOfSeasons}季';
       } else if (widget.item.year != null) {
         return '${widget.item.year}';
@@ -159,10 +167,14 @@ class _LibraryPosterCardState extends State<LibraryPosterCard> {
     }
   }
 
-  Widget _buildPosterImage() {
+  Widget _buildPosterImage(String? serverBaseUrl) {
     if (widget.item.posterPath != null && widget.item.posterPath!.isNotEmpty) {
+      final posterUrl = ImageProxy.proxyTMDBIfNeeded(
+        widget.item.posterPath!,
+        serverBaseUrl,
+      );
       return CachedNetworkImage(
-        imageUrl: widget.item.posterPath!,
+        imageUrl: posterUrl,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),
@@ -175,11 +187,7 @@ class _LibraryPosterCardState extends State<LibraryPosterCard> {
     return Container(
       color: Colors.grey[300],
       child: const Center(
-        child: Icon(
-          Icons.movie_outlined,
-          size: 40,
-          color: Colors.grey,
-        ),
+        child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey),
       ),
     );
   }

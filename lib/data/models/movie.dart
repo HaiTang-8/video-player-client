@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'cast_member.dart';
+
 /// 电影模型
 class Movie {
   final int id;
@@ -13,6 +15,10 @@ class Movie {
   final DateTime? releaseDate;
   final int? runtime;
   final List<String>? genres;
+  /// 演员表（按展示顺序）
+  final List<String>? cast;
+  /// 演员详情（含头像/角色等）
+  final List<CastMember>? castDetail;
   final String? tmdbId;
   final String? imdbId;
   final String? filePath;
@@ -32,6 +38,8 @@ class Movie {
     this.releaseDate,
     this.runtime,
     this.genres,
+    this.cast,
+    this.castDetail,
     this.tmdbId,
     this.imdbId,
     this.filePath,
@@ -54,7 +62,9 @@ class Movie {
           ? DateTime.tryParse(json['release_date'].toString())
           : null,
       runtime: (json['runtime'] as num?)?.toInt(),
-      genres: _parseGenres(json['genres']),
+      genres: _parseStringList(json['genres']),
+      cast: _parseStringList(json['cast']),
+      castDetail: _parseCastDetail(json['cast_detail']),
       tmdbId: json['tmdb_id']?.toString(),
       imdbId: json['imdb_id']?.toString(),
       filePath: json['file_path'] as String?,
@@ -80,6 +90,8 @@ class Movie {
         'release_date': releaseDate?.toIso8601String(),
         'runtime': runtime,
         'genres': genres,
+        'cast': cast,
+        'cast_detail': castDetail?.map((e) => e.toJson()).toList(),
         'tmdb_id': tmdbId,
         'imdb_id': imdbId,
         'file_path': filePath,
@@ -110,7 +122,7 @@ class Movie {
     return '${mb.toStringAsFixed(2)} MB';
   }
 
-  static List<String>? _parseGenres(dynamic value) {
+  static List<String>? _parseStringList(dynamic value) {
     if (value == null) return null;
     if (value is List) {
       return value.map((e) => e.toString()).toList();
@@ -123,6 +135,36 @@ class Movie {
         }
       } catch (_) {}
     }
+    return null;
+  }
+
+  static List<CastMember>? _parseCastDetail(dynamic value) {
+    if (value == null) return null;
+    dynamic decoded = value;
+    if (value is String && value.isNotEmpty) {
+      try {
+        decoded = jsonDecode(value);
+      } catch (_) {
+        return null;
+      }
+    }
+
+    if (decoded is List) {
+      final out = <CastMember>[];
+      for (final item in decoded) {
+        if (item is Map) {
+          out.add(CastMember.fromJson(Map<String, dynamic>.from(item)));
+          continue;
+        }
+        // 兼容后端历史数据：cast_detail 可能为空/缺失，也可能误传为姓名列表。
+        final name = item?.toString() ?? '';
+        if (name.isNotEmpty) {
+          out.add(CastMember(name: name));
+        }
+      }
+      return out.isEmpty ? null : out;
+    }
+
     return null;
   }
 }
