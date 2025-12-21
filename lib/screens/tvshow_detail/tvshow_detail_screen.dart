@@ -2,6 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -25,15 +28,69 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final tvShowAsync = ref.watch(tvShowDetailProvider(widget.tvShowId));
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar:
+          isDesktop
+              ? tvShowAsync.when(
+                loading:
+                    () => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: const Text('加载中...'),
+                      actions: const [],
+                    ),
+                error:
+                    (error, stack) => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: const Text('剧集详情'),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed:
+                              () => ref.invalidate(
+                                tvShowDetailProvider(widget.tvShowId),
+                              ),
+                        ),
+                      ],
+                    ),
+                data:
+                    (tvShow) => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让“资源名称”紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: Text(tvShow?.name ?? '剧集详情'),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed:
+                              () => ref.invalidate(
+                                tvShowDetailProvider(widget.tvShowId),
+                              ),
+                        ),
+                      ],
+                    ),
+              )
+              : null,
       body: tvShowAsync.when(
         loading: () => const LoadingWidget(message: '加载中...'),
-        error: (error, stack) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
-        ),
+        error:
+            (error, stack) => AppErrorWidget(
+              message: error.toString(),
+              onRetry:
+                  () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
+            ),
         data: (tvShow) {
           if (tvShow == null) {
             return const AppErrorWidget(message: '剧集不存在');
@@ -47,15 +104,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             _selectedSeasonIndex = 0;
           }
 
-          final selectedSeason = tvShow.seasons != null &&
-                  _selectedSeasonIndex < tvShow.seasons!.length
-              ? tvShow.seasons![_selectedSeasonIndex]
-              : null;
+          final selectedSeason =
+              tvShow.seasons != null &&
+                      _selectedSeasonIndex < tvShow.seasons!.length
+                  ? tvShow.seasons![_selectedSeasonIndex]
+                  : null;
 
           return CustomScrollView(
             slivers: [
               // 顶部导航栏
-              _buildAppBar(context, tvShow),
+              if (!isDesktop) _buildAppBar(context, tvShow),
 
               // 背景图区域 - 作为滚动内容的一部分
               SliverToBoxAdapter(
@@ -65,7 +123,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               // Hero Section
               SliverToBoxAdapter(
                 child: _buildHeroSection(
-                    context, theme, tvShow, selectedSeason),
+                  context,
+                  theme,
+                  tvShow,
+                  selectedSeason,
+                ),
               ),
 
               // 剧集选择区
@@ -94,9 +156,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 ),
 
               // 相关演员区
-              SliverToBoxAdapter(
-                child: _buildCastSection(context, theme),
-              ),
+              SliverToBoxAdapter(child: _buildCastSection(context, theme)),
 
               // 文件信息区
               SliverToBoxAdapter(
@@ -104,9 +164,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               ),
 
               // 底部间距
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 32),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
             ],
           );
         },
@@ -129,20 +187,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             height: imageHeight,
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
-            errorWidget: (_, __, ___) => Container(
-              height: imageHeight,
-              color: Colors.black,
-            ),
-            placeholder: (_, __) => Container(
-              height: imageHeight,
-              color: Colors.black,
-            ),
+            errorWidget:
+                (_, __, ___) =>
+                    Container(height: imageHeight, color: Colors.black),
+            placeholder:
+                (_, __) => Container(height: imageHeight, color: Colors.black),
           )
         else
-          Container(
-            height: imageHeight,
-            color: Colors.black,
-          ),
+          Container(height: imageHeight, color: Colors.black),
 
         // 渐变蒙版 - 底部10%渐变到黑色
         Positioned(
@@ -155,10 +207,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black,
-                ],
+                colors: [Colors.transparent, Colors.black],
               ),
             ),
           ),
@@ -174,9 +223,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.black, size: 20),
+      // 移动端顶部导航：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）。
+      centerTitle: false,
+      automaticallyImplyLeading: false,
+      leadingWidth: kAppBackButtonWidth,
+      titleSpacing: 1,
+      leading: AppBackButton(
         onPressed: () => context.pop(),
+        color: Colors.black,
       ),
       title: Text(
         tvShow.name,
@@ -189,8 +243,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       actions: [
         IconButton(
           icon: const Icon(Icons.refresh, color: Colors.black, size: 20),
-          onPressed: () =>
-              ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
+          onPressed:
+              () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
         ),
       ],
     );
@@ -316,33 +370,31 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
     // 评分
     if (tvShow.rating != null && tvShow.rating! > 0) {
-      items.add(_buildMetadataItem(
-        '豆 ${tvShow.rating!.toStringAsFixed(1)}',
-        Colors.green,
-      ));
+      items.add(
+        _buildMetadataItem(
+          '豆 ${tvShow.rating!.toStringAsFixed(1)}',
+          Colors.green,
+        ),
+      );
     }
 
     // 首播日期
     if (tvShow.firstAirDate != null) {
-      items.add(_buildMetadataItem(
-        '${tvShow.firstAirDate!.year}-${tvShow.firstAirDate!.month.toString().padLeft(2, '0')}-${tvShow.firstAirDate!.day.toString().padLeft(2, '0')}',
-        null,
-      ));
+      items.add(
+        _buildMetadataItem(
+          '${tvShow.firstAirDate!.year}-${tvShow.firstAirDate!.month.toString().padLeft(2, '0')}-${tvShow.firstAirDate!.day.toString().padLeft(2, '0')}',
+          null,
+        ),
+      );
     } else if (tvShow.year != null) {
       items.add(_buildMetadataItem('${tvShow.year}', null));
     }
 
     // 剧集数
     if (selectedSeason?.episodeCount != null) {
-      items.add(_buildMetadataItem(
-        '共${selectedSeason!.episodeCount}集',
-        null,
-      ));
+      items.add(_buildMetadataItem('共${selectedSeason!.episodeCount}集', null));
     } else if (tvShow.numberOfEpisodes != null) {
-      items.add(_buildMetadataItem(
-        '共${tvShow.numberOfEpisodes}集',
-        null,
-      ));
+      items.add(_buildMetadataItem('共${tvShow.numberOfEpisodes}集', null));
     }
 
     // 状态
@@ -350,11 +402,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       items.add(_buildMetadataItem(tvShow.statusText, null));
     }
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      children: items,
-    );
+    return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 
   Widget _buildMetadataItem(String text, Color? color) {
@@ -370,7 +418,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   /// 构建剧集选择区 - 季度标签页
   Widget _buildEpisodeSelector(
-      BuildContext context, ThemeData theme, TvShow tvShow) {
+    BuildContext context,
+    ThemeData theme,
+    TvShow tvShow,
+  ) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
@@ -396,16 +447,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 10),
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
-                      color: isSelected
-                          ? Colors.white.withValues(alpha: 0.15)
-                          : Colors.transparent,
+                      color:
+                          isSelected
+                              ? Colors.white.withValues(alpha: 0.15)
+                              : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: isSelected
-                            ? Colors.white.withValues(alpha: 0.3)
-                            : Colors.white.withValues(alpha: 0.1),
+                        color:
+                            isSelected
+                                ? Colors.white.withValues(alpha: 0.3)
+                                : Colors.white.withValues(alpha: 0.1),
                       ),
                     ),
                     child: Row(
@@ -414,13 +469,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                         Text(
                           season.displayName,
                           style: TextStyle(
-                            color: isSelected
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: 0.6),
+                            color:
+                                isSelected
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.6),
                             fontSize: 14,
-                            fontWeight: isSelected
-                                ? FontWeight.bold
-                                : FontWeight.normal,
+                            fontWeight:
+                                isSelected
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
                           ),
                         ),
                         if (isSelected) ...[
@@ -550,7 +607,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   /// 构建文件信息区
   Widget _buildFileInfoSection(
-      BuildContext context, ThemeData theme, TvShow tvShow) {
+    BuildContext context,
+    ThemeData theme,
+    TvShow tvShow,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -644,10 +704,7 @@ class _EpisodesCarousel extends ConsumerWidget {
   final int tvShowId;
   final int seasonId;
 
-  const _EpisodesCarousel({
-    required this.tvShowId,
-    required this.seasonId,
-  });
+  const _EpisodesCarousel({required this.tvShowId, required this.seasonId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -656,19 +713,21 @@ class _EpisodesCarousel extends ConsumerWidget {
     );
 
     return episodesAsync.when(
-      loading: () => const SizedBox(
-        height: 180,
-        child: Center(
-          child: CircularProgressIndicator(color: Colors.white),
-        ),
-      ),
-      error: (error, stack) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          '加载失败: $error',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
-        ),
-      ),
+      loading:
+          () => const SizedBox(
+            height: 180,
+            child: Center(
+              child: CircularProgressIndicator(color: Colors.white),
+            ),
+          ),
+      error:
+          (error, stack) => Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              '加载失败: $error',
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+            ),
+          ),
       data: (episodes) {
         if (episodes == null || episodes.isEmpty) {
           return Padding(
@@ -717,11 +776,12 @@ class _EpisodeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: episode.hasFile
-          ? () => context.push(
+      onTap:
+          episode.hasFile
+              ? () => context.push(
                 '/player/episode/$tvShowId/$seasonId/${episode.id}',
               )
-          : null,
+              : null,
       child: SizedBox(
         width: 160,
         child: Column(
@@ -732,16 +792,16 @@ class _EpisodeCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: episode.stillPath != null &&
-                          episode.stillPath!.isNotEmpty
-                      ? CachedNetworkImage(
-                          imageUrl: episode.stillPath!,
-                          width: 160,
-                          height: 90,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, __, ___) => _buildPlaceholder(),
-                        )
-                      : _buildPlaceholder(),
+                  child:
+                      episode.stillPath != null && episode.stillPath!.isNotEmpty
+                          ? CachedNetworkImage(
+                            imageUrl: episode.stillPath!,
+                            width: 160,
+                            height: 90,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => _buildPlaceholder(),
+                          )
+                          : _buildPlaceholder(),
                 ),
 
                 // 时长标签
@@ -751,7 +811,9 @@ class _EpisodeCard extends StatelessWidget {
                     bottom: 6,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(4),

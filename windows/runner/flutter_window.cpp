@@ -1,6 +1,7 @@
 #include "flutter_window.h"
 
 #include <optional>
+#include <windows.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -27,6 +28,49 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  window_controls_channel_ =
+      std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
+          flutter_controller_->engine()->messenger(),
+          "media_player/window_controls",
+          &flutter::StandardMethodCodec::GetInstance());
+
+  window_controls_channel_->SetMethodCallHandler(
+      [this](
+          const flutter::MethodCall<flutter::EncodableValue>& call,
+          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>>
+              result) {
+        HWND hwnd = GetHandle();
+        if (!hwnd) {
+          result->Error("no_window", "Window handle is not available.");
+          return;
+        }
+
+        const std::string& method = call.method_name();
+        if (method == "startDrag") {
+          ReleaseCapture();
+          SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+          result->Success();
+          return;
+        }
+        if (method == "minimize") {
+          ShowWindow(hwnd, SW_MINIMIZE);
+          result->Success();
+          return;
+        }
+        if (method == "toggleMaximize") {
+          ShowWindow(hwnd, IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+          result->Success();
+          return;
+        }
+        if (method == "close") {
+          PostMessage(hwnd, WM_CLOSE, 0, 0);
+          result->Success();
+          return;
+        }
+
+        result->NotImplemented();
+      });
+
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
@@ -43,6 +87,7 @@ void FlutterWindow::OnDestroy() {
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }
+  window_controls_channel_ = nullptr;
 
   Win32Window::OnDestroy();
 }

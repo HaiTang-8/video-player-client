@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
 /// 设置页面
@@ -12,11 +15,24 @@ class SettingsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final themeMode = ref.watch(themeModeProvider);
     final serverUrl = ref.watch(serverUrlProvider);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('设置'),
-      ),
+      appBar:
+          isDesktop
+              ? DesktopTitleBar(
+                leading: AppBackButton(onPressed: () => context.pop()),
+                title: const Text('设置'),
+                centerTitle: false,
+              )
+              : AppBar(
+                centerTitle: false,
+                automaticallyImplyLeading: false,
+                leadingWidth: kAppBackButtonWidth,
+                titleSpacing: 1,
+                leading: AppBackButton(onPressed: () => context.pop()),
+                title: const Text('设置'),
+              ),
       body: ListView(
         children: [
           // 服务器设置
@@ -58,11 +74,12 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.code),
             title: const Text('开源许可'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => showLicensePage(
-              context: context,
-              applicationName: 'Media Player',
-              applicationVersion: '1.0.0',
-            ),
+            onTap:
+                () => showLicensePage(
+                  context: context,
+                  applicationName: 'Media Player',
+                  applicationVersion: '1.0.0',
+                ),
           ),
         ],
       ),
@@ -93,44 +110,49 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
-  void _showThemeDialog(BuildContext context, WidgetRef ref, ThemeMode current) {
+  void _showThemeDialog(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeMode current,
+  ) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('选择主题'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            RadioListTile<ThemeMode>(
-              title: const Text('跟随系统'),
-              value: ThemeMode.system,
-              groupValue: current,
-              onChanged: (value) {
-                ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                Navigator.pop(context);
-              },
+      builder:
+          (context) => AlertDialog(
+            title: const Text('选择主题'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RadioListTile<ThemeMode>(
+                  title: const Text('跟随系统'),
+                  value: ThemeMode.system,
+                  groupValue: current,
+                  onChanged: (value) {
+                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
+                    Navigator.pop(context);
+                  },
+                ),
+                RadioListTile<ThemeMode>(
+                  title: const Text('浅色'),
+                  value: ThemeMode.light,
+                  groupValue: current,
+                  onChanged: (value) {
+                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
+                    Navigator.pop(context);
+                  },
+                ),
+                RadioListTile<ThemeMode>(
+                  title: const Text('深色'),
+                  value: ThemeMode.dark,
+                  groupValue: current,
+                  onChanged: (value) {
+                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
+                    Navigator.pop(context);
+                  },
+                ),
+              ],
             ),
-            RadioListTile<ThemeMode>(
-              title: const Text('浅色'),
-              value: ThemeMode.light,
-              groupValue: current,
-              onChanged: (value) {
-                ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                Navigator.pop(context);
-              },
-            ),
-            RadioListTile<ThemeMode>(
-              title: const Text('深色'),
-              value: ThemeMode.dark,
-              groupValue: current,
-              onChanged: (value) {
-                ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -139,49 +161,52 @@ class SettingsScreen extends ConsumerWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('服务器地址'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'http://192.168.1.100:8080',
-            labelText: '服务器地址',
-          ),
-          keyboardType: TextInputType.url,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                final success = await ref
-                    .read(serverConnectionProvider.notifier)
-                    .testConnection(url);
-                if (success) {
-                  await ref.read(serverUrlProvider.notifier).setServerUrl(url);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('服务器连接成功')),
-                    );
+      builder:
+          (context) => AlertDialog(
+            title: const Text('服务器地址'),
+            content: TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'http://192.168.1.100:8080',
+                labelText: '服务器地址',
+              ),
+              keyboardType: TextInputType.url,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () async {
+                  final url = controller.text.trim();
+                  if (url.isNotEmpty) {
+                    final success = await ref
+                        .read(serverConnectionProvider.notifier)
+                        .testConnection(url);
+                    if (success) {
+                      await ref
+                          .read(serverUrlProvider.notifier)
+                          .setServerUrl(url);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('服务器连接成功')),
+                        );
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('无法连接到服务器')),
+                        );
+                      }
+                    }
                   }
-                } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('无法连接到服务器')),
-                    );
-                  }
-                }
-              }
-            },
-            child: const Text('保存'),
+                },
+                child: const Text('保存'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 }

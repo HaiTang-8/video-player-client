@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../providers/providers.dart';
 import 'widgets/category_row.dart';
@@ -25,21 +27,37 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     final categoriesState = ref.watch(categoriesProvider);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('媒体库'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () => context.push('/search'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-      ),
+      appBar: isDesktop
+          ? DesktopTitleBar(
+              title: const Text('媒体库'),
+              centerTitle: true,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => context.push('/search'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => context.push('/settings'),
+                ),
+              ],
+            )
+          : AppBar(
+              title: const Text('媒体库'),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () => context.push('/search'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings),
+                  onPressed: () => context.push('/settings'),
+                ),
+              ],
+            ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(categoriesProvider.notifier).refresh(),
         child: _buildBody(categoriesState),

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -25,11 +27,17 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   Widget build(BuildContext context) {
     final storagesAsync = ref.watch(storagesProvider);
     final scanState = ref.watch(scanStateProvider);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('存储源管理'),
-      ),
+      appBar: isDesktop
+          ? const DesktopTitleBar(
+              title: Text('存储源管理'),
+              centerTitle: true,
+            )
+          : AppBar(
+              title: const Text('存储源管理'),
+            ),
       body: storagesAsync.when(
         loading: () => const LoadingWidget(message: '加载中...'),
         error: (error, stack) => AppErrorWidget(

@@ -3,6 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../providers/providers.dart';
 
@@ -31,6 +34,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _isLoading = true;
   String? _error;
   bool _isFullscreen = false;
+  bool _isDisposing = false;
 
   @override
   void initState() {
@@ -38,13 +42,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player = Player();
     _controller = VideoController(_player);
     _loadVideo();
-    // 进入全屏模式
-    _enterFullscreen();
+    // 移动端默认进入全屏模式
+    if (!WindowControls.isDesktop) {
+      _enterFullscreen();
+    }
   }
 
   @override
   void dispose() {
-    _exitFullscreen();
+    _isDisposing = true;
+    if (_isFullscreen) {
+      _exitFullscreen();
+    }
     _player.dispose();
     super.dispose();
   }
@@ -68,7 +77,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
-    if (mounted) {
+    if (mounted && !_isDisposing) {
       setState(() {
         _isFullscreen = false;
       });
@@ -113,9 +122,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       // 获取服务器地址
       final serverUrl = ref.read(serverUrlProvider);
-      final fullUrl = streamUrl.startsWith('http')
-          ? streamUrl
-          : '$serverUrl$streamUrl';
+      final fullUrl =
+          streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
 
       await _player.open(Media(fullUrl));
 
@@ -146,10 +154,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_error != null) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
-          backgroundColor: Colors.transparent,
-          foregroundColor: Colors.white,
-        ),
+        appBar:
+            WindowControls.isDesktop
+                ? DesktopTitleBar(
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                  // Desktop 端自绘标题栏：返回按钮使用“<”样式，标题不居中。
+                  centerTitle: false,
+                  leading: AppBackButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                  title: const Text('播放失败'),
+                )
+                : AppBar(
+                  backgroundColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  automaticallyImplyLeading: false,
+                  leadingWidth: kAppBackButtonWidth,
+                  titleSpacing: 1,
+                  leading: AppBackButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    color: Colors.white,
+                  ),
+                ),
         body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -195,7 +222,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               top: MediaQuery.of(context).padding.top + 8,
               left: 8,
               child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white),
+                // 顶部返回按钮使用“<”样式，视觉上更接近“<”形态。
+                icon: const Icon(Icons.chevron_left, color: Colors.white),
                 onPressed: () => Navigator.of(context).pop(),
               ),
             ),

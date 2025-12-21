@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
 /// 服务器配置页面
@@ -64,8 +66,15 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final connectionState = ref.watch(serverConnectionProvider);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
+      appBar: isDesktop
+          ? const DesktopTitleBar(
+              title: Text('Media Player'),
+              centerTitle: true,
+            )
+          : null,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

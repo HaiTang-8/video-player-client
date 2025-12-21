@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 
 /// 我的页面 - 占位
 class ProfileScreen extends StatelessWidget {
@@ -7,11 +9,17 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('我的'),
-      ),
+      appBar: isDesktop
+          ? const DesktopTitleBar(
+              title: Text('我的'),
+              centerTitle: true,
+            )
+          : AppBar(
+              title: const Text('我的'),
+            ),
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,

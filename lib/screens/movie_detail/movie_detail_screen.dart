@@ -2,6 +2,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -17,15 +20,66 @@ class MovieDetailScreen extends ConsumerWidget {
     final movieAsync = ref.watch(movieDetailProvider(movieId));
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
       backgroundColor: Colors.black,
+      appBar:
+          isDesktop
+              ? movieAsync.when(
+                loading:
+                    () => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: const Text('加载中...'),
+                      actions: const [],
+                    ),
+                error:
+                    (error, stack) => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: const Text('电影详情'),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed:
+                              () =>
+                                  ref.invalidate(movieDetailProvider(movieId)),
+                        ),
+                      ],
+                    ),
+                data:
+                    (movie) => DesktopTitleBar(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让“资源名称”紧跟图标靠左展示（不居中）。
+                      centerTitle: false,
+                      leading: AppBackButton(onPressed: () => context.pop()),
+                      title: Text(movie?.title ?? '电影详情'),
+                      actions: [
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          onPressed:
+                              () =>
+                                  ref.invalidate(movieDetailProvider(movieId)),
+                        ),
+                      ],
+                    ),
+              )
+              : null,
       body: movieAsync.when(
         loading: () => const LoadingWidget(message: '加载中...'),
-        error: (error, stack) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(movieDetailProvider(movieId)),
-        ),
+        error:
+            (error, stack) => AppErrorWidget(
+              message: error.toString(),
+              onRetry: () => ref.invalidate(movieDetailProvider(movieId)),
+            ),
         data: (movie) {
           if (movie == null) {
             return const AppErrorWidget(message: '电影不存在');
@@ -34,7 +88,7 @@ class MovieDetailScreen extends ConsumerWidget {
           return CustomScrollView(
             slivers: [
               // 顶部导航栏
-              _buildAppBar(context, ref, movie),
+              if (!isDesktop) _buildAppBar(context, ref, movie),
 
               // 背景图区域
               SliverToBoxAdapter(
@@ -47,9 +101,7 @@ class MovieDetailScreen extends ConsumerWidget {
               ),
 
               // 相关演员区（占位）
-              SliverToBoxAdapter(
-                child: _buildCastSection(context, theme),
-              ),
+              SliverToBoxAdapter(child: _buildCastSection(context, theme)),
 
               // 文件信息区
               SliverToBoxAdapter(
@@ -57,9 +109,7 @@ class MovieDetailScreen extends ConsumerWidget {
               ),
 
               // 底部间距
-              const SliverToBoxAdapter(
-                child: SizedBox(height: 32),
-              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
             ],
           );
         },
@@ -82,20 +132,14 @@ class MovieDetailScreen extends ConsumerWidget {
             height: imageHeight,
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
-            errorWidget: (_, __, ___) => Container(
-              height: imageHeight,
-              color: Colors.black,
-            ),
-            placeholder: (_, __) => Container(
-              height: imageHeight,
-              color: Colors.black,
-            ),
+            errorWidget:
+                (_, __, ___) =>
+                    Container(height: imageHeight, color: Colors.black),
+            placeholder:
+                (_, __) => Container(height: imageHeight, color: Colors.black),
           )
         else
-          Container(
-            height: imageHeight,
-            color: Colors.black,
-          ),
+          Container(height: imageHeight, color: Colors.black),
 
         // 渐变蒙版 - 底部10%渐变到黑色
         Positioned(
@@ -108,10 +152,7 @@ class MovieDetailScreen extends ConsumerWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black,
-                ],
+                colors: [Colors.transparent, Colors.black],
               ),
             ),
           ),
@@ -127,9 +168,14 @@ class MovieDetailScreen extends ConsumerWidget {
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.black, size: 20),
+      // 移动端顶部导航：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）。
+      centerTitle: false,
+      automaticallyImplyLeading: false,
+      leadingWidth: kAppBackButtonWidth,
+      titleSpacing: 1,
+      leading: AppBackButton(
         onPressed: () => context.pop(),
+        color: Colors.black,
       ),
       title: Text(
         movie.title,
@@ -149,11 +195,7 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   /// 构建 Hero Section - 左右布局
-  Widget _buildHeroSection(
-    BuildContext context,
-    ThemeData theme,
-    Movie movie,
-  ) {
+  Widget _buildHeroSection(BuildContext context, ThemeData theme, Movie movie) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
       child: Row(
@@ -251,10 +293,12 @@ class MovieDetailScreen extends ConsumerWidget {
 
     // 评分
     if (movie.rating != null && movie.rating! > 0) {
-      items.add(_buildMetadataItem(
-        '豆 ${movie.rating!.toStringAsFixed(1)}',
-        Colors.green,
-      ));
+      items.add(
+        _buildMetadataItem(
+          '豆 ${movie.rating!.toStringAsFixed(1)}',
+          Colors.green,
+        ),
+      );
     }
 
     // 年份
@@ -272,11 +316,7 @@ class MovieDetailScreen extends ConsumerWidget {
       items.add(_buildMetadataItem(movie.formattedFileSize, null));
     }
 
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      children: items,
-    );
+    return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 
   Widget _buildMetadataItem(String text, Color? color) {
@@ -396,7 +436,10 @@ class MovieDetailScreen extends ConsumerWidget {
 
   /// 构建文件信息区
   Widget _buildFileInfoSection(
-      BuildContext context, ThemeData theme, Movie movie) {
+    BuildContext context,
+    ThemeData theme,
+    Movie movie,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
