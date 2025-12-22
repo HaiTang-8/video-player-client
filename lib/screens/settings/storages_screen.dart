@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -30,20 +32,45 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar: isDesktop
-          ? const DesktopTitleBar(
-              title: Text('存储源管理'),
-              centerTitle: true,
-            )
-          : AppBar(
-              title: const Text('存储源管理'),
-            ),
+      appBar:
+          isDesktop
+              ? DesktopTitleBar(
+                backgroundColor: Colors.white,
+                foregroundColor: Colors.black,
+                // 与影视详情页保持一致：返回按钮使用“<”样式，标题靠左（不居中）
+                centerTitle: false,
+                leading: AppBackButton(onPressed: () => context.pop()),
+                title: const Text('存储源管理'),
+              )
+              : AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0,
+                toolbarHeight: 44,
+                // 与影视详情页保持一致：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）
+                centerTitle: false,
+                automaticallyImplyLeading: false,
+                leadingWidth: kAppBackButtonWidth,
+                titleSpacing: 1,
+                leading: AppBackButton(
+                  onPressed: () => context.pop(),
+                  color: Colors.black,
+                ),
+                title: const Text(
+                  '存储源管理',
+                  style: TextStyle(
+                    color: Colors.black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
       body: storagesAsync.when(
         loading: () => const LoadingWidget(message: '加载中...'),
-        error: (error, stack) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
-        ),
+        error:
+            (error, stack) => AppErrorWidget(
+              message: error.toString(),
+              onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
+            ),
         data: (storages) {
           if (storages.isEmpty) {
             return const EmptyWidget(
@@ -82,40 +109,44 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   }
 
   Future<void> _startScan(int storageId) async {
-    final success = await ref.read(scanStateProvider.notifier).startScan(storageId);
+    final success = await ref
+        .read(scanStateProvider.notifier)
+        .startScan(storageId);
     if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('启动扫描失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('启动扫描失败')));
     }
   }
 
   Future<void> _deleteStorage(Storage storage) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除存储源'),
-        content: Text('确定要删除 "${storage.name}" 吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
+      builder:
+          (context) => AlertDialog(
+            title: const Text('删除存储源'),
+            content: Text('确定要删除 "${storage.name}" 吗？'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('删除'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
     );
 
     if (confirmed == true) {
-      final success =
-          await ref.read(storagesProvider.notifier).deleteStorage(storage.id);
+      final success = await ref
+          .read(storagesProvider.notifier)
+          .deleteStorage(storage.id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('删除失败')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('删除失败')));
       }
     }
   }
@@ -125,129 +156,163 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final urlController = TextEditingController();
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
+    final proxyUrlController = TextEditingController();
     String selectedType = 'webdav';
+    bool useProxy = false;
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('添加存储源'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(
-                    labelText: '名称',
-                    hintText: '我的媒体库',
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setState) => AlertDialog(
+                  title: const Text('添加存储源'),
+                  content: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextField(
+                          controller: nameController,
+                          decoration: const InputDecoration(
+                            labelText: '名称',
+                            hintText: '我的媒体库',
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        DropdownButtonFormField<String>(
+                          value: selectedType,
+                          decoration: const InputDecoration(labelText: '类型'),
+                          items: const [
+                            DropdownMenuItem(
+                              value: 'webdav',
+                              child: Text('WebDAV'),
+                            ),
+                            DropdownMenuItem(
+                              value: 'local',
+                              child: Text('本地存储'),
+                            ),
+                          ],
+                          onChanged: (value) {
+                            setState(() {
+                              selectedType = value!;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        if (selectedType == 'webdav') ...[
+                          TextField(
+                            controller: urlController,
+                            decoration: const InputDecoration(
+                              labelText: 'WebDAV URL',
+                              hintText: 'https://example.com/dav',
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: usernameController,
+                            decoration: const InputDecoration(labelText: '用户名'),
+                          ),
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: passwordController,
+                            decoration: const InputDecoration(labelText: '密码'),
+                            obscureText: true,
+                          ),
+                          const SizedBox(height: 8),
+                          // WebDAV 代理配置：用于在特定网络环境下，通过 HTTP(S) 代理访问 WebDAV。
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('使用代理访问'),
+                            value: useProxy,
+                            onChanged: (value) {
+                              setState(() {
+                                useProxy = value;
+                                if (!useProxy) {
+                                  proxyUrlController.clear();
+                                }
+                              });
+                            },
+                          ),
+                          if (useProxy) ...[
+                            TextField(
+                              controller: proxyUrlController,
+                              decoration: const InputDecoration(
+                                labelText: '代理地址（可选）',
+                                hintText: 'http://127.0.0.1:7890',
+                              ),
+                              keyboardType: TextInputType.url,
+                            ),
+                          ],
+                        ] else ...[
+                          TextField(
+                            controller: urlController,
+                            decoration: const InputDecoration(
+                              labelText: '路径',
+                              hintText: '/path/to/media',
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(
-                    labelText: '类型',
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'webdav', child: Text('WebDAV')),
-                    DropdownMenuItem(value: 'local', child: Text('本地存储')),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('取消'),
+                    ),
+                    FilledButton(
+                      onPressed: () async {
+                        final name = nameController.text.trim();
+                        if (name.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('请输入名称')),
+                          );
+                          return;
+                        }
+
+                        Map<String, String> settings;
+                        if (selectedType == 'webdav') {
+                          settings = {
+                            'url': urlController.text.trim(),
+                            'username': usernameController.text.trim(),
+                            'password': passwordController.text,
+                            'use_proxy': useProxy.toString(),
+                          };
+                          final proxyUrl = proxyUrlController.text.trim();
+                          if (proxyUrl.isNotEmpty) {
+                            settings['proxy_url'] = proxyUrl;
+                          }
+                        } else {
+                          settings = {'path': urlController.text.trim()};
+                        }
+
+                        final success = await ref
+                            .read(storagesProvider.notifier)
+                            .addStorage(
+                              name: name,
+                              type: selectedType,
+                              settings: settings,
+                            );
+
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('添加成功')),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('添加失败')),
+                            );
+                          }
+                        }
+                      },
+                      child: const Text('添加'),
+                    ),
                   ],
-                  onChanged: (value) {
-                    setState(() {
-                      selectedType = value!;
-                    });
-                  },
                 ),
-                const SizedBox(height: 16),
-                if (selectedType == 'webdav') ...[
-                  TextField(
-                    controller: urlController,
-                    decoration: const InputDecoration(
-                      labelText: 'WebDAV URL',
-                      hintText: 'https://example.com/dav',
-                    ),
-                    keyboardType: TextInputType.url,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: usernameController,
-                    decoration: const InputDecoration(
-                      labelText: '用户名',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: passwordController,
-                    decoration: const InputDecoration(
-                      labelText: '密码',
-                    ),
-                    obscureText: true,
-                  ),
-                ] else ...[
-                  TextField(
-                    controller: urlController,
-                    decoration: const InputDecoration(
-                      labelText: '路径',
-                      hintText: '/path/to/media',
-                    ),
-                  ),
-                ],
-              ],
-            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('请输入名称')),
-                  );
-                  return;
-                }
-
-                Map<String, String> settings;
-                if (selectedType == 'webdav') {
-                  settings = {
-                    'url': urlController.text.trim(),
-                    'username': usernameController.text.trim(),
-                    'password': passwordController.text,
-                  };
-                } else {
-                  settings = {
-                    'path': urlController.text.trim(),
-                  };
-                }
-
-                final success = await ref.read(storagesProvider.notifier).addStorage(
-                      name: name,
-                      type: selectedType,
-                      settings: settings,
-                    );
-
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  if (success) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('添加成功')),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('添加失败')),
-                    );
-                  }
-                }
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -311,18 +376,19 @@ class _StorageCard extends StatelessWidget {
                       onDelete();
                     }
                   },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete_outline, color: Colors.red),
-                          SizedBox(width: 8),
-                          Text('删除', style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                  ],
+                  itemBuilder:
+                      (context) => [
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('删除', style: TextStyle(color: Colors.red)),
+                            ],
+                          ),
+                        ),
+                      ],
                 ),
               ],
             ),
@@ -330,9 +396,7 @@ class _StorageCard extends StatelessWidget {
 
             // 扫描进度
             if (isScanning && progress != null) ...[
-              LinearProgressIndicator(
-                value: progress!.progress / 100,
-              ),
+              LinearProgressIndicator(value: progress!.progress / 100),
               const SizedBox(height: 8),
               Text(
                 '${progress!.statusText}: ${progress!.scannedFiles}/${progress!.totalFiles}',
@@ -347,13 +411,14 @@ class _StorageCard extends StatelessWidget {
               children: [
                 FilledButton.icon(
                   onPressed: isScanning ? null : onScan,
-                  icon: isScanning
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh),
+                  icon:
+                      isScanning
+                          ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                          : const Icon(Icons.refresh),
                   label: Text(isScanning ? '扫描中...' : '扫描'),
                 ),
               ],

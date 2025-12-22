@@ -48,7 +48,7 @@ class SettingsScreen extends ConsumerWidget {
             leading: const Icon(Icons.storage_outlined),
             title: const Text('存储源管理'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/storages'),
+            onTap: () => context.push('/storage-manage'),
           ),
           const Divider(),
 

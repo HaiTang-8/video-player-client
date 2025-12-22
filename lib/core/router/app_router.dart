@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../screens/main_shell.dart';
 import '../../screens/library/library_screen.dart';
@@ -12,6 +13,8 @@ import '../../screens/settings/settings_screen.dart';
 import '../../screens/settings/storages_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/server_config/server_config_screen.dart';
+import '../../screens/storages/resources_screen.dart';
+import '../../screens/storages/storage_browse_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -69,37 +72,66 @@ final routerProvider = Provider<GoRouter>((ref) {
           // 媒体库
           GoRoute(
             path: '/library',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const LibraryScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            ),
+            pageBuilder:
+                (context, state) => CustomTransitionPage(
+                  key: state.pageKey,
+                  child: const LibraryScreen(),
+                  transitionsBuilder: (
+                    context,
+                    animation,
+                    secondaryAnimation,
+                    child,
+                  ) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                ),
           ),
 
           // 资源库（存储管理）
           GoRoute(
             path: '/storages',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const StoragesScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            ),
+            pageBuilder:
+                (context, state) => CustomTransitionPage(
+                  key: state.pageKey,
+                  child: const ResourcesScreen(),
+                  transitionsBuilder: (
+                    context,
+                    animation,
+                    secondaryAnimation,
+                    child,
+                  ) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                ),
+            routes: [
+              // 存储源目录浏览
+              GoRoute(
+                path: ':id',
+                builder: (context, state) {
+                  final id = int.parse(state.pathParameters['id']!);
+                  final storage = state.extra as Storage?;
+                  return StorageBrowseScreen(storageId: id, storage: storage);
+                },
+              ),
+            ],
           ),
 
           // 我的
           GoRoute(
             path: '/profile',
-            pageBuilder: (context, state) => CustomTransitionPage(
-              key: state.pageKey,
-              child: const ProfileScreen(),
-              transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
-              },
-            ),
+            pageBuilder:
+                (context, state) => CustomTransitionPage(
+                  key: state.pageKey,
+                  child: const ProfileScreen(),
+                  transitionsBuilder: (
+                    context,
+                    animation,
+                    secondaryAnimation,
+                    child,
+                  ) {
+                    return FadeTransition(opacity: animation, child: child);
+                  },
+                ),
           ),
         ],
       ),
@@ -160,23 +192,30 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
       ),
-    ],
-    errorBuilder: (context, state) => Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 64),
-            const SizedBox(height: 16),
-            Text('页面不存在: ${state.matchedLocation}'),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () => context.go('/library'),
-              child: const Text('返回首页'),
-            ),
-          ],
-        ),
+
+      // 存储源管理页面（从设置进入，不在 Shell 内）
+      GoRoute(
+        path: '/storage-manage',
+        builder: (context, state) => const StoragesScreen(),
       ),
-    ),
+    ],
+    errorBuilder:
+        (context, state) => Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 64),
+                const SizedBox(height: 16),
+                Text('页面不存在: ${state.matchedLocation}'),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: () => context.go('/library'),
+                  child: const Text('返回首页'),
+                ),
+              ],
+            ),
+          ),
+        ),
   );
 });

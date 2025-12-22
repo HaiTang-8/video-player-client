@@ -7,7 +7,8 @@ class ApiClient {
   final Logger _logger = Logger();
 
   ApiClient({required String baseUrl})
-      : _dio = Dio(BaseOptions(
+    : _dio = Dio(
+        BaseOptions(
           baseUrl: baseUrl,
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 30),
@@ -16,12 +17,15 @@ class ApiClient {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-        )) {
-    _dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
-      logPrint: (obj) => _logger.d(obj),
-    ));
+        ),
+      ) {
+    _dio.interceptors.add(
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        logPrint: (obj) => _logger.d(obj),
+      ),
+    );
   }
 
   /// 更新 baseUrl
@@ -34,9 +38,15 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic json)? fromJson,
+    // 可选：针对“AI 整理/长任务”单独放宽超时，避免 Dio 默认 30s 触发“接收超时”
+    Duration? receiveTimeout,
   }) async {
     try {
-      final response = await _dio.get(path, queryParameters: queryParameters);
+      final response = await _dio.get(
+        path,
+        queryParameters: queryParameters,
+        options: _buildOptions(receiveTimeout: receiveTimeout),
+      );
       return _handleResponse(response, fromJson);
     } on DioException catch (e) {
       return _handleError(e);
@@ -49,12 +59,15 @@ class ApiClient {
     dynamic data,
     Map<String, dynamic>? queryParameters,
     T Function(dynamic json)? fromJson,
+    // 可选：针对“AI 整理/长任务”单独放宽超时，避免 Dio 默认 30s 触发“接收超时”
+    Duration? receiveTimeout,
   }) async {
     try {
       final response = await _dio.post(
         path,
         data: data,
         queryParameters: queryParameters,
+        options: _buildOptions(receiveTimeout: receiveTimeout),
       );
       return _handleResponse(response, fromJson);
     } on DioException catch (e) {
@@ -67,14 +80,29 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic json)? fromJson,
+    // 可选：针对“AI 整理/长任务”单独放宽超时，避免 Dio 默认 30s 触发“接收超时”
+    Duration? receiveTimeout,
   }) async {
     try {
-      final response =
-          await _dio.delete(path, queryParameters: queryParameters);
+      final response = await _dio.delete(
+        path,
+        queryParameters: queryParameters,
+        options: _buildOptions(receiveTimeout: receiveTimeout),
+      );
       return _handleResponse(response, fromJson);
     } on DioException catch (e) {
       return _handleError(e);
     }
+  }
+
+  /// 构建 Dio Options（按需覆盖默认超时）
+  ///
+  /// 说明：
+  /// - BaseOptions 里设置的是全局默认超时（更偏“常规接口”）
+  /// - AI 整理属于“长任务”，这里允许为单个请求单独放宽 receiveTimeout
+  Options? _buildOptions({Duration? receiveTimeout}) {
+    if (receiveTimeout == null) return null;
+    return Options(receiveTimeout: receiveTimeout);
   }
 
   /// 处理响应
@@ -88,9 +116,12 @@ class ApiClient {
       // 兼容两种响应格式：
       // 1. 标准格式: {"success": true, "data": ...}
       // 2. 健康检查格式: {"status": "ok", "message": ...}
-      final success = data['success'] as bool? ??
+      final success =
+          data['success'] as bool? ??
           (data['status'] == 'ok') ||
-          (response.statusCode != null && response.statusCode! >= 200 && response.statusCode! < 300);
+              (response.statusCode != null &&
+                  response.statusCode! >= 200 &&
+                  response.statusCode! < 300);
       final message = data['message'] as String?;
       final error = data['error'] as String?;
 
@@ -121,10 +152,7 @@ class ApiClient {
       }
     }
 
-    return ApiResponse<T>(
-      success: false,
-      error: '响应格式错误',
-    );
+    return ApiResponse<T>(success: false, error: '响应格式错误');
   }
 
   /// 处理错误
@@ -162,10 +190,7 @@ class ApiClient {
 
     _logger.e('API Error: $errorMessage', error: e);
 
-    return ApiResponse<T>(
-      success: false,
-      error: errorMessage,
-    );
+    return ApiResponse<T>(success: false, error: errorMessage);
   }
 }
 

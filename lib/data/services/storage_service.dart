@@ -12,9 +12,11 @@ class StorageService {
   Future<ApiResponse<List<Storage>>> getStorages() async {
     return _client.get<List<Storage>>(
       ApiConstants.storages,
-      fromJson: (json) => (json as List)
-          .map((e) => Storage.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => Storage.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -26,11 +28,7 @@ class StorageService {
   }) async {
     return _client.post<Storage>(
       ApiConstants.storages,
-      data: {
-        'name': name,
-        'type': type,
-        'settings': settings,
-      },
+      data: {'name': name, 'type': type, 'settings': settings},
       fromJson: (json) => Storage.fromJson(json as Map<String, dynamic>),
     );
   }
@@ -60,9 +58,11 @@ class StorageService {
   Future<ApiResponse<List<ScanProgress>>> getScanTasks(int storageId) async {
     return _client.get<List<ScanProgress>>(
       ApiConstants.storageScanTasks(storageId),
-      fromJson: (json) => (json as List)
-          .map((e) => ScanProgress.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => ScanProgress.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -74,9 +74,52 @@ class StorageService {
     return _client.get<List<FileInfo>>(
       ApiConstants.storageBrowse(storageId),
       queryParameters: {'path': path},
-      fromJson: (json) => (json as List)
-          .map((e) => FileInfo.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => FileInfo.fromJson(e as Map<String, dynamic>))
+                  .toList(),
+    );
+  }
+
+  /// AI 整理预览：只生成建议方案，不会修改文件
+  Future<ApiResponse<AiTidyPlan>> aiTidyPreview(
+    int storageId, {
+    required String path,
+    int maxFiles = 500,
+    String? model,
+  }) async {
+    return _client.post<AiTidyPlan>(
+      ApiConstants.storageAiTidyPreview(storageId),
+      data: {
+        'path': path,
+        'max_files': maxFiles,
+        if (model != null && model.trim().isNotEmpty) 'model': model.trim(),
+      },
+      // LLM 调用 + 目录扫描可能超过默认 30s，这里单独放宽接收超时
+      receiveTimeout: const Duration(seconds: 180),
+      fromJson: (json) => AiTidyPlan.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// AI 整理应用：需要用户二次确认后执行，会对文件做移动/重命名
+  Future<ApiResponse<AiTidyApplyResult>> aiTidyApply(
+    int storageId, {
+    required String path,
+    required String snapshotHash,
+    required List<AiTidyOperation> operations,
+  }) async {
+    return _client.post<AiTidyApplyResult>(
+      ApiConstants.storageAiTidyApply(storageId),
+      data: {
+        'path': path,
+        'snapshot_hash': snapshotHash,
+        'operations': operations.map((e) => e.toJson()).toList(),
+      },
+      // 文件移动/重命名在大量文件时也可能较慢，放宽一点避免误判超时
+      receiveTimeout: const Duration(seconds: 300),
+      fromJson:
+          (json) => AiTidyApplyResult.fromJson(json as Map<String, dynamic>),
     );
   }
 

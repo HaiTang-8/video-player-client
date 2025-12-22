@@ -42,8 +42,13 @@ class ApiConstants {
   static String storageScan(int id) => '$apiPrefix/storages/$id/scan';
   static String storageScanProgress(int id) =>
       '$apiPrefix/storages/$id/scan/progress';
-  static String storageScanTasks(int id) => '$apiPrefix/storages/$id/scan/tasks';
+  static String storageScanTasks(int id) =>
+      '$apiPrefix/storages/$id/scan/tasks';
   static String storageBrowse(int id) => '$apiPrefix/storages/$id/browse';
+  static String storageAiTidyPreview(int id) =>
+      '$apiPrefix/storages/$id/ai-tidy/preview';
+  static String storageAiTidyApply(int id) =>
+      '$apiPrefix/storages/$id/ai-tidy/apply';
 
   // 任务
   static const String tasksRunning = '$apiPrefix/tasks/running';
