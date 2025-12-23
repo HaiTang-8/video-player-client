@@ -15,6 +15,7 @@ import '../../screens/profile/profile_screen.dart';
 import '../../screens/server_config/server_config_screen.dart';
 import '../../screens/storages/resources_screen.dart';
 import '../../screens/storages/storage_browse_screen.dart';
+import '../../screens/library/category_detail_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -185,6 +186,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/search',
         builder: (context, state) => const SearchScreen(),
+      ),
+
+      // 分类详情页面
+      GoRoute(
+        path: '/category/:id',
+        builder: (context, state) {
+          final id = state.pathParameters['id']!;
+          final name = state.uri.queryParameters['name'] ?? '';
+          return CategoryDetailScreen(categoryId: id, categoryName: name);
+        },
       ),
 
       // 设置页面
