@@ -112,7 +112,12 @@ class MovieDetailScreen extends ConsumerWidget {
 
               // 背景图区域
               SliverToBoxAdapter(
-                child: _buildBackgroundImage(movie, screenSize, serverBaseUrl),
+                child: _buildBackgroundImage(
+                  movie,
+                  screenSize,
+                  serverBaseUrl,
+                  isDesktop: isDesktop,
+                ),
               ),
 
               // Hero Section
@@ -144,10 +149,64 @@ class MovieDetailScreen extends ConsumerWidget {
   Widget _buildBackgroundImage(
     Movie movie,
     Size screenSize,
-    String? serverBaseUrl,
-  ) {
-    final imagePath = movie.backdropPath ?? movie.posterPath;
-    final imageHeight = screenSize.height * 0.7;
+    String? serverBaseUrl, {
+    required bool isDesktop,
+  }) {
+    // 移动端：优先海报（竖版，更适配）。
+    // 桌面端：优先背景图/剧照（横版，更适配宽屏）。
+    String? imagePathRaw;
+    bool usePoster = false;
+    if (isDesktop) {
+      imagePathRaw = movie.backdropPath;
+      if (imagePathRaw == null || imagePathRaw.isEmpty) {
+        imagePathRaw = movie.posterPath;
+        usePoster = true;
+      }
+    } else {
+      imagePathRaw = movie.posterPath;
+      usePoster = true;
+      if (imagePathRaw == null || imagePathRaw.isEmpty) {
+        imagePathRaw = movie.backdropPath;
+        usePoster = false;
+      }
+    }
+
+    // 顶部图容器：海报用 contain（完整展示）；横图用 cover（更适配宽屏）。
+    String? imagePath = imagePathRaw;
+    if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
+      final uri = Uri.tryParse(imagePathRaw);
+      final segments = uri?.pathSegments ?? const <String>[];
+      // TMDB：/t/p/{size}/...
+      final currentSize = segments.length >= 3 ? segments[2] : '';
+      // 顶部大图容器：若当前尺寸偏小，则升级到 w780，避免模糊。
+      const smallSizes = <String>{'w92', 'w154', 'w185', 'w342', 'w500'};
+      if (smallSizes.contains(currentSize)) {
+        imagePath = ImageProxy.withTMDBSize(
+          imagePathRaw,
+          usePoster ? 'w780' : 'w1280',
+        );
+      }
+    }
+    // 说明：
+    // - 你要求“完整展示 + 不留黑边/空白”，只能用 BoxFit.fill（会改变宽高比）。
+    // - 为了让“拉伸变形”尽量不那么明显，这里根据内容类型尽量让容器宽高比接近图片的常见比例：
+    //   - 横版背景图：按 16:9 估算一个更合理的高度；
+    //   - 海报：保持原来的高度策略（更接近 2:3）。
+    //
+    // 同时，为了避免 Sliver 之间在某些 DPR/尺寸下出现 1px 的“细缝”，最终高度向上取整到整数像素。
+    final imageHeight =
+        (() {
+          if (usePoster) {
+            return screenSize.height * 0.7;
+          }
+          // 背景图常见比例约为 16:9（宽/高）。
+          const backdropAspect = 16 / 9;
+          final idealHeight = screenSize.width / backdropAspect;
+          final minHeight = screenSize.height * 0.55;
+          final maxHeight = screenSize.height * 0.9;
+          return idealHeight.clamp(minHeight, maxHeight);
+        })().ceilToDouble();
+    final gradientHeight = (imageHeight * 0.22).ceilToDouble();
     final imageUrl =
         imagePath != null && imagePath.isNotEmpty
             ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
@@ -155,14 +214,16 @@ class MovieDetailScreen extends ConsumerWidget {
 
     return Stack(
       children: [
-        // 背景图 - 清晰显示
+        // 海报图：完整展示（BoxFit.contain），避免 BoxFit.cover 导致裁切后“图文衔接”不自然。
         if (imageUrl != null && imageUrl.isNotEmpty)
+          // 按需求：宽度拉伸并且不留黑边/空白，同时不裁切图片内容。
+          // 注意：这会改变图片的原始宽高比（图片会被“拉伸/压扁”），属于有损展示。
           CachedNetworkImage(
             imageUrl: imageUrl,
             width: double.infinity,
             height: imageHeight,
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
+            fit: BoxFit.fill,
+            alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
                     Container(height: imageHeight, color: Colors.black),
@@ -172,18 +233,23 @@ class MovieDetailScreen extends ConsumerWidget {
         else
           Container(height: imageHeight, color: Colors.black),
 
-        // 渐变蒙版 - 底部10%渐变到黑色
+        // 渐变蒙版：适当减小渐变高度，避免遮罩范围过大导致画面偏暗。
         Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
-          height: imageHeight * 0.1,
+          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的“发丝缝”。
+          bottom: -1,
+          height: gradientHeight + 2,
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Colors.black],
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.75),
+                  Colors.black,
+                ],
               ),
             ),
           ),

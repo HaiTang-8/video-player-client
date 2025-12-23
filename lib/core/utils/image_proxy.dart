@@ -13,6 +13,32 @@ class ImageProxy {
     return uri.path.startsWith('/t/p/');
   }
 
+  /// 尝试替换 TMDB 图片 URL 的尺寸段（例如把 `/t/p/w500/...` 替换为 `/t/p/w780/...`）。
+  ///
+  /// 说明：
+  /// - 客户端展示不同容器时可能需要更高分辨率（例如顶部大图），否则会出现模糊/不适配。
+  /// - 这里只做“尽力而为”的字符串结构化处理：仅当满足 TMDB 标准路径格式时才替换。
+  static String withTMDBSize(String url, String size) {
+    final origin = url.trim();
+    if (origin.isEmpty) return origin;
+    final s = size.trim();
+    if (s.isEmpty) return origin;
+    if (!isTMDBImageUrl(origin)) return origin;
+
+    final uri = Uri.tryParse(origin);
+    if (uri == null) return origin;
+
+    // 标准格式：/t/p/{size}/{file_path...}
+    final segments = uri.pathSegments;
+    if (segments.length < 4) return origin;
+    if (segments[0] != 't' || segments[1] != 'p') return origin;
+
+    final newSegments = List<String>.from(segments);
+    newSegments[2] = s;
+
+    return uri.replace(pathSegments: newSegments).toString();
+  }
+
   /// 将 TMDB 图片 URL 转成后端代理 URL；若不满足条件则返回原 URL。
   static String proxyTMDBIfNeeded(String url, String? serverBaseUrl) {
     final origin = url.trim();

@@ -137,7 +137,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
               // 背景图区域 - 作为滚动内容的一部分
               SliverToBoxAdapter(
-                child: _buildBackgroundImage(tvShow, screenSize, serverBaseUrl),
+                child: _buildBackgroundImage(
+                  tvShow,
+                  selectedSeason,
+                  screenSize,
+                  serverBaseUrl,
+                  isDesktop: isDesktop,
+                ),
               ),
 
               // Hero Section
@@ -177,7 +183,19 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 ),
 
               // 相关演员区
-              if (cast.isNotEmpty)
+              if ((selectedSeason?.castDetail != null &&
+                      selectedSeason!.castDetail!.isNotEmpty) ||
+                  (selectedSeason?.crewDetail != null &&
+                      selectedSeason!.crewDetail!.isNotEmpty))
+                SliverToBoxAdapter(
+                  child: _buildSeasonCreditsSection(
+                    context,
+                    theme,
+                    selectedSeason,
+                    serverBaseUrl,
+                  ),
+                )
+              else if (cast.isNotEmpty)
                 SliverToBoxAdapter(
                   child: _buildCastSection(context, theme, cast, serverBaseUrl),
                 ),
@@ -199,11 +217,70 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   /// 构建背景图 - 清晰展示90%，底部渐变过渡
   Widget _buildBackgroundImage(
     TvShow tvShow,
+    Season? selectedSeason,
     Size screenSize,
-    String? serverBaseUrl,
-  ) {
-    final imagePath = tvShow.backdropPath ?? tvShow.posterPath;
-    final imageHeight = screenSize.height * 0.7;
+    String? serverBaseUrl, {
+    required bool isDesktop,
+  }) {
+    // 移动端：优先季海报（竖版，更适配）。
+    // 桌面端：优先本季剧照（横版，适配宽屏）；缺失则回退剧集背景图。
+    String? imagePathRaw;
+    bool usePoster = false;
+    if (isDesktop) {
+      // 优先使用 TMDB 的“剧照/背景图”（/tv/{id}/images.backdrops），避免用“每季第一集 still”冒充剧照。
+      final backdrops = tvShow.backdrops;
+      if (backdrops != null && backdrops.isNotEmpty) {
+        imagePathRaw = backdrops[_selectedSeasonIndex % backdrops.length];
+      }
+      imagePathRaw ??= tvShow.backdropPath;
+      if (imagePathRaw == null || imagePathRaw.isEmpty) {
+        imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
+        usePoster = true;
+      }
+    } else {
+      imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
+      usePoster = true;
+      if (imagePathRaw == null || imagePathRaw.isEmpty) {
+        imagePathRaw = tvShow.backdropPath;
+        usePoster = false;
+      }
+    }
+
+    String? imagePath = imagePathRaw;
+    if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
+      final uri = Uri.tryParse(imagePathRaw);
+      final segments = uri?.pathSegments ?? const <String>[];
+      // TMDB：/t/p/{size}/...
+      final currentSize = segments.length >= 3 ? segments[2] : '';
+      // 仅当当前尺寸偏小才升级，避免把已是 w1280/original 的背景图降级。
+      const smallSizes = <String>{'w92', 'w154', 'w185', 'w342', 'w500'};
+      if (smallSizes.contains(currentSize)) {
+        imagePath = ImageProxy.withTMDBSize(
+          imagePathRaw,
+          usePoster ? 'w780' : 'w1280',
+        );
+      }
+    }
+    // 说明：
+    // - 你要求“完整展示 + 不留黑边/空白”，只能用 BoxFit.fill（会改变宽高比）。
+    // - 为了让“拉伸变形”尽量不那么明显，这里根据内容类型尽量让容器宽高比接近图片的常见比例：
+    //   - 横版背景图：按 16:9 估算一个更合理的高度；
+    //   - 海报：保持原来的高度策略（更接近 2:3）。
+    //
+    // 同时，为了避免 Sliver 之间在某些 DPR/尺寸下出现 1px 的“细缝”，最终高度向上取整到整数像素。
+    final imageHeight =
+        (() {
+          if (usePoster) {
+            return screenSize.height * 0.7;
+          }
+          // 背景图常见比例约为 16:9（宽/高）。
+          const backdropAspect = 16 / 9;
+          final idealHeight = screenSize.width / backdropAspect;
+          final minHeight = screenSize.height * 0.55;
+          final maxHeight = screenSize.height * 0.9;
+          return idealHeight.clamp(minHeight, maxHeight);
+        })().ceilToDouble();
+    final gradientHeight = (imageHeight * 0.22).ceilToDouble();
     final imageUrl =
         imagePath != null && imagePath.isNotEmpty
             ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
@@ -211,14 +288,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
     return Stack(
       children: [
-        // 背景图 - 清晰显示
+        // 顶部图：移动端海报完整展示；桌面端横图更适配宽屏（cover）。
         if (imageUrl != null && imageUrl.isNotEmpty)
+          // 按需求：宽度拉伸并且不留黑边/空白，同时不裁切图片内容。
+          // 注意：这会改变图片的原始宽高比（图片会被“拉伸/压扁”），属于有损展示。
           CachedNetworkImage(
             imageUrl: imageUrl,
             width: double.infinity,
             height: imageHeight,
-            fit: BoxFit.cover,
-            alignment: Alignment.topCenter,
+            fit: BoxFit.fill,
+            alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
                     Container(height: imageHeight, color: Colors.black),
@@ -228,18 +307,23 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         else
           Container(height: imageHeight, color: Colors.black),
 
-        // 渐变蒙版 - 底部10%渐变到黑色
+        // 渐变蒙版：适当减小渐变高度，避免遮罩范围过大导致画面偏暗。
         Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
-          height: imageHeight * 0.1, // 只有底部10%有渐变
+          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的“发丝缝”。
+          bottom: -1,
+          height: gradientHeight + 2,
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.transparent, Colors.black],
+                colors: [
+                  Colors.transparent,
+                  Colors.black.withValues(alpha: 0.75),
+                  Colors.black,
+                ],
               ),
             ),
           ),
@@ -542,19 +626,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     BuildContext context,
     ThemeData theme,
     List<CastMember> cast,
-    String? serverBaseUrl,
-  ) {
+    String? serverBaseUrl, {
+    String title = '相关演员',
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 区域标题
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Text(
-              '相关演员',
-              style: TextStyle(
+              title,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -576,6 +661,143 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               },
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSeasonCreditsSection(
+    BuildContext context,
+    ThemeData theme,
+    Season season,
+    String? serverBaseUrl,
+  ) {
+    final cast = season.castDetail ?? const <CastMember>[];
+    final crew = season.crewDetail ?? const <CrewMember>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (crew.isNotEmpty)
+          _buildCrewSection(
+            context,
+            theme,
+            crew,
+            serverBaseUrl,
+            title: '${season.displayName} 职员',
+          ),
+        if (cast.isNotEmpty)
+          _buildCastSection(
+            context,
+            theme,
+            cast,
+            serverBaseUrl,
+            title: '${season.displayName} 演员',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildCrewSection(
+    BuildContext context,
+    ThemeData theme,
+    List<CrewMember> crew,
+    String? serverBaseUrl, {
+    String title = '职员',
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 120,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              scrollDirection: Axis.horizontal,
+              itemCount: crew.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              itemBuilder: (context, index) {
+                return _buildCrewCard(crew[index], serverBaseUrl);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCrewCard(CrewMember member, String? serverBaseUrl) {
+    final name = member.name;
+    final job =
+        (member.job?.trim().isNotEmpty ?? false) ? member.job!.trim() : null;
+    final dept =
+        (member.department?.trim().isNotEmpty ?? false)
+            ? member.department!.trim()
+            : null;
+    final role = job ?? dept;
+    final profileUrl = member.profilePath;
+
+    return SizedBox(
+      width: 80,
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: 0.1),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2),
+                width: 2,
+              ),
+            ),
+            child: ClipOval(
+              child: CastAvatar(
+                size: 64,
+                imageUrl: profileUrl,
+                serverBaseUrl: serverBaseUrl,
+                iconColor: Colors.white.withValues(alpha: 0.5),
+                iconSize: 32,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+          if (role != null && role.isNotEmpty)
+            Text(
+              role,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 10,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
         ],
       ),
     );

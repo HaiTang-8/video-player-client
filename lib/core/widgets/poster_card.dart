@@ -48,67 +48,70 @@ class PosterCard extends ConsumerWidget {
               // 海报图片
               _buildPosterImage(serverBaseUrl),
 
-              // 渐变遮罩
+              // 底部信息区：用更小的渐变范围，并给文字留出底部呼吸感
               Positioned(
-                bottom: 0,
                 left: 0,
                 right: 0,
-                child: Container(
-                  height: 80,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.8),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
-              // 标题和信息
-              Positioned(
-                bottom: 8,
-                left: 8,
-                right: 8,
+                bottom: 0,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      item.title,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(8, 14, 8, 12),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.85),
+                          ],
+                        ),
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (item.year != null) ...[
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                           Text(
-                            '${item.year}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
+                            item.title,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
                             ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (item.rating != null && item.rating! > 0) ...[
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          const SizedBox(width: 2),
-                          Text(
-                            item.rating!.toStringAsFixed(1),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: Colors.white70,
-                            ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              if (item.year != null) ...[
+                                Text(
+                                  '${item.year}',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              if (item.rating != null && item.rating! > 0) ...[
+                                const Icon(
+                                  Icons.star,
+                                  size: 14,
+                                  color: Colors.amber,
+                                ),
+                                const SizedBox(width: 2),
+                                Text(
+                                  item.rating!.toStringAsFixed(1),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
-                      ],
+                      ),
                     ),
                   ],
                 ),

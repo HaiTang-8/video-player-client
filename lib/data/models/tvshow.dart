@@ -10,6 +10,9 @@ class TvShow {
   final String? overview;
   final String? posterPath;
   final String? backdropPath;
+
+  /// 剧照/背景图列表（横版），用于 PC 横屏展示
+  final List<String>? backdrops;
   final double? rating;
   final int? year;
   final DateTime? firstAirDate;
@@ -17,8 +20,10 @@ class TvShow {
   final int? numberOfSeasons;
   final int? numberOfEpisodes;
   final List<String>? genres;
+
   /// 演员表（按展示顺序）
   final List<String>? cast;
+
   /// 演员详情（含头像/角色等）
   final List<CastMember>? castDetail;
   final String? tmdbId;
@@ -35,6 +40,7 @@ class TvShow {
     this.overview,
     this.posterPath,
     this.backdropPath,
+    this.backdrops,
     this.rating,
     this.year,
     this.firstAirDate,
@@ -60,14 +66,17 @@ class TvShow {
       overview: json['overview'] as String?,
       posterPath: json['poster_path'] as String?,
       backdropPath: json['backdrop_path'] as String?,
+      backdrops: _parseGenres(json['backdrops']),
       rating: (json['vote_average'] as num?)?.toDouble(),
       year: (json['year'] as num?)?.toInt(),
-      firstAirDate: json['first_air_date'] != null
-          ? DateTime.tryParse(json['first_air_date'].toString())
-          : null,
-      lastAirDate: json['last_air_date'] != null
-          ? DateTime.tryParse(json['last_air_date'].toString())
-          : null,
+      firstAirDate:
+          json['first_air_date'] != null
+              ? DateTime.tryParse(json['first_air_date'].toString())
+              : null,
+      lastAirDate:
+          json['last_air_date'] != null
+              ? DateTime.tryParse(json['last_air_date'].toString())
+              : null,
       numberOfSeasons: (json['number_of_seasons'] as num?)?.toInt(),
       numberOfEpisodes: (json['number_of_episodes'] as num?)?.toInt(),
       genres: _parseGenres(json['genres']),
@@ -77,38 +86,41 @@ class TvShow {
       imdbId: json['imdb_id']?.toString(),
       status: json['status'] as String?,
       seasons: _parseSeasons(json['seasons']),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString())
-          : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'].toString())
-          : null,
+      createdAt:
+          json['created_at'] != null
+              ? DateTime.tryParse(json['created_at'].toString())
+              : null,
+      updatedAt:
+          json['updated_at'] != null
+              ? DateTime.tryParse(json['updated_at'].toString())
+              : null,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'original_name': originalName,
-        'overview': overview,
-        'poster_path': posterPath,
-        'backdrop_path': backdropPath,
-        'vote_average': rating,
-        'year': year,
-        'first_air_date': firstAirDate?.toIso8601String(),
-        'last_air_date': lastAirDate?.toIso8601String(),
-        'number_of_seasons': numberOfSeasons,
-        'number_of_episodes': numberOfEpisodes,
-        'genres': genres,
-        'cast': cast,
-        'cast_detail': castDetail?.map((e) => e.toJson()).toList(),
-        'tmdb_id': tmdbId,
-        'imdb_id': imdbId,
-        'status': status,
-        'seasons': seasons?.map((e) => e.toJson()).toList(),
-        'created_at': createdAt?.toIso8601String(),
-        'updated_at': updatedAt?.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'original_name': originalName,
+    'overview': overview,
+    'poster_path': posterPath,
+    'backdrop_path': backdropPath,
+    'backdrops': backdrops,
+    'vote_average': rating,
+    'year': year,
+    'first_air_date': firstAirDate?.toIso8601String(),
+    'last_air_date': lastAirDate?.toIso8601String(),
+    'number_of_seasons': numberOfSeasons,
+    'number_of_episodes': numberOfEpisodes,
+    'genres': genres,
+    'cast': cast,
+    'cast_detail': castDetail?.map((e) => e.toJson()).toList(),
+    'tmdb_id': tmdbId,
+    'imdb_id': imdbId,
+    'status': status,
+    'seasons': seasons?.map((e) => e.toJson()).toList(),
+    'created_at': createdAt?.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
+  };
 
   /// 获取状态显示文本
   String get statusText {
@@ -143,13 +155,17 @@ class TvShow {
   static List<Season>? _parseSeasons(dynamic value) {
     if (value == null) return null;
     if (value is List) {
-      return value.map((e) => Season.fromJson(e as Map<String, dynamic>)).toList();
+      return value
+          .map((e) => Season.fromJson(e as Map<String, dynamic>))
+          .toList();
     }
     if (value is String && value.isNotEmpty) {
       try {
         final decoded = jsonDecode(value);
         if (decoded is List) {
-          return decoded.map((e) => Season.fromJson(e as Map<String, dynamic>)).toList();
+          return decoded
+              .map((e) => Season.fromJson(e as Map<String, dynamic>))
+              .toList();
         }
       } catch (_) {}
     }

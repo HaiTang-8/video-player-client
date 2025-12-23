@@ -1,5 +1,6 @@
 // 导出所有模型
 export 'cast_member.dart';
+export 'crew_member.dart';
 export 'media_item.dart';
 export 'movie.dart';
 export 'tvshow.dart';
