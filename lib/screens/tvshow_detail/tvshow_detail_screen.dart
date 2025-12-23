@@ -135,24 +135,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               // 顶部导航栏
               if (!isDesktop) _buildAppBar(context, tvShow),
 
-              // 背景图区域 - 作为滚动内容的一部分
+              // 背景图区域（含渐变蒙版和 Hero 内容）
               SliverToBoxAdapter(
-                child: _buildBackgroundImage(
+                child: _buildBackgroundWithHero(
+                  context,
                   tvShow,
                   selectedSeason,
                   screenSize,
                   serverBaseUrl,
                   isDesktop: isDesktop,
-                ),
-              ),
-
-              // Hero Section
-              SliverToBoxAdapter(
-                child: _buildHeroSection(
-                  context,
-                  theme,
-                  tvShow,
-                  selectedSeason,
                 ),
               ),
 
@@ -214,20 +205,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  /// 构建背景图 - 清晰展示90%，底部渐变过渡
-  Widget _buildBackgroundImage(
+  /// 构建背景图（含渐变蒙版和 Hero 内容）
+  Widget _buildBackgroundWithHero(
+    BuildContext context,
     TvShow tvShow,
     Season? selectedSeason,
     Size screenSize,
     String? serverBaseUrl, {
     required bool isDesktop,
   }) {
-    // 移动端：优先季海报（竖版，更适配）。
-    // 桌面端：优先本季剧照（横版，适配宽屏）；缺失则回退剧集背景图。
     String? imagePathRaw;
     bool usePoster = false;
     if (isDesktop) {
-      // 优先使用 TMDB 的“剧照/背景图”（/tv/{id}/images.backdrops），避免用“每季第一集 still”冒充剧照。
       final backdrops = tvShow.backdrops;
       if (backdrops != null && backdrops.isNotEmpty) {
         imagePathRaw = backdrops[_selectedSeasonIndex % backdrops.length];
@@ -250,9 +239,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
       final uri = Uri.tryParse(imagePathRaw);
       final segments = uri?.pathSegments ?? const <String>[];
-      // TMDB：/t/p/{size}/...
       final currentSize = segments.length >= 3 ? segments[2] : '';
-      // 仅当当前尺寸偏小才升级，避免把已是 w1280/original 的背景图降级。
       const smallSizes = <String>{'w92', 'w154', 'w185', 'w342', 'w500'};
       if (smallSizes.contains(currentSize)) {
         imagePath = ImageProxy.withTMDBSize(
@@ -261,26 +248,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         );
       }
     }
-    // 说明：
-    // - 你要求“完整展示 + 不留黑边/空白”，只能用 BoxFit.fill（会改变宽高比）。
-    // - 为了让“拉伸变形”尽量不那么明显，这里根据内容类型尽量让容器宽高比接近图片的常见比例：
-    //   - 横版背景图：按 16:9 估算一个更合理的高度；
-    //   - 海报：保持原来的高度策略（更接近 2:3）。
-    //
-    // 同时，为了避免 Sliver 之间在某些 DPR/尺寸下出现 1px 的“细缝”，最终高度向上取整到整数像素。
+
     final imageHeight =
         (() {
           if (usePoster) {
             return screenSize.height * 0.7;
           }
-          // 背景图常见比例约为 16:9（宽/高）。
           const backdropAspect = 16 / 9;
           final idealHeight = screenSize.width / backdropAspect;
           final minHeight = screenSize.height * 0.55;
           final maxHeight = screenSize.height * 0.9;
           return idealHeight.clamp(minHeight, maxHeight);
         })().ceilToDouble();
-    final gradientHeight = (imageHeight * 0.22).ceilToDouble();
+
+    final gradientHeight = (imageHeight * 0.5).ceilToDouble();
     final imageUrl =
         imagePath != null && imagePath.isNotEmpty
             ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
@@ -288,10 +269,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
     return Stack(
       children: [
-        // 顶部图：移动端海报完整展示；桌面端横图更适配宽屏（cover）。
+        // 背景图
         if (imageUrl != null && imageUrl.isNotEmpty)
-          // 按需求：宽度拉伸并且不留黑边/空白，同时不裁切图片内容。
-          // 注意：这会改变图片的原始宽高比（图片会被“拉伸/压扁”），属于有损展示。
           CachedNetworkImage(
             imageUrl: imageUrl,
             width: double.infinity,
@@ -300,20 +279,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
-                    Container(height: imageHeight, color: Colors.white),
+                    Container(height: imageHeight, color: Colors.grey[300]),
             placeholder:
-                (_, __) => Container(height: imageHeight, color: Colors.white),
+                (_, __) =>
+                    Container(height: imageHeight, color: Colors.grey[300]),
           )
         else
-          Container(height: imageHeight, color: Colors.white),
+          Container(height: imageHeight, color: Colors.grey[300]),
 
-        // 渐变蒙版：适当减小渐变高度，避免遮罩范围过大导致画面偏暗。
+        // 渐变蒙版
         Positioned(
           left: 0,
           right: 0,
-          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的"发丝缝"。
-          bottom: -1,
-          height: gradientHeight + 2,
+          bottom: 0,
+          height: gradientHeight,
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -321,11 +300,88 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.white.withValues(alpha: 0.75),
-                  Colors.white,
+                  Colors.white.withValues(alpha: 0.3),
+                  Colors.white.withValues(alpha: 0.7),
+                  Colors.white.withValues(alpha: 0.95),
                 ],
+                stops: const [0.0, 0.3, 0.6, 1.0],
               ),
             ),
+          ),
+        ),
+
+        // Hero 内容（叠加在渐变蒙版上）
+        Positioned(
+          left: 24,
+          right: 24,
+          bottom: 24,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 第一行：剧集标题
+              Text(
+                selectedSeason != null
+                    ? '${tvShow.name} ${selectedSeason.displayName}'
+                    : tvShow.name,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 第二行：左侧播放按钮 + 右侧（元数据+简介）
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 左侧 - 播放按钮
+                  _buildPlayButton(context),
+                  const SizedBox(width: 24),
+
+                  // 右侧 - 元数据 + 简介
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 元数据行
+                        _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
+                        // 简介
+                        if (selectedSeason?.overview != null &&
+                            selectedSeason!.overview!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            selectedSeason.overview!,
+                            style: TextStyle(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ] else if (tvShow.overview != null &&
+                            tvShow.overview!.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            tvShow.overview!,
+                            style: TextStyle(
+                              color: Colors.black.withValues(alpha: 0.8),
+                              fontSize: 14,
+                              height: 1.5,
+                            ),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ],
@@ -370,88 +426,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  /// 构建 Hero Section - 左右布局
-  Widget _buildHeroSection(
-    BuildContext context,
-    ThemeData theme,
-    TvShow tvShow,
-    Season? selectedSeason,
-  ) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 左侧 - 标题和播放按钮
-          Expanded(
-            flex: 2,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 季标题
-                Text(
-                  selectedSeason != null
-                      ? '${tvShow.name} ${selectedSeason.displayName}'
-                      : tvShow.name,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // 播放按钮
-                _buildPlayButton(context),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 32),
-
-          // 右侧 - 元数据和简介
-          Expanded(
-            flex: 3,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 元数据行
-                _buildMetadataRow(tvShow, selectedSeason),
-                const SizedBox(height: 16),
-
-                // 剧情简介
-                if (selectedSeason?.overview != null &&
-                    selectedSeason!.overview!.isNotEmpty)
-                  Text(
-                    selectedSeason.overview!,
-                    style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.8),
-                      fontSize: 14,
-                      height: 1.6,
-                    ),
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                else if (tvShow.overview != null && tvShow.overview!.isNotEmpty)
-                  Text(
-                    tvShow.overview!,
-                    style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.8),
-                      fontSize: 14,
-                      height: 1.6,
-                    ),
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
     return Material(
@@ -485,7 +459,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建元数据行
-  Widget _buildMetadataRow(TvShow tvShow, Season? selectedSeason) {
+  Widget _buildMetadataRow(TvShow tvShow, Season? selectedSeason, {bool forOverlay = false}) {
     final items = <Widget>[];
 
     // 评分
@@ -494,6 +468,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         _buildMetadataItem(
           '豆 ${tvShow.rating!.toStringAsFixed(1)}',
           Colors.green,
+          forOverlay: forOverlay,
         ),
       );
     }
@@ -504,34 +479,43 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         _buildMetadataItem(
           '${tvShow.firstAirDate!.year}-${tvShow.firstAirDate!.month.toString().padLeft(2, '0')}-${tvShow.firstAirDate!.day.toString().padLeft(2, '0')}',
           null,
+          forOverlay: forOverlay,
         ),
       );
     } else if (tvShow.year != null) {
-      items.add(_buildMetadataItem('${tvShow.year}', null));
+      items.add(_buildMetadataItem('${tvShow.year}', null, forOverlay: forOverlay));
     }
 
     // 剧集数
     if (selectedSeason?.episodeCount != null) {
-      items.add(_buildMetadataItem('共${selectedSeason!.episodeCount}集', null));
+      items.add(_buildMetadataItem('共${selectedSeason!.episodeCount}集', null, forOverlay: forOverlay));
     } else if (tvShow.numberOfEpisodes != null) {
-      items.add(_buildMetadataItem('共${tvShow.numberOfEpisodes}集', null));
+      items.add(_buildMetadataItem('共${tvShow.numberOfEpisodes}集', null, forOverlay: forOverlay));
     }
 
     // 状态
     if (tvShow.status != null) {
-      items.add(_buildMetadataItem(tvShow.statusText, null));
+      items.add(_buildMetadataItem(tvShow.statusText, null, forOverlay: forOverlay));
     }
 
     return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 
-  Widget _buildMetadataItem(String text, Color? color) {
+  Widget _buildMetadataItem(String text, Color? color, {bool forOverlay = false}) {
+    final defaultColor = forOverlay
+        ? Colors.white.withValues(alpha: 0.85)
+        : Colors.black.withValues(alpha: 0.7);
     return Text(
       text,
       style: TextStyle(
-        color: color ?? Colors.black.withValues(alpha: 0.7),
+        color: color ?? defaultColor,
         fontSize: 14,
         fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
+        shadows: forOverlay
+            ? const [
+                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black45),
+              ]
+            : null,
       ),
     );
   }
