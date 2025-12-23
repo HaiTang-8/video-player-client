@@ -534,65 +534,52 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           // 分季切换标签
           SizedBox(
             height: 44,
-            child: ListView.separated(
+            child: ListView.builder(
               scrollDirection: Axis.horizontal,
               itemCount: tvShow.seasons!.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final season = tvShow.seasons![index];
                 final isSelected = index == _selectedSeasonIndex;
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedSeasonIndex = index;
-                      _selectedSeasonId = season.id;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color:
-                          isSelected
-                              ? Colors.black.withValues(alpha: 0.15)
-                              : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color:
-                            isSelected
-                                ? Colors.black.withValues(alpha: 0.3)
-                                : Colors.black.withValues(alpha: 0.1),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          season.displayName,
-                          style: TextStyle(
-                            color:
-                                isSelected
-                                    ? Colors.black
-                                    : Colors.black.withValues(alpha: 0.6),
-                            fontSize: 14,
-                            fontWeight:
-                                isSelected
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
+                return Padding(
+                  padding: const EdgeInsets.only(right: 32.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() {
+                        _selectedSeasonIndex = index;
+                        _selectedSeasonId = season.id;
+                      });
+                    },
+                    child: IntrinsicWidth(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // 文本
+                          Text(
+                            season.displayName,
+                            style: TextStyle(
+                              color: isSelected ? Colors.black : Colors.grey,
+                              fontSize: 18.0,
+                              fontWeight:
+                                  isSelected ? FontWeight.w700 : FontWeight.normal,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
-                        ),
-                        if (isSelected) ...[
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.keyboard_arrow_down,
-                            color: Colors.black.withValues(alpha: 0.8),
-                            size: 18,
+                          const SizedBox(height: 4),
+                          // 指示器
+                          Container(
+                            height: 3.0,
+                            decoration: BoxDecoration(
+                              color:
+                                  isSelected
+                                      ? Colors.black
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(1.5),
+                            ),
                           ),
                         ],
-                      ],
+                      ),
                     ),
                   ),
                 );
