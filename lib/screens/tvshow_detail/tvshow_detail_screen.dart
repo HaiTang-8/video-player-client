@@ -34,7 +34,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar:
           isDesktop
               ? tvShowAsync.when(
@@ -300,18 +300,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
-                    Container(height: imageHeight, color: Colors.black),
+                    Container(height: imageHeight, color: Colors.white),
             placeholder:
-                (_, __) => Container(height: imageHeight, color: Colors.black),
+                (_, __) => Container(height: imageHeight, color: Colors.white),
           )
         else
-          Container(height: imageHeight, color: Colors.black),
+          Container(height: imageHeight, color: Colors.white),
 
         // 渐变蒙版：适当减小渐变高度，避免遮罩范围过大导致画面偏暗。
         Positioned(
           left: 0,
           right: 0,
-          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的“发丝缝”。
+          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的"发丝缝"。
           bottom: -1,
           height: gradientHeight + 2,
           child: Container(
@@ -321,8 +321,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.75),
-                  Colors.black,
+                  Colors.white.withValues(alpha: 0.75),
+                  Colors.white,
                 ],
               ),
             ),
@@ -394,7 +394,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                       ? '${tvShow.name} ${selectedSeason.displayName}'
                       : tvShow.name,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Colors.black,
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
@@ -426,7 +426,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   Text(
                     selectedSeason.overview!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
+                      color: Colors.black.withValues(alpha: 0.8),
                       fontSize: 14,
                       height: 1.6,
                     ),
@@ -437,7 +437,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   Text(
                     tvShow.overview!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
+                      color: Colors.black.withValues(alpha: 0.8),
                       fontSize: 14,
                       height: 1.6,
                     ),
@@ -455,7 +455,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: Colors.black,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: () {
@@ -467,12 +467,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_arrow, color: Colors.black, size: 24),
+              Icon(Icons.play_arrow, color: Colors.white, size: 24),
               SizedBox(width: 8),
               Text(
                 '播放',
                 style: TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -529,7 +529,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     return Text(
       text,
       style: TextStyle(
-        color: color ?? Colors.white.withValues(alpha: 0.7),
+        color: color ?? Colors.black.withValues(alpha: 0.7),
         fontSize: 14,
         fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
       ),
@@ -573,14 +573,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     decoration: BoxDecoration(
                       color:
                           isSelected
-                              ? Colors.white.withValues(alpha: 0.15)
+                              ? Colors.black.withValues(alpha: 0.15)
                               : Colors.transparent,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color:
                             isSelected
-                                ? Colors.white.withValues(alpha: 0.3)
-                                : Colors.white.withValues(alpha: 0.1),
+                                ? Colors.black.withValues(alpha: 0.3)
+                                : Colors.black.withValues(alpha: 0.1),
                       ),
                     ),
                     child: Row(
@@ -591,8 +591,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                           style: TextStyle(
                             color:
                                 isSelected
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.6),
+                                    ? Colors.black
+                                    : Colors.black.withValues(alpha: 0.6),
                             fontSize: 14,
                             fontWeight:
                                 isSelected
@@ -604,7 +604,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                           const SizedBox(width: 4),
                           Icon(
                             Icons.keyboard_arrow_down,
-                            color: Colors.white.withValues(alpha: 0.8),
+                            color: Colors.black.withValues(alpha: 0.8),
                             size: 18,
                           ),
                         ],
@@ -640,7 +640,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             child: Text(
               title,
               style: const TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -715,7 +715,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             child: Text(
               title,
               style: const TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -759,9 +759,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 width: 2,
               ),
             ),
@@ -770,7 +770,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 size: 64,
                 imageUrl: profileUrl,
                 serverBaseUrl: serverBaseUrl,
-                iconColor: Colors.white.withValues(alpha: 0.5),
+                iconColor: Colors.black.withValues(alpha: 0.5),
                 iconSize: 32,
               ),
             ),
@@ -779,7 +779,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           Text(
             name,
             style: const TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -791,7 +791,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             Text(
               role,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 fontSize: 10,
               ),
               maxLines: 1,
@@ -819,9 +819,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 width: 2,
               ),
             ),
@@ -830,7 +830,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 size: 64,
                 imageUrl: profileUrl,
                 serverBaseUrl: serverBaseUrl,
-                iconColor: Colors.white.withValues(alpha: 0.5),
+                iconColor: Colors.black.withValues(alpha: 0.5),
                 iconSize: 32,
               ),
             ),
@@ -841,7 +841,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           Text(
             name,
             style: const TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -855,7 +855,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             Text(
               '饰 $role',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 fontSize: 10,
               ),
               maxLines: 1,
@@ -949,7 +949,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Divider(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             height: 48,
           ),
         ),
@@ -963,7 +963,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -972,7 +972,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 'TMDB ID: ${tvShow.tmdbId ?? "未知"} | IMDB: ${tvShow.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -983,7 +983,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '类型: ${tvShow.genres!.join(", ")}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
@@ -1052,7 +1052,7 @@ class _EpisodesCarousel extends ConsumerWidget {
           () => const SizedBox(
             height: 180,
             child: Center(
-              child: CircularProgressIndicator(color: Colors.white),
+              child: CircularProgressIndicator(color: Colors.black),
             ),
           ),
       error:
@@ -1060,7 +1060,7 @@ class _EpisodesCarousel extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Text(
               '加载失败: $error',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
             ),
           ),
       data: (episodes) {
@@ -1069,7 +1069,7 @@ class _EpisodesCarousel extends ConsumerWidget {
             padding: const EdgeInsets.all(24),
             child: Text(
               '暂无剧集',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+              style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
             ),
           );
         }
@@ -1215,7 +1215,7 @@ class _EpisodeCard extends StatelessWidget {
             Text(
               '${episode.episodeNumber}. ${episode.name ?? "第${episode.episodeNumber}集"}',
               style: const TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -1234,12 +1234,12 @@ class _EpisodeCard extends StatelessWidget {
       width: 160,
       height: 90,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
+        color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(
         Icons.play_circle_outline,
-        color: Colors.white.withValues(alpha: 0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         size: 32,
       ),
     );

@@ -26,7 +26,7 @@ class MovieDetailScreen extends ConsumerWidget {
     final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Colors.white,
       appBar:
           isDesktop
               ? movieAsync.when(
@@ -226,18 +226,18 @@ class MovieDetailScreen extends ConsumerWidget {
             alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
-                    Container(height: imageHeight, color: Colors.black),
+                    Container(height: imageHeight, color: Colors.white),
             placeholder:
-                (_, __) => Container(height: imageHeight, color: Colors.black),
+                (_, __) => Container(height: imageHeight, color: Colors.white),
           )
         else
-          Container(height: imageHeight, color: Colors.black),
+          Container(height: imageHeight, color: Colors.white),
 
         // 渐变蒙版：适当减小渐变高度，避免遮罩范围过大导致画面偏暗。
         Positioned(
           left: 0,
           right: 0,
-          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的“发丝缝”。
+          // 轻微下探 + 增加 1~2px 覆盖，避免渐变与下方内容之间出现肉眼可见的"发丝缝"。
           bottom: -1,
           height: gradientHeight + 2,
           child: Container(
@@ -247,8 +247,8 @@ class MovieDetailScreen extends ConsumerWidget {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.75),
-                  Colors.black,
+                  Colors.white.withValues(alpha: 0.75),
+                  Colors.white,
                 ],
               ),
             ),
@@ -312,7 +312,7 @@ class MovieDetailScreen extends ConsumerWidget {
                 Text(
                   movie.title,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: Colors.black,
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
                     height: 1.2,
@@ -343,7 +343,7 @@ class MovieDetailScreen extends ConsumerWidget {
                   Text(
                     movie.overview!,
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
+                      color: Colors.black.withValues(alpha: 0.8),
                       fontSize: 14,
                       height: 1.6,
                     ),
@@ -361,7 +361,7 @@ class MovieDetailScreen extends ConsumerWidget {
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: Colors.black,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         onTap: () => context.push('/player/movie/$movieId'),
@@ -371,12 +371,12 @@ class MovieDetailScreen extends ConsumerWidget {
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_arrow, color: Colors.black, size: 24),
+              Icon(Icons.play_arrow, color: Colors.white, size: 24),
               SizedBox(width: 8),
               Text(
                 '播放',
                 style: TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -424,7 +424,7 @@ class MovieDetailScreen extends ConsumerWidget {
     return Text(
       text,
       style: TextStyle(
-        color: color ?? Colors.white.withValues(alpha: 0.7),
+        color: color ?? Colors.black.withValues(alpha: 0.7),
         fontSize: 14,
         fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
       ),
@@ -449,7 +449,7 @@ class MovieDetailScreen extends ConsumerWidget {
             child: Text(
               '相关演员',
               style: TextStyle(
-                color: Colors.white,
+                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
@@ -491,9 +491,9 @@ class MovieDetailScreen extends ConsumerWidget {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.1),
+              color: Colors.black.withValues(alpha: 0.1),
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: Colors.black.withValues(alpha: 0.2),
                 width: 2,
               ),
             ),
@@ -502,7 +502,7 @@ class MovieDetailScreen extends ConsumerWidget {
                 size: 64,
                 imageUrl: profileUrl,
                 serverBaseUrl: serverBaseUrl,
-                iconColor: Colors.white.withValues(alpha: 0.5),
+                iconColor: Colors.black.withValues(alpha: 0.5),
                 iconSize: 32,
               ),
             ),
@@ -513,7 +513,7 @@ class MovieDetailScreen extends ConsumerWidget {
           Text(
             name,
             style: const TextStyle(
-              color: Colors.white,
+              color: Colors.black,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -527,7 +527,7 @@ class MovieDetailScreen extends ConsumerWidget {
             Text(
               '饰 $role',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: Colors.black.withValues(alpha: 0.5),
                 fontSize: 10,
               ),
               maxLines: 1,
@@ -621,7 +621,7 @@ class MovieDetailScreen extends ConsumerWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Divider(
-            color: Colors.white.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             height: 48,
           ),
         ),
@@ -635,7 +635,7 @@ class MovieDetailScreen extends ConsumerWidget {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -644,7 +644,7 @@ class MovieDetailScreen extends ConsumerWidget {
               Text(
                 'TMDB ID: ${movie.tmdbId ?? "未知"} | IMDB: ${movie.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -655,7 +655,7 @@ class MovieDetailScreen extends ConsumerWidget {
                   child: Text(
                     '类型: ${movie.genres!.join(", ")}',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
