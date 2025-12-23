@@ -320,9 +320,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // 第一行：剧集标题
+              // 第一行：剧集标题（只有一季时不显示季度信息）
               Text(
-                selectedSeason != null
+                (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
                     ? '${tvShow.name} ${selectedSeason.displayName}'
                     : tvShow.name,
                 style: const TextStyle(
@@ -556,9 +556,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // 文本
+                          // 文本（单季时固定显示"第一季"）
                           Text(
-                            season.displayName,
+                            tvShow.seasons!.length == 1 ? '第一季' : season.displayName,
                             style: TextStyle(
                               color: isSelected ? Colors.black : Colors.grey,
                               fontSize: 18.0,
