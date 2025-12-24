@@ -148,7 +148,9 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       );
     }
 
-    return RefreshIndicator(
+    return Stack(
+      children: [
+        RefreshIndicator(
       onRefresh: () async {
         await ref.read(browseProvider(widget.storageId).notifier).browse(state.currentPath);
       },
@@ -194,6 +196,17 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
           return const SizedBox.shrink();
         },
       ),
+    ),
+        if (state.isLoading)
+          Positioned.fill(
+            child: Container(
+              color: isDark ? Colors.black54 : Colors.white54,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
