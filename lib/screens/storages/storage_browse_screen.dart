@@ -346,11 +346,32 @@ class _FileTile extends StatelessWidget {
     required this.onLongPress,
   });
 
+  static const _videoExtensions = {
+    'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'rmvb', 'rm', '3gp', 'mpg', 'mpeg', 'vob'
+  };
+
+  bool get _isVideo {
+    final ext = file.name.split('.').last.toLowerCase();
+    return _videoExtensions.contains(ext);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final iconColor = file.isDir ? Colors.blue : Colors.grey;
+    final Color iconColor;
+    final IconData iconData;
+
+    if (file.isDir) {
+      iconColor = Colors.blue;
+      iconData = CupertinoIcons.folder;
+    } else if (_isVideo) {
+      iconColor = Colors.purple;
+      iconData = CupertinoIcons.play_rectangle_fill;
+    } else {
+      iconColor = Colors.grey;
+      iconData = CupertinoIcons.doc;
+    }
 
     return Material(
       color: Colors.transparent,
@@ -370,7 +391,7 @@ class _FileTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  file.isDir ? CupertinoIcons.folder : CupertinoIcons.doc,
+                  iconData,
                   size: 20,
                   color: iconColor,
                 ),
