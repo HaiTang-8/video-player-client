@@ -14,7 +14,7 @@ class StreamInfo {
 
   factory StreamInfo.fromJson(Map<String, dynamic> json) {
     return StreamInfo(
-      url: json['url'] as String? ?? '',
+      url: json['url'] as String? ?? json['file_path'] as String? ?? '',
       mimeType: json['mime_type'] as String?,
       fileSize: json['file_size'] as int?,
       fileName: json['file_name'] as String?,

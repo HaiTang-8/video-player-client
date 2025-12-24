@@ -41,11 +41,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    _setupPlayerListeners();
     _loadVideo();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
     }
+  }
+
+  void _setupPlayerListeners() {
+    // 监听播放器错误
+    _player.stream.error.listen((error) {
+      if (!mounted || _isDisposing) return;
+      if (error.isNotEmpty) {
+        setState(() {
+          _error = '播放错误: $error';
+          _isLoading = false;
+        });
+      }
+    });
+
+    // 监听缓冲状态
+    _player.stream.buffering.listen((buffering) {
+      if (!mounted || _isDisposing) return;
+      // 可选：显示缓冲状态
+    });
+
+    // 监听播放完成
+    _player.stream.completed.listen((completed) {
+      if (!mounted || _isDisposing) return;
+      if (completed) {
+        // 播放完成，可返回上一页或显示提示
+      }
+    });
   }
 
   @override
@@ -124,7 +152,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final serverUrl = ref.read(serverUrlProvider);
       final fullUrl =
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
-
+          
       await _player.open(Media(fullUrl));
 
       if (!mounted) return;
@@ -169,12 +197,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 : AppBar(
                   backgroundColor: Colors.transparent,
                   foregroundColor: Colors.white,
+                  elevation: 0,
+                  toolbarHeight: 44,
+                  centerTitle: false,
                   automaticallyImplyLeading: false,
                   leadingWidth: kAppBackButtonWidth,
                   titleSpacing: 1,
                   leading: AppBackButton(
                     onPressed: () => Navigator.of(context).pop(),
                     color: Colors.white,
+                  ),
+                  title: const Text(
+                    '播放失败',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
         body: Center(
