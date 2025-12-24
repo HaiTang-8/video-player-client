@@ -17,6 +17,7 @@ class ProfileScreen extends ConsumerWidget {
     final playbackSettings = ref.watch(playbackSettingsProvider);
 
     return Scaffold(
+      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
       appBar: isDesktop
           ? const DesktopTitleBar(
               title: Text('我的'),

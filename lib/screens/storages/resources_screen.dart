@@ -30,8 +30,10 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     final scanState = ref.watch(scanStateProvider);
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
       appBar: isDesktop
           ? DesktopTitleBar(
               title: const Text('资源库'),
