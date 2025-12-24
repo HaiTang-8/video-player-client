@@ -27,7 +27,6 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   @override
   Widget build(BuildContext context) {
     final storagesAsync = ref.watch(storagesProvider);
-    final scanState = ref.watch(scanStateProvider);
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -40,9 +39,9 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               centerTitle: true,
               actions: [
                 IconButton(
-                  tooltip: '存储源管理',
+                  tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
-                  icon: const Icon(CupertinoIcons.gear),
+                  icon: const Icon(CupertinoIcons.add),
                 ),
               ],
             )
@@ -50,9 +49,9 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               title: const Text('资源库'),
               actions: [
                 IconButton(
-                  tooltip: '存储源管理',
+                  tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
-                  icon: const Icon(CupertinoIcons.gear),
+                  icon: const Icon(CupertinoIcons.add),
                 ),
               ],
             ),
@@ -81,7 +80,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               children: [
                 _buildSectionHeader('存储源', theme),
-                _buildStorageList(context, theme, storages, scanState),
+                _buildStorageList(context, theme, storages),
               ],
             ),
           );
@@ -107,7 +106,6 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     BuildContext context,
     ThemeData theme,
     List<Storage> storages,
-    ScanState scanState,
   ) {
     final isDark = theme.brightness == Brightness.dark;
 
@@ -121,13 +119,12 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
           for (int i = 0; i < storages.length; i++) ...[
             _StorageTile(
               storage: storages[i],
-              isScanning: scanState.scanning.contains(storages[i].id),
-              progress: scanState.progresses[storages[i].id],
               onBrowse: () => context.push(
                 '/storages/${storages[i].id}',
                 extra: storages[i],
               ),
-              onScan: () => _startScan(storages[i].id),
+              onEdit: () => _editStorage(storages[i]),
+              onDelete: () => _confirmDeleteStorage(storages[i]),
             ),
             if (i < storages.length - 1)
               Padding(
@@ -144,29 +141,54 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     );
   }
 
-  Future<void> _startScan(int storageId) async {
-    final success = await ref.read(scanStateProvider.notifier).startScan(storageId);
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('启动扫描失败')),
-      );
+  void _editStorage(Storage storage) {
+    context.push('/storage-manage');
+  }
+
+  Future<void> _confirmDeleteStorage(Storage storage) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('删除存储源'),
+        content: Text('确定要删除「${storage.name}」吗？\n\n删除后相关的媒体信息也会被移除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final success = await ref.read(storagesProvider.notifier).deleteStorage(storage.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(success ? '已删除' : '删除失败')),
+        );
+      }
     }
   }
 }
 
 class _StorageTile extends StatelessWidget {
   final Storage storage;
-  final bool isScanning;
-  final ScanProgress? progress;
   final VoidCallback onBrowse;
-  final VoidCallback onScan;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   const _StorageTile({
     required this.storage,
-    required this.isScanning,
-    this.progress,
     required this.onBrowse,
-    required this.onScan,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   @override
@@ -182,72 +204,55 @@ class _StorageTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Column(
+          child: Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: iconColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  storage.type == 'webdav'
+                      ? CupertinoIcons.globe
+                      : CupertinoIcons.folder,
+                  size: 20,
+                  color: iconColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      storage.name,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    child: Icon(
-                      storage.type == 'webdav'
-                          ? CupertinoIcons.cloud
-                          : CupertinoIcons.folder,
-                      size: 20,
-                      color: iconColor,
+                    const SizedBox(height: 2),
+                    Text(
+                      storage.typeDisplayName,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          storage.name,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          storage.typeDisplayName,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildActionButton(context, theme),
-                  const SizedBox(width: 8),
-                  Icon(
-                    CupertinoIcons.chevron_right,
-                    size: 16,
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showActionMenu(context, isDark),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    CupertinoIcons.ellipsis,
+                    size: 20,
                     color: isDark ? Colors.grey[400] : Colors.grey[600],
                   ),
-                ],
+                ),
               ),
-              if (isScanning && progress != null) ...[
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: progress!.progress / 100,
-                    minHeight: 4,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${progress!.statusText}: ${progress!.scannedFiles}/${progress!.totalFiles}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -255,31 +260,108 @@ class _StorageTile extends StatelessWidget {
     );
   }
 
-  Widget _buildActionButton(BuildContext context, ThemeData theme) {
-    if (isScanning) {
-      return SizedBox(
-        width: 24,
-        height: 24,
-        child: CircularProgressIndicator(
-          strokeWidth: 2,
-          color: theme.colorScheme.primary,
+  void _showActionMenu(BuildContext context, bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width,
+      ),
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _ActionItem(
+              icon: CupertinoIcons.pencil,
+              label: '编辑存储源',
+              onTap: () {
+                Navigator.pop(context);
+                onEdit();
+              },
+            ),
+            _ActionItem(
+              icon: CupertinoIcons.trash,
+              label: '删除存储源',
+              isDestructive: true,
+              onTap: () {
+                Navigator.pop(context);
+                onDelete();
+              },
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('取消'),
+                ),
+              ),
+            ),
+          ],
         ),
-      );
-    }
+      ),
+    );
+  }
+}
 
-    return GestureDetector(
-      onTap: onScan,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Text(
-          '扫描',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w500,
+class _ActionItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isDestructive;
+  final VoidCallback onTap;
+
+  const _ActionItem({
+    required this.icon,
+    required this.label,
+    this.isDestructive = false,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isDestructive ? Colors.red : null;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: color),
+              const SizedBox(width: 12),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: color,
+                ),
+              ),
+            ],
           ),
         ),
       ),
