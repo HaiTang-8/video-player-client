@@ -9,6 +9,8 @@ class AppConstants {
   static const String serverUrlKey = 'server_url';
   static const String themeKey = 'theme_mode';
   static const String localeKey = 'locale';
+  static const String seekDurationKey = 'playback_seek_duration';
+  static const String playbackSpeedKey = 'playback_speed';
 
   // 分页
   static const int defaultPageSize = 20;

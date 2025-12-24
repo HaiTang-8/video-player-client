@@ -16,6 +16,7 @@ import '../../screens/server_config/server_config_screen.dart';
 import '../../screens/storages/resources_screen.dart';
 import '../../screens/storages/storage_browse_screen.dart';
 import '../../screens/library/category_detail_screen.dart';
+import '../../screens/playback_settings/playback_settings_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -208,6 +209,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/storage-manage',
         builder: (context, state) => const StoragesScreen(),
+      ),
+
+      // 播放设置页面
+      GoRoute(
+        path: '/playback-settings',
+        builder: (context, state) => const PlaybackSettingsScreen(),
       ),
     ],
     errorBuilder:

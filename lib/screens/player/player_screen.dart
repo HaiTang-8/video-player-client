@@ -41,12 +41,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    _applyPlaybackSettings();
     _setupPlayerListeners();
     _loadVideo();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
     }
+  }
+
+  void _applyPlaybackSettings() {
+    final settings = ref.read(playbackSettingsProvider);
+    _player.setRate(settings.playbackSpeed);
   }
 
   void _setupPlayerListeners() {
