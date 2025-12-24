@@ -33,7 +33,10 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final browseState = ref.watch(browseProvider(widget.storageId));
-    final title = widget.storage?.name ?? '目录浏览';
+    final storageName = widget.storage?.name ?? '目录浏览';
+    final title = browseState.currentPath == '/'
+        ? storageName
+        : browseState.currentPath.split('/').last;
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
 

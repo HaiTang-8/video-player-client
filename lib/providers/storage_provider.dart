@@ -199,14 +199,13 @@ class BrowseNotifier extends StateNotifier<BrowseState> {
   Future<void> browse(String path) async {
     if (_service == null) return;
 
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, currentPath: path);
 
     final response = await _service.browseStorage(_storageId, path: path);
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
         files: response.data!,
-        currentPath: path,
         isLoading: false,
       );
     } else {
