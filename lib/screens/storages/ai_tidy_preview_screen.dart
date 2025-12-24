@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/app_back_button.dart';
@@ -8,7 +9,6 @@ import '../../data/models/models.dart';
 import '../../data/services/api_client.dart';
 import '../../providers/providers.dart';
 
-/// AI 整理预览页：展示服务端生成的整理方案，并在二次确认后应用。
 class AiTidyPreviewScreen extends ConsumerStatefulWidget {
   final int storageId;
   final String rootPath;
@@ -22,8 +22,7 @@ class AiTidyPreviewScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<AiTidyPreviewScreen> createState() =>
-      _AiTidyPreviewScreenState();
+  ConsumerState<AiTidyPreviewScreen> createState() => _AiTidyPreviewScreenState();
 }
 
 class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
@@ -51,43 +50,43 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = WindowControls.isDesktop;
+    final theme = Theme.of(context);
 
     return Scaffold(
-      appBar:
-          isDesktop
-              ? DesktopTitleBar(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                // 与影视详情页保持一致：标题靠左，不居中
-                centerTitle: false,
-                leading: AppBackButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  color: Colors.black,
-                ),
-                title: const Text('AI 整理预览'),
-              )
-              : AppBar(
-                backgroundColor: Colors.white,
-                elevation: 0,
-                toolbarHeight: 44,
-                // 与影视详情页保持一致：返回按钮用“<”样式，标题靠左（避免 iOS 默认居中）
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  color: Colors.black,
-                ),
-                title: const Text(
-                  'AI 整理预览',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+      appBar: isDesktop
+          ? DesktopTitleBar(
+              centerTitle: false,
+              leading: AppBackButton(
+                onPressed: () => Navigator.pop(context, false),
               ),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.wand_stars, size: 18, color: theme.colorScheme.primary),
+                  const SizedBox(width: 8),
+                  const Text('AI 整理预览'),
+                ],
+              ),
+            )
+          : AppBar(
+              elevation: 0,
+              toolbarHeight: 44,
+              centerTitle: false,
+              automaticallyImplyLeading: false,
+              leadingWidth: kAppBackButtonWidth,
+              titleSpacing: 1,
+              leading: AppBackButton(
+                onPressed: () => Navigator.pop(context, false),
+              ),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(CupertinoIcons.wand_stars, size: 16, color: theme.colorScheme.primary),
+                  const SizedBox(width: 6),
+                  const Text('AI 整理预览'),
+                ],
+              ),
+            ),
       body: FutureBuilder<ApiResponse<AiTidyPlan>>(
         future: _future,
         builder: (context, snapshot) {
@@ -111,9 +110,9 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
           return Column(
             children: [
               _buildHeader(context, plan),
-              const Divider(height: 1),
+              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
               Expanded(child: _buildOperations(context, plan)),
-              const Divider(height: 1),
+              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
               _buildFooter(context, plan),
             ],
           );
@@ -124,6 +123,8 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
 
   Widget _buildHeader(BuildContext context, AiTidyPlan plan) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -132,18 +133,24 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
           Text(
             plan.summary,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 8),
-          Text('目录：${plan.rootPath}'),
-          const SizedBox(height: 4),
-          Text('文件数：${plan.fileCount}  ·  变更数：${plan.operations.length}'),
-          const SizedBox(height: 4),
-          Text(
-            'Provider：${plan.provider}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.outline,
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              children: [
+                _buildInfoRow(theme, CupertinoIcons.folder, '目录', plan.rootPath),
+                const SizedBox(height: 8),
+                _buildInfoRow(theme, CupertinoIcons.doc, '文件数', '${plan.fileCount}'),
+                const SizedBox(height: 8),
+                _buildInfoRow(theme, CupertinoIcons.arrow_right_arrow_left, '变更数', '${plan.operations.length}'),
+              ],
             ),
           ),
           if (plan.warnings.isNotEmpty) ...[
@@ -152,23 +159,41 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+                color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    '注意事项',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.error,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      const Icon(CupertinoIcons.exclamationmark_triangle, size: 16, color: Colors.orange),
+                      const SizedBox(width: 6),
+                      Text(
+                        '注意事项',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
-                  ...plan.warnings.take(3).map((w) => Text('• $w')),
+                  ...plan.warnings.take(3).map((w) => Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• $w',
+                          style: theme.textTheme.bodySmall,
+                        ),
+                      )),
                   if (plan.warnings.length > 3)
-                    Text('… 还有 ${plan.warnings.length - 3} 条'),
+                    Text(
+                      '… 还有 ${plan.warnings.length - 3} 条',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -178,36 +203,65 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     );
   }
 
+  Widget _buildInfoRow(ThemeData theme, IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: theme.colorScheme.onSurfaceVariant),
+        const SizedBox(width: 8),
+        Text(
+          '$label：',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: theme.textTheme.bodyMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildOperations(BuildContext context, AiTidyPlan plan) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     if (plan.operations.isEmpty) {
       return const EmptyWidget(
         message: '没有需要变更的文件\n（或 AI 未生成有效建议）',
-        icon: Icons.rule_folder_outlined,
+        icon: CupertinoIcons.folder,
       );
     }
 
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: plan.operations.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
-      itemBuilder: (context, index) {
-        final op = plan.operations[index];
-        return ListTile(
-          leading: const Icon(Icons.drive_file_move_outline),
-          title: Text(op.to),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      itemCount: 1,
+      itemBuilder: (context, _) {
+        return Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
             children: [
-              Text('来自：${op.from}'),
-              if (op.reason != null && op.reason!.trim().isNotEmpty)
-                Text('原因：${op.reason}'),
+              for (int i = 0; i < plan.operations.length; i++) ...[
+                _OperationTile(operation: plan.operations[i]),
+                if (i < plan.operations.length - 1)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 60),
+                    child: Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      color: theme.dividerColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+              ],
             ],
           ),
-          onLongPress: () {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text('长按复制功能可在浏览页使用')));
-          },
         );
       },
     );
@@ -217,31 +271,40 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
             Expanded(
               child: OutlinedButton(
-                onPressed:
-                    _isApplying ? null : () => Navigator.pop(context, false),
+                onPressed: _isApplying ? null : () => Navigator.pop(context, false),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
                 child: const Text('返回'),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton(
-                onPressed:
-                    _isApplying || plan.operations.isEmpty
-                        ? null
-                        : () => _confirmAndApply(context, plan),
-                child:
-                    _isApplying
-                        ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Text('应用（需二次确认）'),
+                onPressed: _isApplying || plan.operations.isEmpty
+                    ? null
+                    : () => _confirmAndApply(context, plan),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: _isApplying
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Text('应用变更'),
               ),
             ),
           ],
@@ -251,25 +314,57 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
   }
 
   Future<void> _confirmAndApply(BuildContext context, AiTidyPlan plan) async {
+    final theme = Theme.of(context);
+
     final confirmed = await showDialog<bool>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('二次确认'),
-            content: Text(
-              '将应用 ${plan.operations.length} 条变更，修改目录：\n${plan.rootPath}\n\n此操作会移动/重命名文件，可能耗时。\n确认继续吗？',
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(CupertinoIcons.exclamationmark_circle, color: theme.colorScheme.primary),
+            const SizedBox(width: 8),
+            const Text('确认应用'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('将应用 ${plan.operations.length} 条变更'),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                plan.rootPath,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                ),
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
+            const SizedBox(height: 12),
+            Text(
+              '此操作会移动/重命名文件，可能耗时。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('我已确认，继续'),
-              ),
-            ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
           ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认应用'),
+          ),
+        ],
+      ),
     );
 
     if (confirmed != true) return;
@@ -277,9 +372,9 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     final service = ref.read(storageServiceProvider);
     if (service == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('未连接服务器')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('未连接服务器')),
+        );
       }
       return;
     }
@@ -300,14 +395,83 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     if (!context.mounted) return;
 
     if (resp.isSuccess && resp.data != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('已应用 ${resp.data!.applied} 条变更')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已应用 ${resp.data!.applied} 条变更')),
+      );
       Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(resp.error ?? '应用失败')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(resp.error ?? '应用失败')),
+      );
     }
+  }
+}
+
+class _OperationTile extends StatelessWidget {
+  final AiTidyOperation operation;
+
+  const _OperationTile({required this.operation});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              CupertinoIcons.arrow_right_arrow_left,
+              size: 18,
+              color: Colors.green,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  operation.to,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '来自：${operation.from}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (operation.reason != null && operation.reason!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '原因：${operation.reason}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

@@ -4,21 +4,25 @@ import 'package:flutter/material.dart';
 class AppTheme {
   AppTheme._();
 
-  // 主色调
-  static const Color primaryColor = Color(0xFF6366F1);
+  // 主色调 - iOS 蓝
+  static const Color primaryColor = Color(0xFF007AFF);
   static const Color secondaryColor = Color(0xFF8B5CF6);
 
   // 亮色主题
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
+    scaffoldBackgroundColor: Colors.white,
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.light,
+      surface: Colors.white,
     ),
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
     ),
     cardTheme: CardTheme(
       elevation: 2,
@@ -49,6 +53,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(12),
         ),
       ),
+    ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: Colors.white,
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      indicatorColor: primaryColor.withValues(alpha: 0.15),
     ),
   );
 
