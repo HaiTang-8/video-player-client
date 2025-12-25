@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -16,6 +17,8 @@ class CustomVideoControls extends StatefulWidget {
   final bool hasPrevious;
   final bool hasNext;
   final VoidCallback? onOpenPlaylist;
+  final VoidCallback? onToggleFullscreen;
+  final bool isFullscreen;
 
   const CustomVideoControls({
     super.key,
@@ -28,6 +31,8 @@ class CustomVideoControls extends StatefulWidget {
     this.hasPrevious = false,
     this.hasNext = false,
     this.onOpenPlaylist,
+    this.onToggleFullscreen,
+    this.isFullscreen = false,
   });
 
   @override
@@ -59,6 +64,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Timer? _speedTimer;
 
   final List<StreamSubscription> _subscriptions = [];
+  final FocusNode _focusNode = FocusNode();
+  double _volumeBeforeMute = 1.0;
 
   @override
   void initState() {
@@ -167,6 +174,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   void dispose() {
     _hideTimer?.cancel();
     _speedTimer?.cancel();
+    _focusNode.dispose();
     for (final sub in _subscriptions) {
       sub.cancel();
     }
@@ -201,6 +209,78 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     setState(() => _showBrightnessOverlay = false);
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (!WindowControls.isDesktop || event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.space) {
+      widget.player.playOrPause();
+      _showControlsTemporarily();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      _seekRelative(-5);
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      _seekRelative(5);
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.arrowUp) {
+      _adjustVolume(0.1);
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.arrowDown) {
+      _adjustVolume(-0.1);
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyM) {
+      _toggleMute();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyF) {
+      widget.onToggleFullscreen?.call();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.escape) {
+      if (widget.isFullscreen) {
+        widget.onToggleFullscreen?.call();
+      }
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyN) {
+      if (widget.hasNext) widget.onNext?.call();
+      return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyP) {
+      if (widget.hasPrevious) widget.onPrevious?.call();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _showControlsTemporarily() {
+    setState(() => _visible = true);
+    _startHideTimer();
+  }
+
+  void _seekRelative(int seconds) {
+    final newPos = _position + Duration(seconds: seconds);
+    final clamped = Duration(
+      milliseconds: newPos.inMilliseconds.clamp(0, _duration.inMilliseconds),
+    );
+    widget.player.seek(clamped);
+    _showControlsTemporarily();
+  }
+
+  void _adjustVolume(double delta) {
+    final newVol = (_volume + delta).clamp(0.0, 1.0);
+    widget.player.setVolume(newVol * 100);
+    _showControlsTemporarily();
+  }
+
+  void _toggleMute() {
+    if (_volume > 0) {
+      _volumeBeforeMute = _volume;
+      widget.player.setVolume(0);
+    } else {
+      widget.player.setVolume(_volumeBeforeMute * 100);
+    }
+    _showControlsTemporarily();
+  }
+
   String _formatDuration(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -210,38 +290,43 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        GestureDetector(
-          onTap: _toggleVisibility,
-          behavior: HitTestBehavior.translucent,
-          child: Video(controller: widget.controller, controls: NoVideoControls),
-        ),
-        // 左侧亮度手势区域
-        if (!WindowControls.isDesktop)
-          Positioned(
-            left: 0,
-            top: 60,
-            bottom: 100,
-            width: MediaQuery.of(context).size.width * 0.3,
-            child: GestureDetector(
-              onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, true),
-              onVerticalDragEnd: _onVerticalDragEnd,
-              behavior: HitTestBehavior.translucent,
-            ),
+    return Focus(
+      focusNode: _focusNode,
+      autofocus: WindowControls.isDesktop,
+      onKeyEvent: _handleKeyEvent,
+      child: Stack(
+        children: [
+          GestureDetector(
+            onTap: _toggleVisibility,
+            behavior: HitTestBehavior.translucent,
+            child: Video(controller: widget.controller, controls: NoVideoControls),
           ),
-        // 亮度指示器
-        if (_showBrightnessOverlay) _buildBrightnessOverlay(),
-        // 控制栏
-        if (_visible) ...[
-          _buildTopBar(),
-          _buildBottomBar(),
-          _buildProgressBar(),
+          // 左侧亮度手势区域
+          if (!WindowControls.isDesktop)
+            Positioned(
+              left: 0,
+              top: 60,
+              bottom: 100,
+              width: MediaQuery.of(context).size.width * 0.3,
+              child: GestureDetector(
+                onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, true),
+                onVerticalDragEnd: _onVerticalDragEnd,
+                behavior: HitTestBehavior.translucent,
+              ),
+            ),
+          // 亮度指示器
+          if (_showBrightnessOverlay) _buildBrightnessOverlay(),
+          // 控制栏
+          if (_visible) ...[
+            _buildTopBar(),
+            _buildBottomBar(),
+            _buildProgressBar(),
+          ],
+          // 缓冲指示器
+          if (_buffering)
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
         ],
-        // 缓冲指示器
-        if (_buffering)
-          const Center(child: CircularProgressIndicator(color: Colors.white)),
-      ],
+      ),
     );
   }
 
@@ -436,7 +521,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             _buildPlayControls(),
             const Spacer(),
             // 右侧：全屏 + 音效 + 字幕 + 列表
-            _buildIconButton(Icons.fullscreen, () {}),
+            _buildIconButton(
+              widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+              widget.onToggleFullscreen,
+            ),
             _buildIconButton(Icons.equalizer, () => _showAudioTrackSheet()),
             _buildIconButton(
               Icons.subtitles_outlined,

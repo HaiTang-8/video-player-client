@@ -133,6 +133,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  void _toggleFullscreen() {
+    if (WindowControls.isDesktop) {
+      WindowControls.toggleFullscreen();
+      setState(() => _isFullscreen = !_isFullscreen);
+    } else {
+      if (_isFullscreen) {
+        _exitFullscreen();
+      } else {
+        _enterFullscreen();
+      }
+    }
+  }
+
   Future<void> _loadVideo({int? episodeIndex}) async {
     if (!mounted) return;
     setState(() {
@@ -301,6 +314,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         onNext: _hasNext ? _playNext : null,
         hasPrevious: _hasPrevious,
         hasNext: _hasNext,
+        onToggleFullscreen: _toggleFullscreen,
+        isFullscreen: _isFullscreen,
       ),
     );
   }

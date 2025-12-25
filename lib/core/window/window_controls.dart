@@ -61,5 +61,28 @@ class WindowControls {
       // Ignore in tests or unsupported platforms.
     }
   }
+
+  static Future<void> toggleFullscreen() async {
+    if (!isDesktop) return;
+    try {
+      await _channel.invokeMethod<void>('toggleFullscreen');
+    } on PlatformException {
+      // Ignore if not supported on the current platform.
+    } on MissingPluginException {
+      // Ignore in tests or unsupported platforms.
+    }
+  }
+
+  static Future<bool> isFullscreen() async {
+    if (!isDesktop) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>('isFullscreen');
+      return result ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 }
 

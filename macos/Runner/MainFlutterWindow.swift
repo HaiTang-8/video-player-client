@@ -60,6 +60,12 @@ class MainFlutterWindow: NSWindow {
       case "close":
         window.performClose(nil)
         result(nil)
+      case "toggleFullscreen":
+        window.toggleFullScreen(nil)
+        result(nil)
+      case "isFullscreen":
+        let isFullscreen = window.styleMask.contains(.fullScreen)
+        result(isFullscreen)
       default:
         result(FlutterMethodNotImplemented)
       }
