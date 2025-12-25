@@ -7,7 +7,9 @@ import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../data/models/episode.dart';
 import '../../providers/providers.dart';
+import 'widgets/custom_video_controls.dart';
 
 /// 视频播放器页面
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -15,6 +17,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final int id;
   final int? tvShowId;
   final int? seasonId;
+  final String? title;
+  final List<Episode>? episodes;
 
   const PlayerScreen({
     super.key,
@@ -22,6 +26,8 @@ class PlayerScreen extends ConsumerStatefulWidget {
     required this.id,
     this.tvShowId,
     this.seasonId,
+    this.title,
+    this.episodes,
   });
 
   @override
@@ -35,18 +41,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _error;
   bool _isFullscreen = false;
   bool _isDisposing = false;
+  int _currentEpisodeIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    _initEpisodeIndex();
     _applyPlaybackSettings();
     _setupPlayerListeners();
     _loadVideo();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
+    }
+  }
+
+  void _initEpisodeIndex() {
+    if (widget.episodes != null && widget.type == 'episode') {
+      _currentEpisodeIndex = widget.episodes!.indexWhere((e) => e.id == widget.id);
+      if (_currentEpisodeIndex < 0) _currentEpisodeIndex = 0;
     }
   }
 
@@ -118,11 +133,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  Future<void> _loadVideo() async {
+  Future<void> _loadVideo({int? episodeIndex}) async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
+      if (episodeIndex != null) _currentEpisodeIndex = episodeIndex;
     });
 
     try {
@@ -134,11 +150,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       } else if (widget.type == 'episode' &&
           widget.tvShowId != null &&
           widget.seasonId != null) {
+        final episodeId = _currentEpisode?.id ?? widget.id;
         final response = await ref.read(
           episodeStreamProvider((
             tvShowId: widget.tvShowId!,
             seasonId: widget.seasonId!,
-            episodeId: widget.id,
+            episodeId: episodeId,
           )).future,
         );
         streamUrl = response?.url;
@@ -172,6 +189,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Episode? get _currentEpisode {
+    if (widget.episodes == null || widget.episodes!.isEmpty) return null;
+    if (_currentEpisodeIndex < 0 || _currentEpisodeIndex >= widget.episodes!.length) return null;
+    return widget.episodes![_currentEpisodeIndex];
+  }
+
+  bool get _hasPrevious => widget.episodes != null && _currentEpisodeIndex > 0;
+  bool get _hasNext => widget.episodes != null && _currentEpisodeIndex < widget.episodes!.length - 1;
+
+  void _playPrevious() {
+    if (_hasPrevious) _loadVideo(episodeIndex: _currentEpisodeIndex - 1);
+  }
+
+  void _playNext() {
+    if (_hasNext) _loadVideo(episodeIndex: _currentEpisodeIndex + 1);
+  }
+
+  String get _displayTitle {
+    if (widget.type == 'episode' && _currentEpisode != null) {
+      return _currentEpisode!.displayTitle;
+    }
+    return widget.title ?? '';
   }
 
   @override
@@ -251,28 +292,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 视频播放器
-          Center(
-            child: Video(
-              controller: _controller,
-              controls: AdaptiveVideoControls,
-            ),
-          ),
-
-          // 返回按钮（仅在非全屏时显示）
-          if (!_isFullscreen)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 8,
-              child: IconButton(
-                // 顶部返回按钮使用“<”样式，视觉上更接近“<”形态。
-                icon: const Icon(Icons.chevron_left, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-        ],
+      body: CustomVideoControls(
+        player: _player,
+        controller: _controller,
+        title: _displayTitle,
+        onBack: () => Navigator.of(context).pop(),
+        onPrevious: _hasPrevious ? _playPrevious : null,
+        onNext: _hasNext ? _playNext : null,
+        hasPrevious: _hasPrevious,
+        hasNext: _hasNext,
       ),
     );
   }
