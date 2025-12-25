@@ -210,38 +210,38 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _toggleVisibility,
-      behavior: HitTestBehavior.translucent,
-      child: Stack(
-        children: [
-          Video(controller: widget.controller, controls: NoVideoControls),
-          // 左侧亮度手势区域
-          if (!WindowControls.isDesktop)
-            Positioned(
-              left: 0,
-              top: 60,
-              bottom: 100,
-              width: MediaQuery.of(context).size.width * 0.3,
-              child: GestureDetector(
-                onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, true),
-                onVerticalDragEnd: _onVerticalDragEnd,
-                behavior: HitTestBehavior.translucent,
-              ),
+    return Stack(
+      children: [
+        GestureDetector(
+          onTap: _toggleVisibility,
+          behavior: HitTestBehavior.translucent,
+          child: Video(controller: widget.controller, controls: NoVideoControls),
+        ),
+        // 左侧亮度手势区域
+        if (!WindowControls.isDesktop)
+          Positioned(
+            left: 0,
+            top: 60,
+            bottom: 100,
+            width: MediaQuery.of(context).size.width * 0.3,
+            child: GestureDetector(
+              onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, true),
+              onVerticalDragEnd: _onVerticalDragEnd,
+              behavior: HitTestBehavior.translucent,
             ),
-          // 亮度指示器
-          if (_showBrightnessOverlay) _buildBrightnessOverlay(),
-          // 控制栏
-          if (_visible) ...[
-            _buildTopBar(),
-            _buildProgressBar(),
-            _buildBottomBar(),
-          ],
-          // 缓冲指示器
-          if (_buffering)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+          ),
+        // 亮度指示器
+        if (_showBrightnessOverlay) _buildBrightnessOverlay(),
+        // 控制栏
+        if (_visible) ...[
+          _buildTopBar(),
+          _buildBottomBar(),
+          _buildProgressBar(),
         ],
-      ),
+        // 缓冲指示器
+        if (_buffering)
+          const Center(child: CircularProgressIndicator(color: Colors.white)),
+      ],
     );
   }
 
@@ -353,60 +353,56 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       left: 16,
       right: 16,
       bottom: 56,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () {},
-        child: Row(
-          children: [
-            Text(
-              _formatDuration(_position),
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 3,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-                ),
-                child: Slider(
-                  value:
-                      _duration.inMilliseconds > 0
-                          ? _position.inMilliseconds / _duration.inMilliseconds
-                          : 0,
-                  onChangeStart: (_) {
-                    _dragging = true;
-                    _hideTimer?.cancel();
-                  },
-                  onChanged: (v) {
-                    setState(() {
-                      _position = Duration(
-                        milliseconds: (v * _duration.inMilliseconds).round(),
-                      );
-                    });
-                  },
-                  onChangeEnd: (v) {
-                    _dragging = false;
-                    widget.player.seek(
-                      Duration(
-                        milliseconds: (v * _duration.inMilliseconds).round(),
-                      ),
+      child: Row(
+        children: [
+          Text(
+            _formatDuration(_position),
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value:
+                    _duration.inMilliseconds > 0
+                        ? _position.inMilliseconds / _duration.inMilliseconds
+                        : 0,
+                onChangeStart: (_) {
+                  _dragging = true;
+                  _hideTimer?.cancel();
+                },
+                onChanged: (v) {
+                  setState(() {
+                    _position = Duration(
+                      milliseconds: (v * _duration.inMilliseconds).round(),
                     );
-                    _startHideTimer();
-                  },
-                  activeColor: Colors.red,
-                  inactiveColor: Colors.white38,
-                ),
+                  });
+                },
+                onChangeEnd: (v) {
+                  _dragging = false;
+                  widget.player.seek(
+                    Duration(
+                      milliseconds: (v * _duration.inMilliseconds).round(),
+                    ),
+                  );
+                  _startHideTimer();
+                },
+                activeColor: Colors.red,
+                inactiveColor: Colors.white38,
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              _formatDuration(_duration),
-              style: const TextStyle(color: Colors.white, fontSize: 12),
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            _formatDuration(_duration),
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ],
       ),
     );
   }
