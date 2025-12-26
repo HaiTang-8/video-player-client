@@ -130,6 +130,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   ? tvShow.seasons![_selectedSeasonIndex]
                   : null;
 
+          final seasonBackdrop = tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
+              ? tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length]
+              : null;
+          final episodeFallbackImage = seasonBackdrop ?? selectedSeason?.posterPath ?? tvShow.backdropPath ?? tvShow.posterPath;
+
           return CustomScrollView(
             slivers: [
               // 顶部导航栏
@@ -163,6 +168,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     tvShowId: widget.tvShowId,
                     seasonId: selectedSeason.id,
                     serverBaseUrl: serverBaseUrl,
+                    fallbackImageUrl: episodeFallbackImage,
                   ),
                 )
               else if (_selectedSeasonId != null)
@@ -170,6 +176,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: _EpisodesCarousel(
                     tvShowId: widget.tvShowId,
                     seasonId: _selectedSeasonId!,
+                    fallbackImageUrl: episodeFallbackImage,
                   ),
                 ),
 
@@ -974,12 +981,14 @@ class _EpisodesCarouselDirect extends StatelessWidget {
   final int tvShowId;
   final int seasonId;
   final String? serverBaseUrl;
+  final String? fallbackImageUrl;
 
   const _EpisodesCarouselDirect({
     required this.episodes,
     required this.tvShowId,
     required this.seasonId,
     required this.serverBaseUrl,
+    this.fallbackImageUrl,
   });
 
   @override
@@ -998,6 +1007,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
             tvShowId: tvShowId,
             seasonId: seasonId,
             serverBaseUrl: serverBaseUrl,
+            fallbackImageUrl: fallbackImageUrl,
           );
         },
       ),
@@ -1009,8 +1019,13 @@ class _EpisodesCarouselDirect extends StatelessWidget {
 class _EpisodesCarousel extends ConsumerWidget {
   final int tvShowId;
   final int seasonId;
+  final String? fallbackImageUrl;
 
-  const _EpisodesCarousel({required this.tvShowId, required this.seasonId});
+  const _EpisodesCarousel({
+    required this.tvShowId,
+    required this.seasonId,
+    this.fallbackImageUrl,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1060,6 +1075,7 @@ class _EpisodesCarousel extends ConsumerWidget {
                 tvShowId: tvShowId,
                 seasonId: seasonId,
                 serverBaseUrl: serverBaseUrl,
+                fallbackImageUrl: fallbackImageUrl,
               );
             },
           ),
@@ -1075,12 +1091,14 @@ class _EpisodeCard extends StatelessWidget {
   final int tvShowId;
   final int seasonId;
   final String? serverBaseUrl;
+  final String? fallbackImageUrl;
 
   const _EpisodeCard({
     required this.episode,
     required this.tvShowId,
     required this.seasonId,
     required this.serverBaseUrl,
+    this.fallbackImageUrl,
   });
 
   @override
@@ -1102,19 +1120,7 @@ class _EpisodeCard extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child:
-                      episode.stillPath != null && episode.stillPath!.isNotEmpty
-                          ? CachedNetworkImage(
-                            imageUrl: ImageProxy.proxyTMDBIfNeeded(
-                              episode.stillPath!,
-                              serverBaseUrl,
-                            ),
-                            width: 160,
-                            height: 90,
-                            fit: BoxFit.cover,
-                            errorWidget: (_, __, ___) => _buildPlaceholder(),
-                          )
-                          : _buildPlaceholder(),
+                  child: _buildThumbnail(),
                 ),
 
                 // 时长标签
@@ -1199,6 +1205,21 @@ class _EpisodeCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildThumbnail() {
+    final hasStill = episode.stillPath != null && episode.stillPath!.isNotEmpty;
+    final imageUrl = hasStill ? episode.stillPath! : fallbackImageUrl;
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: ImageProxy.proxyTMDBIfNeeded(imageUrl, serverBaseUrl),
+        width: 160,
+        height: 90,
+        fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _buildPlaceholder(),
+      );
+    }
+    return _buildPlaceholder();
   }
 
   Widget _buildPlaceholder() {
