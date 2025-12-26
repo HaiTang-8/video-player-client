@@ -57,6 +57,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   SubtitleTrack? _currentSubtitleTrack;
   double _playbackSpeed = 1.0;
 
+  // 长按倍速
+  bool _isLongPressSpeed = false;
+  double _originalSpeed = 1.0;
+
   // 网速计算
   int _lastBytes = 0;
   int _currentBytes = 0;
@@ -210,19 +214,28 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
-    if (!WindowControls.isDesktop || event is! KeyDownEvent) {
-      return KeyEventResult.ignored;
-    }
+    if (!WindowControls.isDesktop) return KeyEventResult.ignored;
+
     final key = event.logicalKey;
+
+    // 右箭头长按倍速
+    if (key == LogicalKeyboardKey.arrowRight) {
+      if (event is KeyDownEvent && event is! KeyRepeatEvent) {
+        _startLongPressSpeed();
+      } else if (event is KeyUpEvent) {
+        _endLongPressSpeed();
+      }
+      return KeyEventResult.handled;
+    }
+
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
     if (key == LogicalKeyboardKey.space) {
       widget.player.playOrPause();
       _showControlsTemporarily();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowLeft) {
       _seekRelative(-5);
-      return KeyEventResult.handled;
-    } else if (key == LogicalKeyboardKey.arrowRight) {
-      _seekRelative(5);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowUp) {
       _adjustVolume(0.1);
@@ -281,6 +294,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     _showControlsTemporarily();
   }
 
+  void _startLongPressSpeed() {
+    if (_isLongPressSpeed) return;
+    _originalSpeed = _playbackSpeed;
+    widget.player.setRate(2.0);
+    setState(() => _isLongPressSpeed = true);
+  }
+
+  void _endLongPressSpeed() {
+    if (!_isLongPressSpeed) return;
+    widget.player.setRate(_originalSpeed);
+    setState(() => _isLongPressSpeed = false);
+  }
+
   String _formatDuration(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -298,6 +324,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         children: [
           GestureDetector(
             onTap: _toggleVisibility,
+            onLongPressStart: WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
+            onLongPressEnd: WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
             behavior: HitTestBehavior.translucent,
             child: Video(controller: widget.controller, controls: NoVideoControls),
           ),
@@ -325,6 +353,26 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           // 缓冲指示器
           if (_buffering)
             const Center(child: CircularProgressIndicator(color: Colors.white)),
+          // 长按倍速提示
+          if (_isLongPressSpeed)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 60,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    '倍速中 2x',
+                    style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
