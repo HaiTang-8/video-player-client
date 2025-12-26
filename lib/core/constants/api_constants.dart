@@ -31,6 +31,10 @@ class ApiConstants {
       '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/episodes';
   static String episodeStream(int tvShowId, int seasonId, int episodeId) =>
       '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/episodes/$episodeId/stream';
+  static String seasonSourceGroups(int tvShowId, int seasonId) =>
+      '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/source-groups';
+  static String seasonPrimarySource(int tvShowId, int seasonId) =>
+      '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/primary-source';
   static String tvShowScrape(int id) => '$apiPrefix/tvshows/$id/scrape';
   static String tvShowAiMatch(int id) => '$apiPrefix/tvshows/$id/ai-match';
   static const String tvShowSearch = '$apiPrefix/tvshows/search';

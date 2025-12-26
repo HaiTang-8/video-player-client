@@ -168,6 +168,19 @@ final episodeStreamProvider = FutureProvider.family<StreamInfo?,
   return response.data;
 });
 
+/// 季度播放源分组 Provider
+final seasonSourceGroupsProvider = FutureProvider.family<List<SourceGroup>?,
+    ({int tvShowId, int seasonId})>((ref, params) async {
+  final service = ref.watch(mediaServiceProvider);
+  if (service == null) return null;
+
+  final response = await service.getSeasonSourceGroups(
+    params.tvShowId,
+    params.seasonId,
+  );
+  return response.data;
+});
+
 /// 搜索状态
 class SearchState {
   final List<Movie> movies;

@@ -563,16 +563,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // 文本（单季时固定显示"第一季"）
-                          Text(
-                            tvShow.seasons!.length == 1 ? '第一季' : season.displayName,
-                            style: TextStyle(
-                              color: isSelected ? Colors.black : Colors.grey,
-                              fontSize: 18.0,
-                              fontWeight:
-                                  isSelected ? FontWeight.w700 : FontWeight.normal,
-                            ),
-                            textAlign: TextAlign.center,
+                          // 文本 + 播放源数量角标 + 下拉箭头
+                          _SeasonTabLabel(
+                            tvShowId: widget.tvShowId,
+                            season: season,
+                            isSelected: isSelected,
+                            isSingleSeason: tvShow.seasons!.length == 1,
                           ),
                           const SizedBox(height: 4),
                           // 指示器
@@ -1235,6 +1231,258 @@ class _EpisodeCard extends StatelessWidget {
         color: Colors.black.withValues(alpha: 0.3),
         size: 32,
       ),
+    );
+  }
+}
+
+/// 季度标签（含播放源数量角标和下拉箭头）
+class _SeasonTabLabel extends ConsumerWidget {
+  final int tvShowId;
+  final Season season;
+  final bool isSelected;
+  final bool isSingleSeason;
+
+  const _SeasonTabLabel({
+    required this.tvShowId,
+    required this.season,
+    required this.isSelected,
+    required this.isSingleSeason,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sourceGroupsAsync = ref.watch(
+      seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: season.id)),
+    );
+
+    return sourceGroupsAsync.when(
+      loading: () => _buildLabel(context, null),
+      error: (_, __) => _buildLabel(context, null),
+      data: (groups) => _buildLabel(context, groups),
+    );
+  }
+
+  Widget _buildLabel(BuildContext context, List<SourceGroup>? groups) {
+    final hasMultipleSources = groups != null && groups.length > 1;
+    final sourceCount = groups?.length ?? 0;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          isSingleSeason ? '第一季' : season.displayName,
+          style: TextStyle(
+            color: isSelected ? Colors.black : Colors.grey,
+            fontSize: 18.0,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
+          ),
+        ),
+        if (hasMultipleSources) ...[
+          const SizedBox(width: 2),
+          // 播放源数量角标
+          Transform.translate(
+            offset: const Offset(0, -6),
+            child: Text(
+              '$sourceCount',
+              style: TextStyle(
+                color: isSelected ? Colors.black : Colors.grey,
+                fontSize: 11.0,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          // 下拉箭头
+          GestureDetector(
+            onTap: () => _showSourceGroupsDialog(context, groups),
+            child: Icon(
+              Icons.arrow_drop_down,
+              color: isSelected ? Colors.black : Colors.grey,
+              size: 20,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _showSourceGroupsDialog(BuildContext context, List<SourceGroup>? groups) {
+    if (groups == null || groups.isEmpty) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => _SourceGroupsSheet(
+        tvShowId: tvShowId,
+        seasonId: season.id,
+        seasonName: isSingleSeason ? '第一季' : season.displayName,
+        groups: groups,
+      ),
+    );
+  }
+}
+
+/// 播放源分组列表弹窗
+class _SourceGroupsSheet extends ConsumerWidget {
+  final int tvShowId;
+  final int seasonId;
+  final String seasonName;
+  final List<SourceGroup> groups;
+
+  const _SourceGroupsSheet({
+    required this.tvShowId,
+    required this.seasonId,
+    required this.seasonName,
+    required this.groups,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // 标题栏
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              children: [
+                Text(
+                  '$seasonName 播放源',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          // 播放源列表
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: groups.length,
+              separatorBuilder: (_, __) => const Divider(height: 1, indent: 20, endIndent: 20),
+              itemBuilder: (context, index) {
+                final group = groups[index];
+                return _SourceGroupTile(
+                  group: group,
+                  onTap: () => _onSelectSource(context, ref, group),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onSelectSource(BuildContext context, WidgetRef ref, SourceGroup group) async {
+    if (group.isPrimary) {
+      Navigator.pop(context);
+      return;
+    }
+
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+
+    Navigator.pop(context);
+
+    final response = await service.setSeasonPrimarySource(tvShowId, seasonId, group.folderPath);
+    if (response.isSuccess) {
+      // 刷新播放源分组数据
+      ref.invalidate(seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)));
+    }
+  }
+}
+
+/// 单个播放源分组项
+class _SourceGroupTile extends StatelessWidget {
+  final SourceGroup group;
+  final VoidCallback onTap;
+
+  const _SourceGroupTile({required this.group, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      title: Text(
+        group.displayLabel,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: group.isPrimary ? FontWeight.w600 : FontWeight.w500,
+          color: group.isPrimary ? Colors.blue : Colors.black,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          // 存储源名称
+          if (group.storageName != null && group.storageName!.isNotEmpty)
+            Row(
+              children: [
+                Icon(Icons.storage, size: 14, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  group.storageName!,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          const SizedBox(height: 2),
+          // 文件夹路径
+          Row(
+            children: [
+              Icon(Icons.folder_outlined, size: 14, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  group.folderPath,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          // 文件数量和大小
+          Row(
+            children: [
+              Icon(Icons.video_file_outlined, size: 14, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Text(
+                '${group.fileCount} 个文件',
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                group.formattedSize,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+              ),
+            ],
+          ),
+        ],
+      ),
+      trailing: group.isPrimary
+          ? const Icon(Icons.check_circle, color: Colors.blue)
+          : const Icon(Icons.chevron_right, color: Colors.grey),
+      onTap: onTap,
     );
   }
 }

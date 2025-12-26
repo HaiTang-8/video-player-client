@@ -194,6 +194,31 @@ class MediaService {
     );
   }
 
+  /// 获取季度播放源分组
+  Future<ApiResponse<List<SourceGroup>>> getSeasonSourceGroups(
+    int tvShowId,
+    int seasonId,
+  ) async {
+    return _client.get<List<SourceGroup>>(
+      ApiConstants.seasonSourceGroups(tvShowId, seasonId),
+      fromJson: (json) => (json as List)
+          .map((e) => SourceGroup.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  /// 设置季度默认播放源
+  Future<ApiResponse<void>> setSeasonPrimarySource(
+    int tvShowId,
+    int seasonId,
+    String folderPath,
+  ) async {
+    return _client.post(
+      ApiConstants.seasonPrimarySource(tvShowId, seasonId),
+      data: {'folder_path': folderPath},
+    );
+  }
+
   /// 重新刮削剧集
   Future<ApiResponse<TvShow>> scrapeTvShow(int id) async {
     return _client.post<TvShow>(
