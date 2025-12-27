@@ -150,6 +150,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
   final StorageService? _service;
   final AsyncValue<List<Storage>> _storages;
   final Map<int, ScanProgress> _progresses = {};
+  bool _cancelled = false;
 
   GlobalScanNotifier(this._service, this._storages) : super(const GlobalScanState());
 
@@ -158,6 +159,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
     final storages = _storages.valueOrNull ?? [];
     if (storages.isEmpty) return;
 
+    _cancelled = false;
     state = state.copyWith(isScanning: true, foundFiles: 0, pendingFiles: 0, updatedFiles: 0, dismissed: false);
     _progresses.clear();
 
@@ -171,19 +173,24 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
   void _pollProgress(List<int> storageIds) async {
     if (_service == null) return;
 
-    while (state.isScanning) {
+    while (state.isScanning && !_cancelled) {
       await Future.delayed(const Duration(seconds: 1));
+
+      if (_cancelled) break;
 
       int totalFound = 0, totalUpdated = 0;
       bool anyRunning = false;
 
       for (final id in storageIds) {
+        if (_cancelled) break;
         final response = await _service.getScanProgress(id);
         if (response.isSuccess && response.data != null) {
           _progresses[id] = response.data!;
           if (response.data!.isRunning) anyRunning = true;
         }
       }
+
+      if (_cancelled) break;
 
       for (final p in _progresses.values) {
         totalFound += p.totalFiles;
@@ -213,6 +220,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
   Future<void> cancelAllScans() async {
     if (_service == null) return;
 
+    _cancelled = true;
     await _service.cancelAllScans();
 
     // 重置状态
