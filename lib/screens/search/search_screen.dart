@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../library/widgets/library_poster_card.dart';
@@ -71,10 +72,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildSearchBar(BuildContext context) {
+    final leftInset = WindowControls.isMacOS ? 72.0 : 12.0;
+
     return Container(
       padding: EdgeInsets.only(
         top: MediaQuery.of(context).padding.top + 8,
-        left: 12,
+        left: leftInset,
         right: 12,
         bottom: 8,
       ),
@@ -97,11 +100,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               onSubmitted: (_) => _doSearch(),
             ),
           ),
-          CupertinoButton(
-            padding: const EdgeInsets.only(left: 8),
-            minSize: 32,
-            onPressed: _doSearch,
-            child: const Text('搜索', style: TextStyle(fontSize: 15)),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: _searchController,
+            builder: (context, value, _) {
+              final hasQuery = value.text.trim().isNotEmpty;
+              final color =
+                  hasQuery ? CupertinoColors.activeBlue : CupertinoColors.systemGrey;
+              return CupertinoButton(
+                padding: const EdgeInsets.only(left: 8),
+                minSize: 32,
+                onPressed: _doSearch,
+                child: Text('搜索', style: TextStyle(fontSize: 15, color: color)),
+              );
+            },
           ),
         ],
       ),
