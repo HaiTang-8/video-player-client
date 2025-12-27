@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
@@ -372,9 +373,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     final service = ref.read(storageServiceProvider);
     if (service == null) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('未连接服务器')),
-        );
+        IosUiUtils.showToast(context: context, message: '未连接服务器', isError: true);
       }
       return;
     }
@@ -395,14 +394,10 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     if (!context.mounted) return;
 
     if (resp.isSuccess && resp.data != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已应用 ${resp.data!.applied} 条变更')),
-      );
+      IosUiUtils.showToast(context: context, message: '已应用 ${resp.data!.applied} 条变更');
       Navigator.pop(context, true);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(resp.error ?? '应用失败')),
-      );
+      IosUiUtils.showToast(context: context, message: resp.error ?? '应用失败', isError: true);
     }
   }
 }

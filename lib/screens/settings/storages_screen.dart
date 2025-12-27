@@ -1,8 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/models.dart';
@@ -114,30 +117,17 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
         .read(scanStateProvider.notifier)
         .startScan(storageId, forceScrape: forceScrape);
     if (!success && mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('启动扫描失败')));
+      IosUiUtils.showToast(context: context, message: '启动扫描失败', isError: true);
     }
   }
 
   Future<void> _deleteStorage(Storage storage) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await IosUiUtils.showConfirmDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('删除存储源'),
-            content: Text('确定要删除 "${storage.name}" 吗？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('删除'),
-              ),
-            ],
-          ),
+      title: '删除存储源',
+      content: '确定要删除 "${storage.name}" 吗？',
+      confirmText: '删除',
+      isDestructive: true,
     );
 
     if (confirmed == true) {
@@ -145,9 +135,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
           .read(storagesProvider.notifier)
           .deleteStorage(storage.id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('删除失败')));
+        IosUiUtils.showToast(context: context, message: '删除失败', isError: true);
       }
     }
   }
@@ -161,159 +149,146 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     String selectedType = 'webdav';
     bool useProxy = false;
 
-    showDialog(
+    showCupertinoDialog<void>(
       context: context,
-      builder:
-          (context) => StatefulBuilder(
-            builder:
-                (context, setState) => AlertDialog(
-                  title: const Text('添加存储源'),
-                  content: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => CupertinoAlertDialog(
+          title: const Text('添加存储源'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoTextField(
+                    controller: nameController,
+                    placeholder: '名称（如：我的媒体库）',
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.tertiarySystemFill,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: CupertinoSlidingSegmentedControl<String>(
+                      groupValue: selectedType,
+                      children: const {
+                        'webdav': Text('WebDAV'),
+                        'local': Text('本地存储'),
+                      },
+                      onValueChanged: (value) {
+                        setState(() {
+                          selectedType = value!;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedType == 'webdav') ...[
+                    CupertinoTextField(
+                      controller: urlController,
+                      placeholder: 'WebDAV URL',
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 8),
+                    CupertinoTextField(
+                      controller: usernameController,
+                      placeholder: '用户名',
+                    ),
+                    const SizedBox(height: 8),
+                    CupertinoTextField(
+                      controller: passwordController,
+                      placeholder: '密码',
+                      obscureText: true,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        TextField(
-                          controller: nameController,
-                          decoration: const InputDecoration(
-                            labelText: '名称',
-                            hintText: '我的媒体库',
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        DropdownButtonFormField<String>(
-                          value: selectedType,
-                          decoration: const InputDecoration(labelText: '类型'),
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'webdav',
-                              child: Text('WebDAV'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'local',
-                              child: Text('本地存储'),
-                            ),
-                          ],
+                        const Text('使用代理访问', style: TextStyle(fontSize: 14)),
+                        CupertinoSwitch(
+                          value: useProxy,
                           onChanged: (value) {
                             setState(() {
-                              selectedType = value!;
+                              useProxy = value;
+                              if (!useProxy) {
+                                proxyUrlController.clear();
+                              }
                             });
                           },
                         ),
-                        const SizedBox(height: 16),
-                        if (selectedType == 'webdav') ...[
-                          TextField(
-                            controller: urlController,
-                            decoration: const InputDecoration(
-                              labelText: 'WebDAV URL',
-                              hintText: 'https://example.com/dav',
-                            ),
-                            keyboardType: TextInputType.url,
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: usernameController,
-                            decoration: const InputDecoration(labelText: '用户名'),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: passwordController,
-                            decoration: const InputDecoration(labelText: '密码'),
-                            obscureText: true,
-                          ),
-                          const SizedBox(height: 8),
-                          // WebDAV 代理配置：用于在特定网络环境下，通过 HTTP(S) 代理访问 WebDAV。
-                          SwitchListTile(
-                            contentPadding: EdgeInsets.zero,
-                            title: const Text('使用代理访问'),
-                            value: useProxy,
-                            onChanged: (value) {
-                              setState(() {
-                                useProxy = value;
-                                if (!useProxy) {
-                                  proxyUrlController.clear();
-                                }
-                              });
-                            },
-                          ),
-                          if (useProxy) ...[
-                            TextField(
-                              controller: proxyUrlController,
-                              decoration: const InputDecoration(
-                                labelText: '代理地址（可选）',
-                                hintText: 'http://127.0.0.1:7890',
-                              ),
-                              keyboardType: TextInputType.url,
-                            ),
-                          ],
-                        ] else ...[
-                          TextField(
-                            controller: urlController,
-                            decoration: const InputDecoration(
-                              labelText: '路径',
-                              hintText: '/path/to/media',
-                            ),
-                          ),
-                        ],
                       ],
                     ),
-                  ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('取消'),
-                    ),
-                    FilledButton(
-                      onPressed: () async {
-                        final name = nameController.text.trim();
-                        if (name.isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('请输入名称')),
-                          );
-                          return;
-                        }
-
-                        Map<String, String> settings;
-                        if (selectedType == 'webdav') {
-                          settings = {
-                            'url': urlController.text.trim(),
-                            'username': usernameController.text.trim(),
-                            'password': passwordController.text,
-                            'use_proxy': useProxy.toString(),
-                          };
-                          final proxyUrl = proxyUrlController.text.trim();
-                          if (proxyUrl.isNotEmpty) {
-                            settings['proxy_url'] = proxyUrl;
-                          }
-                        } else {
-                          settings = {'path': urlController.text.trim()};
-                        }
-
-                        final success = await ref
-                            .read(storagesProvider.notifier)
-                            .addStorage(
-                              name: name,
-                              type: selectedType,
-                              settings: settings,
-                            );
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('添加成功')),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('添加失败')),
-                            );
-                          }
-                        }
-                      },
-                      child: const Text('添加'),
+                    if (useProxy) ...[
+                      const SizedBox(height: 8),
+                      CupertinoTextField(
+                        controller: proxyUrlController,
+                        placeholder: '代理地址（可选）',
+                        keyboardType: TextInputType.url,
+                      ),
+                    ],
+                  ] else ...[
+                    CupertinoTextField(
+                      controller: urlController,
+                      placeholder: '路径（如：/path/to/media）',
                     ),
                   ],
-                ),
+                ],
+              ),
+            ),
           ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  IosUiUtils.showToast(context: context, message: '请输入名称', isError: true);
+                  return;
+                }
+
+                Map<String, String> settings;
+                if (selectedType == 'webdav') {
+                  settings = {
+                    'url': urlController.text.trim(),
+                    'username': usernameController.text.trim(),
+                    'password': passwordController.text,
+                    'use_proxy': useProxy.toString(),
+                  };
+                  final proxyUrl = proxyUrlController.text.trim();
+                  if (proxyUrl.isNotEmpty) {
+                    settings['proxy_url'] = proxyUrl;
+                  }
+                } else {
+                  settings = {'path': urlController.text.trim()};
+                }
+
+                final success = await ref
+                    .read(storagesProvider.notifier)
+                    .addStorage(
+                      name: name,
+                      type: selectedType,
+                      settings: settings,
+                    );
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  IosUiUtils.showToast(
+                    context: context,
+                    message: success ? '添加成功' : '添加失败',
+                    isError: !success,
+                  );
+                }
+              },
+              child: const Text('添加'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -350,7 +325,7 @@ class _StorageCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  storage.type == 'webdav' ? Icons.cloud : Icons.folder,
+                  storage.type == 'webdav' ? CupertinoIcons.cloud : CupertinoIcons.folder,
                   color: theme.colorScheme.primary,
                 ),
                 const SizedBox(width: 12),
@@ -373,25 +348,20 @@ class _StorageCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                PopupMenuButton<String>(
-                  onSelected: (value) {
-                    if (value == 'delete') {
-                      onDelete();
-                    }
-                  },
-                  itemBuilder:
-                      (context) => [
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(Icons.delete_outline, color: Colors.red),
-                              SizedBox(width: 8),
-                              Text('删除', style: TextStyle(color: Colors.red)),
-                            ],
-                          ),
-                        ),
-                      ],
+                PullDownButton(
+                  itemBuilder: (context) => [
+                    PullDownMenuItem(
+                      title: '删除',
+                      icon: CupertinoIcons.trash,
+                      isDestructive: true,
+                      onTap: onDelete,
+                    ),
+                  ],
+                  buttonBuilder: (context, showMenu) => CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    onPressed: showMenu,
+                    child: const Icon(CupertinoIcons.ellipsis_circle),
+                  ),
                 ),
               ],
             ),
@@ -414,7 +384,7 @@ class _StorageCard extends StatelessWidget {
               children: [
                 OutlinedButton.icon(
                   onPressed: isScanning ? null : onForceScrape,
-                  icon: const Icon(Icons.sync),
+                  icon: const Icon(CupertinoIcons.arrow_2_circlepath),
                   label: const Text('强制刮削'),
                 ),
                 const SizedBox(width: 8),
@@ -422,12 +392,8 @@ class _StorageCard extends StatelessWidget {
                   onPressed: isScanning ? null : onScan,
                   icon:
                       isScanning
-                          ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.refresh),
+                          ? const CupertinoActivityIndicator(radius: 8)
+                          : const Icon(CupertinoIcons.refresh),
                   label: Text(isScanning ? '扫描中...' : '扫描'),
                 ),
               ],

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// 加载中组件
@@ -12,7 +13,7 @@ class LoadingWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircularProgressIndicator(),
+          const CupertinoActivityIndicator(radius: 14),
           if (message != null) ...[
             const SizedBox(height: 16),
             Text(
@@ -46,7 +47,7 @@ class AppErrorWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.error_outline,
+              CupertinoIcons.exclamationmark_circle,
               size: 64,
               color: Theme.of(context).colorScheme.error,
             ),
@@ -60,7 +61,7 @@ class AppErrorWidget extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: onRetry,
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(CupertinoIcons.refresh),
                 label: const Text('重试'),
               ),
             ],
@@ -93,7 +94,7 @@ class EmptyWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              icon ?? Icons.inbox_outlined,
+              icon ?? CupertinoIcons.tray,
               size: 64,
               color: Theme.of(context).colorScheme.outline,
             ),

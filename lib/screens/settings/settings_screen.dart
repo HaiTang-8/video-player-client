@@ -1,8 +1,10 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
@@ -115,98 +117,117 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     ThemeMode current,
   ) {
-    showDialog(
+    showCupertinoModalPopup<ThemeMode>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('选择主题'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
+      builder: (context) => CupertinoActionSheet(
+        title: const Text('选择主题'),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, ThemeMode.system),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                RadioListTile<ThemeMode>(
-                  title: const Text('跟随系统'),
-                  value: ThemeMode.system,
-                  groupValue: current,
-                  onChanged: (value) {
-                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                    Navigator.pop(context);
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  title: const Text('浅色'),
-                  value: ThemeMode.light,
-                  groupValue: current,
-                  onChanged: (value) {
-                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                    Navigator.pop(context);
-                  },
-                ),
-                RadioListTile<ThemeMode>(
-                  title: const Text('深色'),
-                  value: ThemeMode.dark,
-                  groupValue: current,
-                  onChanged: (value) {
-                    ref.read(themeModeProvider.notifier).setThemeMode(value!);
-                    Navigator.pop(context);
-                  },
-                ),
+                const Text('跟随系统'),
+                if (current == ThemeMode.system) ...[
+                  const SizedBox(width: 8),
+                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
+                ],
               ],
             ),
           ),
-    );
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, ThemeMode.light),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('浅色'),
+                if (current == ThemeMode.light) ...[
+                  const SizedBox(width: 8),
+                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
+                ],
+              ],
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.pop(context, ThemeMode.dark),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text('深色'),
+                if (current == ThemeMode.dark) ...[
+                  const SizedBox(width: 8),
+                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
+                ],
+              ],
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ),
+    ).then((value) {
+      if (value != null) {
+        ref.read(themeModeProvider.notifier).setThemeMode(value);
+      }
+    });
   }
 
   void _showServerDialog(BuildContext context, WidgetRef ref, String? current) {
     final controller = TextEditingController(text: current);
 
-    showDialog(
+    showCupertinoDialog<void>(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('服务器地址'),
-            content: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: 'http://192.168.1.100:8080',
-                labelText: '服务器地址',
-              ),
-              keyboardType: TextInputType.url,
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () async {
-                  final url = controller.text.trim();
-                  if (url.isNotEmpty) {
-                    final success = await ref
-                        .read(serverConnectionProvider.notifier)
-                        .testConnection(url);
-                    if (success) {
-                      await ref
-                          .read(serverUrlProvider.notifier)
-                          .setServerUrl(url);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('服务器连接成功')),
-                        );
-                      }
-                    } else {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('无法连接到服务器')),
-                        );
-                      }
-                    }
-                  }
-                },
-                child: const Text('保存'),
-              ),
-            ],
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('服务器地址'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 16),
+          child: CupertinoTextField(
+            controller: controller,
+            placeholder: 'http://192.168.1.100:8080',
+            keyboardType: TextInputType.url,
+            autofocus: true,
           ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isNotEmpty) {
+                final success = await ref
+                    .read(serverConnectionProvider.notifier)
+                    .testConnection(url);
+                if (success) {
+                  await ref
+                      .read(serverUrlProvider.notifier)
+                      .setServerUrl(url);
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    IosUiUtils.showToast(
+                      context: context,
+                      message: '服务器连接成功',
+                    );
+                  }
+                } else {
+                  if (context.mounted) {
+                    IosUiUtils.showToast(
+                      context: context,
+                      message: '无法连接到服务器',
+                      isError: true,
+                    );
+                  }
+                }
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,10 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/utils/image_proxy.dart';
@@ -568,51 +570,20 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Future<void> _scrapeMovie(BuildContext context, int id) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('未连接到服务器')));
+      IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
       return;
     }
 
-    final confirmed = await showDialog<bool>(
+    final confirmed = await IosUiUtils.showConfirmDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('重新刮削'),
-            content: const Text('将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('开始'),
-              ),
-            ],
-          ),
+      title: '重新刮削',
+      content: '将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？',
+      confirmText: '开始',
     );
 
     if (confirmed != true || !context.mounted) return;
 
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder:
-          (_) => const AlertDialog(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                SizedBox(width: 12),
-                Text('正在刮削...'),
-              ],
-            ),
-          ),
-    );
+    IosUiUtils.showLoadingDialog(context: context, message: '正在刮削...');
 
     final resp = await service.scrapeMovie(id);
 
@@ -623,15 +594,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (resp.isSuccess) {
       ref.invalidate(movieDetailProvider(id));
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('刮削完成')));
+      IosUiUtils.showToast(context: context, message: '刮削完成');
       return;
     }
 
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(resp.error ?? '刮削失败')));
+    IosUiUtils.showToast(context: context, message: resp.error ?? '刮削失败', isError: true);
   }
 
   /// 构建文件信息区

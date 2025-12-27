@@ -2,9 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -30,50 +32,19 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     ref.read(globalScanStateProvider.notifier).startScanAll(forceScrape: forceScrape);
   }
 
-  void _showScanMenu() {
-    final RenderBox? button = _refreshButtonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (button == null) return;
-
-    final Offset offset = button.localToGlobal(Offset.zero);
-    final Size size = button.size;
-
-    showMenu<String>(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        offset.dx,
-        offset.dy + size.height,
-        offset.dx + size.width,
-        offset.dy + size.height,
+  List<PullDownMenuEntry> _buildScanMenuItems() {
+    return [
+      PullDownMenuItem(
+        title: '扫描新文件',
+        icon: CupertinoIcons.doc_text_search,
+        onTap: () => _startGlobalScan(forceScrape: false),
       ),
-      items: [
-        const PopupMenuItem<String>(
-          value: 'scan',
-          child: Row(
-            children: [
-              Icon(CupertinoIcons.refresh, size: 18),
-              SizedBox(width: 8),
-              Text('扫描新文件'),
-            ],
-          ),
-        ),
-        const PopupMenuItem<String>(
-          value: 'force',
-          child: Row(
-            children: [
-              Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
-              SizedBox(width: 8),
-              Text('强制刮削全部'),
-            ],
-          ),
-        ),
-      ],
-    ).then((value) {
-      if (value == 'scan') {
-        _startGlobalScan(forceScrape: false);
-      } else if (value == 'force') {
-        _startGlobalScan(forceScrape: true);
-      }
-    });
+      PullDownMenuItem(
+        title: '强制刮削全部',
+        icon: CupertinoIcons.arrow_2_circlepath,
+        onTap: () => _startGlobalScan(forceScrape: true),
+      ),
+    ];
   }
 
   @override
@@ -91,22 +62,29 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               title: const Text('资源库'),
               centerTitle: true,
               actions: [
+                if (globalScanState.isScanning)
+                  IconButton(
+                    key: _refreshButtonKey,
+                    tooltip: '扫描存储源',
+                    onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
+                    icon: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  PullDownButton(
+                    key: _refreshButtonKey,
+                    itemBuilder: (context) => _buildScanMenuItems(),
+                    buttonBuilder: (context, showMenu) => IconButton(
+                      tooltip: '扫描存储源',
+                      onPressed: showMenu,
+                      icon: const Icon(CupertinoIcons.refresh),
+                    ),
+                  ),
                 IconButton(
-                  key: _refreshButtonKey,
-                  tooltip: '扫描存储源',
-                  onPressed: globalScanState.isScanning
-                      ? () => ref.read(globalScanStateProvider.notifier).showPopover()
-                      : _showScanMenu,
-                  icon: globalScanState.isScanning
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(CupertinoIcons.refresh),
-                ),
-                IconButton(
-                  tooltip: '添加���储源',
+                  tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
                   icon: const Icon(CupertinoIcons.add),
                 ),
@@ -115,20 +93,27 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
           : AppBar(
               title: const Text('资源库'),
               actions: [
-                IconButton(
-                  key: _refreshButtonKey,
-                  tooltip: '扫描存储源',
-                  onPressed: globalScanState.isScanning
-                      ? () => ref.read(globalScanStateProvider.notifier).showPopover()
-                      : _showScanMenu,
-                  icon: globalScanState.isScanning
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(CupertinoIcons.refresh),
-                ),
+                if (globalScanState.isScanning)
+                  IconButton(
+                    key: _refreshButtonKey,
+                    tooltip: '扫描存储源',
+                    onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
+                    icon: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                else
+                  PullDownButton(
+                    key: _refreshButtonKey,
+                    itemBuilder: (context) => _buildScanMenuItems(),
+                    buttonBuilder: (context, showMenu) => IconButton(
+                      tooltip: '扫描存储源',
+                      onPressed: showMenu,
+                      icon: const Icon(CupertinoIcons.refresh),
+                    ),
+                  ),
                 IconButton(
                   tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
@@ -238,32 +223,21 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   }
 
   Future<void> _confirmDeleteStorage(Storage storage) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await IosUiUtils.showConfirmDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('删除存储源'),
-        content: Text('确定要删除「${storage.name}」吗？\n\n删除后相关的媒体信息也会被移除。'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.red,
-            ),
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+      title: '删除存储源',
+      content: '确定要删除「${storage.name}」吗？\n\n删除后相关的媒体信息也会被移除。',
+      confirmText: '删除',
+      isDestructive: true,
     );
 
     if (confirmed == true && mounted) {
       final success = await ref.read(storagesProvider.notifier).deleteStorage(storage.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(success ? '已删除' : '删除失败')),
+        IosUiUtils.showToast(
+          context: context,
+          message: success ? '已删除' : '删除失败',
+          isError: !success,
         );
       }
     }
@@ -353,108 +327,29 @@ class _StorageTile extends StatelessWidget {
   }
 
   void _showActionMenu(BuildContext context, bool isDark) {
-    showModalBottomSheet(
+    showCupertinoModalPopup<void>(
       context: context,
-      useRootNavigator: true,
-      isScrollControlled: true,
-      constraints: BoxConstraints(
-        maxWidth: MediaQuery.of(context).size.width,
-      ),
-      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-      ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[400],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 16),
-            _ActionItem(
-              icon: CupertinoIcons.pencil,
-              label: '编辑存储源',
-              onTap: () {
-                Navigator.pop(context);
-                onEdit();
-              },
-            ),
-            _ActionItem(
-              icon: CupertinoIcons.trash,
-              label: '删除存储源',
-              isDestructive: true,
-              onTap: () {
-                Navigator.pop(context);
-                onDelete();
-              },
-            ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text('取消'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ActionItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isDestructive;
-  final VoidCallback onTap;
-
-  const _ActionItem({
-    required this.icon,
-    required this.label,
-    this.isDestructive = false,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isDestructive ? Colors.red : null;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, size: 22, color: color),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: color,
-                ),
-              ),
-            ],
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(context);
+              onEdit();
+            },
+            child: const Text('编辑存储源'),
           ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete();
+            },
+            child: const Text('删除存储源'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
         ),
       ),
     );

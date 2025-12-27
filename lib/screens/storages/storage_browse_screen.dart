@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
@@ -332,9 +333,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
 
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('已复制：$text')),
-    );
+    IosUiUtils.showToast(context: context, message: '已复制');
   }
 }
 

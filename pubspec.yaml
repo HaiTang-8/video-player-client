@@ -67,6 +67,9 @@ dependencies:
   # 屏幕亮度控制
   screen_brightness: ^2.1.7
 
+  # iOS风格下拉菜单
+  pull_down_button: ^0.10.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
