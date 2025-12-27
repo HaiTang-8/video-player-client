@@ -16,6 +16,7 @@ import '../../screens/server_config/server_config_screen.dart';
 import '../../screens/storages/resources_screen.dart';
 import '../../screens/storages/storage_browse_screen.dart';
 import '../../screens/library/category_detail_screen.dart';
+import '../../screens/library/watch_history_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
 
 /// 路由刷新通知器
@@ -209,6 +210,12 @@ final routerProvider = Provider<GoRouter>((ref) {
           final name = state.uri.queryParameters['name'] ?? '';
           return CategoryDetailScreen(categoryId: id, categoryName: name);
         },
+      ),
+
+      // 观看历史页面
+      GoRoute(
+        path: '/watch-history',
+        builder: (context, state) => const WatchHistoryScreen(),
       ),
 
       // 设置页面
