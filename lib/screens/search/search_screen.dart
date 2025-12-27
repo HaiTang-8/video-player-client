@@ -1,17 +1,12 @@
 import 'dart:async';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
-import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
-import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import '../library/widgets/library_poster_card.dart';
 
-/// 搜索页面
 class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
@@ -22,6 +17,18 @@ class SearchScreen extends ConsumerStatefulWidget {
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
   Timer? _debounceTimer;
+
+  int _selectedCategory = 0;
+  int _selectedSort = 0;
+  int _selectedType = 0;
+  int _selectedRegion = 0;
+  int _selectedYear = 0;
+
+  static const _categories = ['全部', '电视剧', '电影', '动漫', '综艺', '演唱会', '纪录片'];
+  static const _sorts = ['最新更新', '最新上映', '影片评分'];
+  static const _types = ['类型', '剧情', '喜剧', '动作', '爱情', '惊悚', '犯罪', '悬疑'];
+  static const _regions = ['地区', '中国大陆', '中国香港', '中国台湾', '新加坡', '欧美', '日本', '韩国'];
+  static const _years = ['年份', '2020年代', '2025', '2024', '2023', '2022', '2021', '2020'];
 
   @override
   void dispose() {
@@ -37,92 +44,130 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
   }
 
+  void _doSearch() {
+    final query = _searchController.text.trim();
+    if (query.isNotEmpty) {
+      ref.read(searchProvider.notifier).search(query);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchProvider);
-    final theme = Theme.of(context);
-    final isDesktop = WindowControls.isDesktop;
 
-    return Scaffold(
-      appBar:
-          isDesktop
-              ? DesktopTitleBar(
-                leading: AppBackButton(onPressed: () => context.pop()),
-                centerTitle: false,
-                titleInteractive: true,
-                title: SizedBox(
-                  width: 420,
-                  child: TextField(
-                    controller: _searchController,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: '搜索电影、剧集...',
-                      border: InputBorder.none,
-                      filled: false,
-                    ),
-                    onChanged: _onSearchChanged,
-                    textInputAction: TextInputAction.search,
-                    onSubmitted: (query) {
-                      ref.read(searchProvider.notifier).search(query);
-                    },
-                  ),
-                ),
-                actions: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        ref.read(searchProvider.notifier).clear();
-                      },
-                    ),
-                ],
-              )
-              : AppBar(
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(onPressed: () => context.pop()),
-                title: TextField(
-                  controller: _searchController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '搜索电影、剧集...',
-                    border: InputBorder.none,
-                    filled: false,
-                  ),
-                  onChanged: _onSearchChanged,
-                  textInputAction: TextInputAction.search,
-                  onSubmitted: (query) {
-                    ref.read(searchProvider.notifier).search(query);
-                  },
-                ),
-                actions: [
-                  if (_searchController.text.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () {
-                        _searchController.clear();
-                        ref.read(searchProvider.notifier).clear();
-                      },
-                    ),
-                ],
-              ),
-      body: _buildBody(searchState, theme),
+    return CupertinoPageScaffold(
+      backgroundColor: CupertinoColors.systemGroupedBackground,
+      child: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            _buildSearchBar(context),
+            _buildFilterSection(),
+            Expanded(child: _buildBody(searchState)),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _buildBody(SearchState state, ThemeData theme) {
-    final serverBaseUrl = ref.watch(serverUrlProvider);
-    if (state.query.isEmpty) {
-      return const EmptyWidget(message: '输入关键词搜索电影或剧集', icon: Icons.search);
-    }
+  Widget _buildSearchBar(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        top: MediaQuery.of(context).padding.top + 8,
+        left: 12,
+        right: 12,
+        bottom: 8,
+      ),
+      color: CupertinoColors.systemGroupedBackground,
+      child: Row(
+        children: [
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minSize: 32,
+            onPressed: () => context.pop(),
+            child: const Icon(CupertinoIcons.back, size: 24),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: CupertinoSearchTextField(
+              controller: _searchController,
+              placeholder: '输入影片名称搜索',
+              autofocus: true,
+              onChanged: _onSearchChanged,
+              onSubmitted: (_) => _doSearch(),
+            ),
+          ),
+          CupertinoButton(
+            padding: const EdgeInsets.only(left: 8),
+            minSize: 32,
+            onPressed: _doSearch,
+            child: const Text('搜索', style: TextStyle(fontSize: 15)),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildFilterSection() {
+    return Container(
+      color: CupertinoColors.systemGroupedBackground,
+      child: Column(
+        children: [
+          _buildFilterRow(_categories, _selectedCategory, (i) => setState(() => _selectedCategory = i)),
+          _buildFilterRow(_sorts, _selectedSort, (i) => setState(() => _selectedSort = i)),
+          _buildFilterRow(_types, _selectedType, (i) => setState(() => _selectedType = i)),
+          _buildFilterRow(_regions, _selectedRegion, (i) => setState(() => _selectedRegion = i)),
+          _buildFilterRow(_years, _selectedYear, (i) => setState(() => _selectedYear = i)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterRow(List<String> items, int selectedIndex, ValueChanged<int> onSelected) {
+    return SizedBox(
+      height: 32,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (context, index) {
+          final selected = index == selectedIndex;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => onSelected(index),
+            child: Align(
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: selected
+                    ? BoxDecoration(color: CupertinoColors.systemGrey5, borderRadius: BorderRadius.circular(11))
+                    : null,
+                child: Text(
+                  items[index],
+                  style: TextStyle(
+                    color: selected ? CupertinoColors.activeBlue : CupertinoColors.black,
+                    fontSize: 13,
+                    height: 1.0,
+                    leadingDistribution: TextLeadingDistribution.even,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildBody(SearchState state) {
+    if (state.query.isEmpty) {
+      return const EmptyWidget(message: '输入关键词搜索电影或剧集', icon: CupertinoIcons.search);
+    }
     if (state.isLoading) {
       return const LoadingWidget(message: '搜索中...');
     }
-
     if (state.error != null) {
       return AppErrorWidget(
         message: state.error!,
@@ -130,275 +175,76 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
-    if (state.movies.isEmpty && state.tvShows.isEmpty) {
-      return const EmptyWidget(message: '未找到相关内容', icon: Icons.search_off);
+    final allItems = _buildMediaItems(state);
+    if (allItems.isEmpty) {
+      return const EmptyWidget(message: '未找到相关内容', icon: CupertinoIcons.search);
     }
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // 电影结果
-        if (state.movies.isNotEmpty) ...[
-          Text(
-            '电影 (${state.movies.length})',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...state.movies.map(
-            (movie) =>
-                _MovieSearchItem(movie: movie, serverBaseUrl: serverBaseUrl),
-          ),
-          const SizedBox(height: 24),
-        ],
-
-        // 剧集结果
-        if (state.tvShows.isNotEmpty) ...[
-          Text(
-            '剧集 (${state.tvShows.length})',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          ...state.tvShows.map(
-            (tvShow) =>
-                _TvShowSearchItem(tvShow: tvShow, serverBaseUrl: serverBaseUrl),
-          ),
-        ],
-      ],
+    return GridView.builder(
+      padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        childAspectRatio: 0.52,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: allItems.length,
+      itemBuilder: (context, index) {
+        final item = allItems[index];
+        return LibraryPosterCard(
+          item: item,
+          width: double.infinity,
+          onTap: () => _navigateToDetail(item),
+        );
+      },
     );
   }
-}
 
-/// 电影搜索结果项
-class _MovieSearchItem extends StatelessWidget {
-  final Movie movie;
-  final String? serverBaseUrl;
+  List<MediaItem> _buildMediaItems(SearchState state) {
+    final List<MediaItem> items = [];
+    final showMovies = _selectedCategory == 0 || _selectedCategory == 2;
+    final showTvShows = _selectedCategory == 0 || _selectedCategory == 1;
 
-  const _MovieSearchItem({required this.movie, required this.serverBaseUrl});
+    if (showMovies) {
+      for (final movie in state.movies) {
+        items.add(MediaItem(
+          id: movie.id,
+          title: movie.title,
+          type: MediaType.movie,
+          posterPath: movie.posterPath,
+          rating: movie.rating,
+          year: movie.year,
+          releaseDate: movie.releaseDate,
+        ));
+      }
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    if (showTvShows) {
+      for (final tv in state.tvShows) {
+        items.add(MediaItem(
+          id: tv.id,
+          title: tv.name,
+          type: MediaType.tvshow,
+          posterPath: tv.posterPath,
+          rating: tv.rating,
+          year: tv.year,
+          numberOfSeasons: tv.numberOfSeasons,
+        ));
+      }
+    }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () => context.push('/movie/${movie.id}'),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // 海报
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child:
-                    movie.posterPath != null && movie.posterPath!.isNotEmpty
-                        ? CachedNetworkImage(
-                          imageUrl: ImageProxy.proxyTMDBIfNeeded(
-                            movie.posterPath!,
-                            serverBaseUrl,
-                          ),
-                          width: 60,
-                          height: 90,
-                          fit: BoxFit.cover,
-                          errorWidget:
-                              (context, url, error) => Container(
-                                width: 60,
-                                height: 90,
-                                color:
-                                    theme.colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.movie),
-                              ),
-                        )
-                        : Container(
-                          width: 60,
-                          height: 90,
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.movie),
-                        ),
-              ),
-              const SizedBox(width: 12),
-              // 信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      movie.title,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (movie.year != null) ...[
-                          Text(
-                            '${movie.year}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (movie.rating != null && movie.rating! > 0) ...[
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          const SizedBox(width: 2),
-                          Text(
-                            movie.rating!.toStringAsFixed(1),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (movie.overview != null &&
-                        movie.overview!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        movie.overview!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
+    if (_selectedSort == 2) {
+      items.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
+    }
+
+    return items;
   }
-}
 
-/// 剧集搜索结果项
-class _TvShowSearchItem extends StatelessWidget {
-  final TvShow tvShow;
-  final String? serverBaseUrl;
-
-  const _TvShowSearchItem({required this.tvShow, required this.serverBaseUrl});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () => context.push('/tvshow/${tvShow.id}'),
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              // 海报
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child:
-                    tvShow.posterPath != null && tvShow.posterPath!.isNotEmpty
-                        ? CachedNetworkImage(
-                          imageUrl: ImageProxy.proxyTMDBIfNeeded(
-                            tvShow.posterPath!,
-                            serverBaseUrl,
-                          ),
-                          width: 60,
-                          height: 90,
-                          fit: BoxFit.cover,
-                          errorWidget:
-                              (context, url, error) => Container(
-                                width: 60,
-                                height: 90,
-                                color:
-                                    theme.colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.tv),
-                              ),
-                        )
-                        : Container(
-                          width: 60,
-                          height: 90,
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          child: const Icon(Icons.tv),
-                        ),
-              ),
-              const SizedBox(width: 12),
-              // 信息
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tvShow.name,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        if (tvShow.year != null) ...[
-                          Text(
-                            '${tvShow.year}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (tvShow.numberOfSeasons != null) ...[
-                          Text(
-                            '${tvShow.numberOfSeasons}季',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                        ],
-                        if (tvShow.rating != null && tvShow.rating! > 0) ...[
-                          const Icon(Icons.star, size: 14, color: Colors.amber),
-                          const SizedBox(width: 2),
-                          Text(
-                            tvShow.rating!.toStringAsFixed(1),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.outline,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (tvShow.overview != null &&
-                        tvShow.overview!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        tvShow.overview!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _navigateToDetail(MediaItem item) {
+    if (item.type == MediaType.movie) {
+      context.push('/movie/${item.id}');
+    } else {
+      context.push('/tvshow/${item.id}');
+    }
   }
 }
