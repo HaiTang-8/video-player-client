@@ -12,14 +12,21 @@ import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
 /// 电影详情页面
-class MovieDetailScreen extends ConsumerWidget {
+class MovieDetailScreen extends ConsumerStatefulWidget {
   final int movieId;
 
   const MovieDetailScreen({super.key, required this.movieId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final movieAsync = ref.watch(movieDetailProvider(movieId));
+  ConsumerState<MovieDetailScreen> createState() => _MovieDetailScreenState();
+}
+
+class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
+  Movie? _movie;
+
+  @override
+  Widget build(BuildContext context) {
+    final movieAsync = ref.watch(movieDetailProvider(widget.movieId));
     final theme = Theme.of(context);
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
@@ -44,7 +51,7 @@ class MovieDetailScreen extends ConsumerWidget {
                     (error, stack) => DesktopTitleBar(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
-                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
+                      // Desktop 端自绘标题栏：返回按钮使用"<"样式，并让标题紧跟图标靠左展示（不居中）。
                       centerTitle: false,
                       leading: AppBackButton(onPressed: () => context.pop()),
                       title: const Text('电影详情'),
@@ -53,7 +60,7 @@ class MovieDetailScreen extends ConsumerWidget {
                           icon: const Icon(Icons.refresh),
                           onPressed:
                               () =>
-                                  ref.invalidate(movieDetailProvider(movieId)),
+                                  ref.invalidate(movieDetailProvider(widget.movieId)),
                         ),
                       ],
                     ),
@@ -61,7 +68,7 @@ class MovieDetailScreen extends ConsumerWidget {
                     (movie) => DesktopTitleBar(
                       backgroundColor: Colors.white,
                       foregroundColor: Colors.black,
-                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让“资源名称”紧跟图标靠左展示（不居中）。
+                      // Desktop 端自绘标题栏：返回按钮使用"<"样式，并让"资源名称"紧跟图标靠左展示（不居中）。
                       centerTitle: false,
                       leading: AppBackButton(onPressed: () => context.pop()),
                       title: Text(movie?.title ?? '电影详情'),
@@ -71,13 +78,13 @@ class MovieDetailScreen extends ConsumerWidget {
                             tooltip: '重新刮削',
                             icon: const Icon(Icons.auto_fix_high),
                             onPressed:
-                                () => _scrapeMovie(context, ref, movie.id),
+                                () => _scrapeMovie(context, movie.id),
                           ),
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           onPressed:
                               () =>
-                                  ref.invalidate(movieDetailProvider(movieId)),
+                                  ref.invalidate(movieDetailProvider(widget.movieId)),
                         ),
                       ],
                     ),
@@ -88,12 +95,13 @@ class MovieDetailScreen extends ConsumerWidget {
         error:
             (error, stack) => AppErrorWidget(
               message: error.toString(),
-              onRetry: () => ref.invalidate(movieDetailProvider(movieId)),
+              onRetry: () => ref.invalidate(movieDetailProvider(widget.movieId)),
             ),
         data: (movie) {
           if (movie == null) {
             return const AppErrorWidget(message: '电影不存在');
           }
+          _movie = movie;
 
           final cast =
               (movie.castDetail != null && movie.castDetail!.isNotEmpty)
@@ -108,7 +116,7 @@ class MovieDetailScreen extends ConsumerWidget {
           return CustomScrollView(
             slivers: [
               // 顶部导航栏
-              if (!isDesktop) _buildAppBar(context, ref, movie),
+              if (!isDesktop) _buildAppBar(context, movie),
 
               // 背景图区域（含渐变蒙版和 Hero 内容）
               SliverToBoxAdapter(
@@ -305,13 +313,13 @@ class MovieDetailScreen extends ConsumerWidget {
   }
 
   /// 构建顶部导航栏
-  Widget _buildAppBar(BuildContext context, WidgetRef ref, Movie movie) {
+  Widget _buildAppBar(BuildContext context, Movie movie) {
     return SliverAppBar(
       backgroundColor: Colors.white,
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
-      // 移动端顶部导航：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）。
+      // 移动端顶部导航：返回按钮使用"<"样式，标题靠左（避免 iOS 默认居中）。
       centerTitle: false,
       automaticallyImplyLeading: false,
       leadingWidth: kAppBackButtonWidth,
@@ -331,11 +339,11 @@ class MovieDetailScreen extends ConsumerWidget {
       actions: [
         IconButton(
           icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),
-          onPressed: () => _scrapeMovie(context, ref, movie.id),
+          onPressed: () => _scrapeMovie(context, movie.id),
         ),
         IconButton(
           icon: const Icon(Icons.refresh, color: Colors.black, size: 20),
-          onPressed: () => ref.invalidate(movieDetailProvider(movieId)),
+          onPressed: () => ref.invalidate(movieDetailProvider(widget.movieId)),
         ),
       ],
     );
@@ -347,7 +355,7 @@ class MovieDetailScreen extends ConsumerWidget {
       color: Colors.black,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: () => context.push('/player/movie/$movieId'),
+        onTap: () => _playMovie(context),
         borderRadius: BorderRadius.circular(8),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
@@ -368,6 +376,32 @@ class MovieDetailScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Future<void> _playMovie(BuildContext context) async {
+    final movie = _movie;
+    if (movie == null) return;
+
+    final service = ref.read(mediaServiceProvider);
+    int? position;
+
+    if (service != null) {
+      final historyResp = await service.getWatchProgress('movie', movie.id);
+      debugPrint('[_playMovie] historyResp.isSuccess=${historyResp.isSuccess}, data=${historyResp.data}, error=${historyResp.error}');
+      if (historyResp.isSuccess && historyResp.data != null) {
+        debugPrint('[_playMovie] position=${historyResp.data!.position}, completed=${historyResp.data!.completed}');
+        if (!historyResp.data!.completed) {
+          position = historyResp.data!.position;
+        }
+      }
+    }
+
+    debugPrint('[_playMovie] final position=$position, title=${movie.title}');
+    if (!context.mounted) return;
+    context.push(
+      '/player/movie/${movie.id}',
+      extra: {'position': position, 'title': movie.title},
     );
   }
 
@@ -531,7 +565,7 @@ class MovieDetailScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _scrapeMovie(BuildContext context, WidgetRef ref, int id) async {
+  Future<void> _scrapeMovie(BuildContext context, int id) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
       ScaffoldMessenger.of(

@@ -44,6 +44,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final VideoController _controller;
   bool _isLoading = true;
   String? _error;
+  String? _currentStreamUrl; // 当前播放地址，用于错误显示
   bool _isFullscreen = false;
   bool _isDisposing = false;
   int _currentEpisodeIndex = 0;
@@ -85,7 +86,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (!mounted || _isDisposing) return;
       if (error.isNotEmpty) {
         setState(() {
-          _error = '播放错误: $error';
+          _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
           _isLoading = false;
         });
       }
@@ -100,11 +101,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // 监听视频时长，准备好后 seek 到初始位置
     _player.stream.duration.listen((duration) {
       if (!mounted || _isDisposing) return;
+      debugPrint('[PlayerScreen] duration=${duration.inSeconds}s, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition');
       if (!_hasSeekToInitialPosition &&
           duration.inSeconds > 0 &&
           widget.initialPosition != null &&
           widget.initialPosition! > 0) {
         _hasSeekToInitialPosition = true;
+        debugPrint('[PlayerScreen] Seeking to ${widget.initialPosition} seconds');
         _player.seek(Duration(seconds: widget.initialPosition!));
       }
     });
@@ -211,6 +214,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     setState(() {
       _isLoading = true;
       _error = null;
+      _currentStreamUrl = null;
       if (episodeIndex != null) _currentEpisodeIndex = episodeIndex;
     });
 
@@ -248,6 +252,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final serverUrl = ref.read(serverUrlProvider);
       final fullUrl =
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
+      _currentStreamUrl = fullUrl;
 
       await _player.open(Media(fullUrl));
 
@@ -261,7 +266,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '加载失败: $e';
+        _error = '加载失败: $e\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
         _isLoading = false;
       });
     }
@@ -340,27 +345,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                 ),
         body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.error_outline,
-                size: 64,
-                color: theme.colorScheme.error,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: _loadVideo,
-                icon: const Icon(Icons.refresh),
-                label: const Text('重试'),
-              ),
-            ],
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: theme.colorScheme.error,
+                ),
+                const SizedBox(height: 16),
+                SelectableText(
+                  _error!,
+                  style: const TextStyle(color: Colors.white),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                FilledButton.icon(
+                  onPressed: _loadVideo,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('重试'),
+                ),
+              ],
+            ),
           ),
         ),
       );

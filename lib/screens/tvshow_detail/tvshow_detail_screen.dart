@@ -167,6 +167,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     episodes: selectedSeason.episodes!,
                     tvShowId: widget.tvShowId,
                     seasonId: selectedSeason.id,
+                    tvShowName: tvShow.name,
                     serverBaseUrl: serverBaseUrl,
                     fallbackImageUrl: episodeFallbackImage,
                   ),
@@ -176,6 +177,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: _EpisodesCarousel(
                     tvShowId: widget.tvShowId,
                     seasonId: _selectedSeasonId!,
+                    tvShowName: tvShow.name,
                     fallbackImageUrl: episodeFallbackImage,
                   ),
                 ),
@@ -976,6 +978,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
   final List<Episode> episodes;
   final int tvShowId;
   final int seasonId;
+  final String? tvShowName;
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
 
@@ -983,6 +986,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
     required this.episodes,
     required this.tvShowId,
     required this.seasonId,
+    this.tvShowName,
     required this.serverBaseUrl,
     this.fallbackImageUrl,
   });
@@ -1002,6 +1006,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
             episode: episode,
             tvShowId: tvShowId,
             seasonId: seasonId,
+            tvShowName: tvShowName,
             serverBaseUrl: serverBaseUrl,
             fallbackImageUrl: fallbackImageUrl,
           );
@@ -1015,11 +1020,13 @@ class _EpisodesCarouselDirect extends StatelessWidget {
 class _EpisodesCarousel extends ConsumerWidget {
   final int tvShowId;
   final int seasonId;
+  final String? tvShowName;
   final String? fallbackImageUrl;
 
   const _EpisodesCarousel({
     required this.tvShowId,
     required this.seasonId,
+    this.tvShowName,
     this.fallbackImageUrl,
   });
 
@@ -1070,6 +1077,7 @@ class _EpisodesCarousel extends ConsumerWidget {
                 episode: episode,
                 tvShowId: tvShowId,
                 seasonId: seasonId,
+                tvShowName: tvShowName,
                 serverBaseUrl: serverBaseUrl,
                 fallbackImageUrl: fallbackImageUrl,
               );
@@ -1082,10 +1090,11 @@ class _EpisodesCarousel extends ConsumerWidget {
 }
 
 /// 单集卡片 - 竖向布局
-class _EpisodeCard extends StatelessWidget {
+class _EpisodeCard extends ConsumerWidget {
   final Episode episode;
   final int tvShowId;
   final int seasonId;
+  final String? tvShowName;
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
 
@@ -1093,18 +1102,17 @@ class _EpisodeCard extends StatelessWidget {
     required this.episode,
     required this.tvShowId,
     required this.seasonId,
+    this.tvShowName,
     required this.serverBaseUrl,
     this.fallbackImageUrl,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
       onTap:
           episode.hasFile
-              ? () => context.push(
-                '/player/episode/$tvShowId/$seasonId/${episode.id}',
-              )
+              ? () => _playEpisode(context, ref)
               : null,
       child: SizedBox(
         width: 160,
@@ -1200,6 +1208,29 @@ class _EpisodeCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _playEpisode(BuildContext context, WidgetRef ref) async {
+    final service = ref.read(mediaServiceProvider);
+    int? position;
+
+    if (service != null) {
+      final historyResp = await service.getWatchProgress('tv', tvShowId);
+      if (historyResp.isSuccess && historyResp.data != null &&
+          historyResp.data!.episodeId == episode.id &&
+          !historyResp.data!.completed) {
+        position = historyResp.data!.position;
+      }
+    }
+
+    if (!context.mounted) return;
+    final title = tvShowName != null
+        ? '$tvShowName - ${episode.displayTitle}'
+        : episode.displayTitle;
+    context.push(
+      '/player/episode/$tvShowId/$seasonId/${episode.id}',
+      extra: {'position': position, 'title': title},
     );
   }
 
