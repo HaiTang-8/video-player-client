@@ -48,7 +48,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
-  bool _playing = false;
+  bool _playing = true; // 初始为 true，视频加载后自动播放
   bool _buffering = true; // 初始为 true，显示加载指示器
   double _volume = 1.0;
   List<AudioTrack> _audioTracks = [];
