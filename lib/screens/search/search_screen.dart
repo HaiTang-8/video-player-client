@@ -95,6 +95,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: CupertinoSearchTextField(
               controller: _searchController,
               placeholder: '输入影片名称搜索',
+              style: const TextStyle(fontSize: 13),
+              placeholderStyle: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.systemGrey,
+              ),
               autofocus: true,
               onChanged: _onSearchChanged,
               onSubmitted: (_) => _doSearch(),
