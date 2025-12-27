@@ -488,7 +488,7 @@ class _ScanPopoverState extends State<_ScanPopover> {
 
     return Positioned(
       left: popoverLeft,
-      top: _buttonBottom! - appBarHeight + 4,
+      top: _buttonBottom! - appBarHeight + 8,
       child: Material(
         color: Colors.transparent,
         child: Column(
