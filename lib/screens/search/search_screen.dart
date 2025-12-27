@@ -139,7 +139,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             child: Align(
               alignment: Alignment.center,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                 decoration: selected
                     ? BoxDecoration(color: CupertinoColors.systemGrey5, borderRadius: BorderRadius.circular(11))
                     : null,
@@ -148,6 +148,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   style: TextStyle(
                     color: selected ? CupertinoColors.activeBlue : CupertinoColors.black,
                     fontSize: 13,
+                    fontWeight: FontWeight.w400,
                     height: 1.0,
                     leadingDistribution: TextLeadingDistribution.even,
                     decoration: TextDecoration.none,
