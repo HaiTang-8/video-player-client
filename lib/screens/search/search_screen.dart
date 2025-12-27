@@ -41,15 +41,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _onSearchChanged(String query) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-      ref.read(searchProvider.notifier).search(query);
+      _doSearchWithFilters(query);
     });
   }
 
   void _doSearch() {
     final query = _searchController.text.trim();
-    if (query.isNotEmpty) {
-      ref.read(searchProvider.notifier).search(query);
-    }
+    _doSearchWithFilters(query);
+  }
+
+  void _doSearchWithFilters(String query) {
+    ref.read(searchProvider.notifier).updateFilters(
+      category: _categories[_selectedCategory],
+      sort: _sorts[_selectedSort],
+      genre: _types[_selectedType],
+      region: _regions[_selectedRegion],
+      year: _years[_selectedYear],
+    );
+    ref.read(searchProvider.notifier).search(query);
+  }
+
+  void _onFilterChanged() {
+    _doSearchWithFilters(_searchController.text.trim());
   }
 
   @override
@@ -129,11 +142,26 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       color: CupertinoColors.systemGroupedBackground,
       child: Column(
         children: [
-          _buildFilterRow(_categories, _selectedCategory, (i) => setState(() => _selectedCategory = i)),
-          _buildFilterRow(_sorts, _selectedSort, (i) => setState(() => _selectedSort = i)),
-          _buildFilterRow(_types, _selectedType, (i) => setState(() => _selectedType = i)),
-          _buildFilterRow(_regions, _selectedRegion, (i) => setState(() => _selectedRegion = i)),
-          _buildFilterRow(_years, _selectedYear, (i) => setState(() => _selectedYear = i)),
+          _buildFilterRow(_categories, _selectedCategory, (i) {
+            setState(() => _selectedCategory = i);
+            _onFilterChanged();
+          }),
+          _buildFilterRow(_sorts, _selectedSort, (i) {
+            setState(() => _selectedSort = i);
+            _onFilterChanged();
+          }),
+          _buildFilterRow(_types, _selectedType, (i) {
+            setState(() => _selectedType = i);
+            _onFilterChanged();
+          }),
+          _buildFilterRow(_regions, _selectedRegion, (i) {
+            setState(() => _selectedRegion = i);
+            _onFilterChanged();
+          }),
+          _buildFilterRow(_years, _selectedYear, (i) {
+            setState(() => _selectedYear = i);
+            _onFilterChanged();
+          }),
         ],
       ),
     );
@@ -179,8 +207,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildBody(SearchState state) {
-    if (state.query.isEmpty) {
-      return const EmptyWidget(message: '输入关键词搜索电影或剧集', icon: CupertinoIcons.search);
+    // 如果没有任何筛选条件且查询为空，显示提示
+    if (state.query.isEmpty && state.items.isEmpty && !state.isLoading) {
+      return const EmptyWidget(message: '输入关键词或选择筛选条件搜索', icon: CupertinoIcons.search);
     }
     if (state.isLoading) {
       return const LoadingWidget(message: '搜索中...');
@@ -192,69 +221,28 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       );
     }
 
-    final allItems = _buildMediaItems(state);
-    if (allItems.isEmpty) {
+    if (state.items.isEmpty) {
       return const EmptyWidget(message: '未找到相关内容', icon: CupertinoIcons.search);
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.52,
-        crossAxisSpacing: 10,
-        mainAxisSpacing: 12,
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 160,
+        childAspectRatio: 0.54,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
-      itemCount: allItems.length,
+      itemCount: state.items.length,
       itemBuilder: (context, index) {
-        final item = allItems[index];
+        final item = state.items[index];
         return LibraryPosterCard(
           item: item,
-          width: double.infinity,
+          width: 140,
           onTap: () => _navigateToDetail(item),
         );
       },
     );
-  }
-
-  List<MediaItem> _buildMediaItems(SearchState state) {
-    final List<MediaItem> items = [];
-    final showMovies = _selectedCategory == 0 || _selectedCategory == 2;
-    final showTvShows = _selectedCategory == 0 || _selectedCategory == 1;
-
-    if (showMovies) {
-      for (final movie in state.movies) {
-        items.add(MediaItem(
-          id: movie.id,
-          title: movie.title,
-          type: MediaType.movie,
-          posterPath: movie.posterPath,
-          rating: movie.rating,
-          year: movie.year,
-          releaseDate: movie.releaseDate,
-        ));
-      }
-    }
-
-    if (showTvShows) {
-      for (final tv in state.tvShows) {
-        items.add(MediaItem(
-          id: tv.id,
-          title: tv.name,
-          type: MediaType.tvshow,
-          posterPath: tv.posterPath,
-          rating: tv.rating,
-          year: tv.year,
-          numberOfSeasons: tv.numberOfSeasons,
-        ));
-      }
-    }
-
-    if (_selectedSort == 2) {
-      items.sort((a, b) => (b.rating ?? 0).compareTo(a.rating ?? 0));
-    }
-
-    return items;
   }
 
   void _navigateToDetail(MediaItem item) {

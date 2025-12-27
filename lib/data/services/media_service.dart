@@ -159,6 +159,45 @@ class MediaService {
     );
   }
 
+  /// 统一搜索（支持多条件组合筛选）
+  Future<ApiResponse<List<MediaItem>>> search({
+    String? query,
+    String? category,
+    String? sort,
+    String? genre,
+    String? region,
+    String? year,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final params = <String, dynamic>{
+      'page': page,
+      'page_size': pageSize,
+    };
+    if (query != null && query.isNotEmpty) params['q'] = query;
+    if (category != null && category.isNotEmpty && category != '全部') {
+      params['category'] = category;
+    }
+    if (sort != null && sort.isNotEmpty) params['sort'] = sort;
+    if (genre != null && genre.isNotEmpty && genre != '类型') {
+      params['genre'] = genre;
+    }
+    if (region != null && region.isNotEmpty && region != '地区') {
+      params['region'] = region;
+    }
+    if (year != null && year.isNotEmpty && year != '年份') {
+      params['year'] = year;
+    }
+
+    return _client.get<List<MediaItem>>(
+      ApiConstants.librarySearch,
+      queryParameters: params,
+      fromJson: (json) => (json as List)
+          .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
   /// 获取剧集的所有季
   Future<ApiResponse<List<Season>>> getTvShowSeasons(int tvShowId) async {
     return _client.get<List<Season>>(

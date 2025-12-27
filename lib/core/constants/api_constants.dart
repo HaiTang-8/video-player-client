@@ -8,6 +8,7 @@ class ApiConstants {
   // 媒体库
   static const String libraryPosters = '$apiPrefix/library/posters';
   static const String libraryCategories = '$apiPrefix/library/categories';
+  static const String librarySearch = '$apiPrefix/library/search';
 
   // 观看历史
   static const String historyRecent = '$apiPrefix/history/recent';
