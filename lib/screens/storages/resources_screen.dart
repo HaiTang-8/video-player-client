@@ -26,8 +26,54 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     });
   }
 
-  void _startGlobalScan() {
-    ref.read(globalScanStateProvider.notifier).startScanAll();
+  void _startGlobalScan({bool forceScrape = false}) {
+    ref.read(globalScanStateProvider.notifier).startScanAll(forceScrape: forceScrape);
+  }
+
+  void _showScanMenu() {
+    final RenderBox? button = _refreshButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (button == null) return;
+
+    final Offset offset = button.localToGlobal(Offset.zero);
+    final Size size = button.size;
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        offset.dx,
+        offset.dy + size.height,
+        offset.dx + size.width,
+        offset.dy + size.height,
+      ),
+      items: [
+        const PopupMenuItem<String>(
+          value: 'scan',
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.refresh, size: 18),
+              SizedBox(width: 8),
+              Text('扫描新文件'),
+            ],
+          ),
+        ),
+        const PopupMenuItem<String>(
+          value: 'force',
+          child: Row(
+            children: [
+              Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+              SizedBox(width: 8),
+              Text('强制刮削全部'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'scan') {
+        _startGlobalScan(forceScrape: false);
+      } else if (value == 'force') {
+        _startGlobalScan(forceScrape: true);
+      }
+    });
   }
 
   @override
@@ -50,7 +96,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                   tooltip: '扫描存储源',
                   onPressed: globalScanState.isScanning
                       ? () => ref.read(globalScanStateProvider.notifier).showPopover()
-                      : _startGlobalScan,
+                      : _showScanMenu,
                   icon: globalScanState.isScanning
                       ? const SizedBox(
                           width: 18,
@@ -74,7 +120,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                   tooltip: '扫描存储源',
                   onPressed: globalScanState.isScanning
                       ? () => ref.read(globalScanStateProvider.notifier).showPopover()
-                      : _startGlobalScan,
+                      : _showScanMenu,
                   icon: globalScanState.isScanning
                       ? const SizedBox(
                           width: 18,

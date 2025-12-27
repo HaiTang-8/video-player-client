@@ -39,9 +39,13 @@ class StorageService {
   }
 
   /// 启动扫描
-  Future<ApiResponse<ScanProgress>> startScan(int storageId) async {
+  Future<ApiResponse<ScanProgress>> startScan(
+    int storageId, {
+    bool forceScrape = false,
+  }) async {
     return _client.post<ScanProgress>(
       ApiConstants.storageScan(storageId),
+      data: forceScrape ? {'force_scrape': true} : null,
       fromJson: (json) => ScanProgress.fromJson(json as Map<String, dynamic>),
     );
   }

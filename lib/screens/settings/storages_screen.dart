@@ -93,7 +93,8 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                   storage: storage,
                   isScanning: isScanning,
                   progress: progress,
-                  onScan: () => _startScan(storage.id),
+                  onScan: () => _startScan(storage.id, forceScrape: false),
+                  onForceScrape: () => _startScan(storage.id, forceScrape: true),
                   onDelete: () => _deleteStorage(storage),
                 );
               },
@@ -108,10 +109,10 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     );
   }
 
-  Future<void> _startScan(int storageId) async {
+  Future<void> _startScan(int storageId, {bool forceScrape = false}) async {
     final success = await ref
         .read(scanStateProvider.notifier)
-        .startScan(storageId);
+        .startScan(storageId, forceScrape: forceScrape);
     if (!success && mounted) {
       ScaffoldMessenger.of(
         context,
@@ -323,6 +324,7 @@ class _StorageCard extends StatelessWidget {
   final bool isScanning;
   final ScanProgress? progress;
   final VoidCallback onScan;
+  final VoidCallback onForceScrape;
   final VoidCallback onDelete;
 
   const _StorageCard({
@@ -330,6 +332,7 @@ class _StorageCard extends StatelessWidget {
     required this.isScanning,
     this.progress,
     required this.onScan,
+    required this.onForceScrape,
     required this.onDelete,
   });
 
@@ -409,6 +412,12 @@ class _StorageCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                OutlinedButton.icon(
+                  onPressed: isScanning ? null : onForceScrape,
+                  icon: const Icon(Icons.sync),
+                  label: const Text('强制刮削'),
+                ),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: isScanning ? null : onScan,
                   icon:

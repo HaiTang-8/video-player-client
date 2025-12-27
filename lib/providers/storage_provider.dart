@@ -154,7 +154,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
 
   GlobalScanNotifier(this._service, this._storages) : super(const GlobalScanState());
 
-  Future<void> startScanAll() async {
+  Future<void> startScanAll({bool forceScrape = false}) async {
     if (_service == null) return;
     final storages = _storages.valueOrNull ?? [];
     if (storages.isEmpty) return;
@@ -164,7 +164,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
     _progresses.clear();
 
     for (final storage in storages) {
-      await _service.startScan(storage.id);
+      await _service.startScan(storage.id, forceScrape: forceScrape);
     }
 
     _pollProgress(storages.map((s) => s.id).toList());
@@ -235,10 +235,10 @@ class ScanStateNotifier extends StateNotifier<ScanState> {
   ScanStateNotifier(this._service) : super(ScanState());
 
   /// 启动扫描
-  Future<bool> startScan(int storageId) async {
+  Future<bool> startScan(int storageId, {bool forceScrape = false}) async {
     if (_service == null) return false;
 
-    final response = await _service.startScan(storageId);
+    final response = await _service.startScan(storageId, forceScrape: forceScrape);
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
