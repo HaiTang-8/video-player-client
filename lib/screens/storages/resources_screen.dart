@@ -16,6 +16,8 @@ class ResourcesScreen extends ConsumerStatefulWidget {
 }
 
 class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
+  final GlobalKey _refreshButtonKey = GlobalKey();
+
   @override
   void initState() {
     super.initState();
@@ -24,9 +26,14 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     });
   }
 
+  void _startGlobalScan() {
+    ref.read(globalScanStateProvider.notifier).startScanAll();
+  }
+
   @override
   Widget build(BuildContext context) {
     final storagesAsync = ref.watch(storagesProvider);
+    final globalScanState = ref.watch(globalScanStateProvider);
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -39,6 +46,18 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               centerTitle: true,
               actions: [
                 IconButton(
+                  key: _refreshButtonKey,
+                  tooltip: '扫描存储源',
+                  onPressed: globalScanState.isScanning ? null : _startGlobalScan,
+                  icon: globalScanState.isScanning
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(CupertinoIcons.refresh),
+                ),
+                IconButton(
                   tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
                   icon: const Icon(CupertinoIcons.add),
@@ -49,42 +68,64 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               title: const Text('资源库'),
               actions: [
                 IconButton(
+                  key: _refreshButtonKey,
+                  tooltip: '扫描存储源',
+                  onPressed: globalScanState.isScanning ? null : _startGlobalScan,
+                  icon: globalScanState.isScanning
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(CupertinoIcons.refresh),
+                ),
+                IconButton(
                   tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
                   icon: const Icon(CupertinoIcons.add),
                 ),
               ],
             ),
-      body: storagesAsync.when(
-        loading: () => const LoadingWidget(message: '加载中...'),
-        error: (error, stack) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
-        ),
-        data: (storages) {
-          if (storages.isEmpty) {
-            return EmptyWidget(
-              message: '暂无存储源\n请先添加存储源',
-              icon: CupertinoIcons.folder_badge_plus,
-              action: FilledButton.icon(
-                onPressed: () => context.push('/storage-manage'),
-                icon: const Icon(CupertinoIcons.add),
-                label: const Text('去添加'),
-              ),
-            );
-          }
-
-          return RefreshIndicator(
-            onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              children: [
-                _buildSectionHeader('存储源', theme),
-                _buildStorageList(context, theme, storages),
-              ],
+      body: Stack(
+        children: [
+          storagesAsync.when(
+            loading: () => const LoadingWidget(message: '加载中...'),
+            error: (error, stack) => AppErrorWidget(
+              message: error.toString(),
+              onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
             ),
-          );
-        },
+            data: (storages) {
+              if (storages.isEmpty) {
+                return EmptyWidget(
+                  message: '暂无存储源\n请先添加存储源',
+                  icon: CupertinoIcons.folder_badge_plus,
+                  action: FilledButton.icon(
+                    onPressed: () => context.push('/storage-manage'),
+                    icon: const Icon(CupertinoIcons.add),
+                    label: const Text('去添加'),
+                  ),
+                );
+              }
+
+              return RefreshIndicator(
+                onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  children: [
+                    _buildSectionHeader('存储源', theme),
+                    _buildStorageList(context, theme, storages),
+                  ],
+                ),
+              );
+            },
+          ),
+          if (globalScanState.isScanning || globalScanState.foundFiles > 0)
+            _ScanPopover(
+              buttonKey: _refreshButtonKey,
+              state: globalScanState,
+              onClose: () => ref.read(globalScanStateProvider.notifier).dismiss(),
+            ),
+        ],
       ),
     );
   }
@@ -367,4 +408,156 @@ class _ActionItem extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ScanPopover extends StatefulWidget {
+  final GlobalKey buttonKey;
+  final GlobalScanState state;
+  final VoidCallback onClose;
+
+  const _ScanPopover({
+    required this.buttonKey,
+    required this.state,
+    required this.onClose,
+  });
+
+  @override
+  State<_ScanPopover> createState() => _ScanPopoverState();
+}
+
+class _ScanPopoverState extends State<_ScanPopover> {
+  double? _buttonCenterX;
+  double? _buttonBottom;
+
+  @override
+  void initState() {
+    super.initState();
+    _schedulePositionUpdate();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ScanPopover oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _schedulePositionUpdate();
+  }
+
+  void _schedulePositionUpdate() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _updatePosition();
+    });
+  }
+
+  void _updatePosition() {
+    final renderBox = widget.buttonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox != null && renderBox.hasSize) {
+      final pos = renderBox.localToGlobal(Offset.zero);
+      if (mounted) {
+        setState(() {
+          _buttonCenterX = pos.dx + renderBox.size.width / 2;
+          _buttonBottom = pos.dy + renderBox.size.height;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_buttonCenterX == null || _buttonBottom == null) {
+      return const SizedBox.shrink();
+    }
+
+    const popoverWidth = 220.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    // body 的坐标系从 AppBar 下方开始，需要减去 AppBar 高度
+    final appBarHeight = WindowControls.isDesktop ? 52.0 : kToolbarHeight;
+
+    // 计算气泡左边位置，确保不超出屏幕
+    double popoverLeft = _buttonCenterX! - popoverWidth / 2;
+    popoverLeft = popoverLeft.clamp(16.0, screenWidth - popoverWidth - 16);
+
+    // 计算小三角相对于气泡的偏移（让三角对准按钮中心）
+    final triangleOffset = _buttonCenterX! - popoverLeft - 8; // 8 是三角宽度的一半
+
+    return Positioned(
+      left: popoverLeft,
+      top: _buttonBottom! - appBarHeight + 4,
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 小三角（通过 Padding 偏移到按钮正下方）
+            Padding(
+              padding: EdgeInsets.only(left: triangleOffset.clamp(8.0, popoverWidth - 24)),
+              child: CustomPaint(
+                size: const Size(16, 8),
+                painter: _TrianglePainter(),
+              ),
+            ),
+            // 气泡主体
+            Container(
+              width: popoverWidth,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        widget.state.isScanning ? '正在扫描' : '扫描完成',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: widget.onClose,
+                        child: const Icon(Icons.close, color: Colors.white, size: 18),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.state.foundFiles == 0 && widget.state.isScanning
+                        ? '正在扫描目录...'
+                        : '已找到 ${widget.state.foundFiles}，待更新 ${widget.state.pendingFiles}，已更新 ${widget.state.updatedFiles}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF2563EB)
+      ..style = PaintingStyle.fill;
+    final path = Path()
+      ..moveTo(size.width / 2, 0)
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

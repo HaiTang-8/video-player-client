@@ -77,6 +77,35 @@ class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
   }
 }
 
+/// 全局扫描聚合状态
+class GlobalScanState {
+  final bool isScanning;
+  final int foundFiles;      // 已找到（所有存储源的 totalFiles 之和）
+  final int pendingFiles;    // 待更新（totalFiles - scannedFiles）
+  final int updatedFiles;    // 已更新（scannedFiles）
+
+  const GlobalScanState({
+    this.isScanning = false,
+    this.foundFiles = 0,
+    this.pendingFiles = 0,
+    this.updatedFiles = 0,
+  });
+
+  GlobalScanState copyWith({
+    bool? isScanning,
+    int? foundFiles,
+    int? pendingFiles,
+    int? updatedFiles,
+  }) {
+    return GlobalScanState(
+      isScanning: isScanning ?? this.isScanning,
+      foundFiles: foundFiles ?? this.foundFiles,
+      pendingFiles: pendingFiles ?? this.pendingFiles,
+      updatedFiles: updatedFiles ?? this.updatedFiles,
+    );
+  }
+}
+
 /// 扫描进度状态
 class ScanState {
   final Map<int, ScanProgress> progresses;
@@ -104,6 +133,74 @@ final scanStateProvider =
   final service = ref.watch(storageServiceProvider);
   return ScanStateNotifier(service);
 });
+
+/// 全局扫描状态 Provider
+final globalScanStateProvider =
+    StateNotifierProvider<GlobalScanNotifier, GlobalScanState>((ref) {
+  final service = ref.watch(storageServiceProvider);
+  final storages = ref.watch(storagesProvider);
+  return GlobalScanNotifier(service, storages);
+});
+
+class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
+  final StorageService? _service;
+  final AsyncValue<List<Storage>> _storages;
+  final Map<int, ScanProgress> _progresses = {};
+
+  GlobalScanNotifier(this._service, this._storages) : super(const GlobalScanState());
+
+  Future<void> startScanAll() async {
+    if (_service == null) return;
+    final storages = _storages.valueOrNull ?? [];
+    if (storages.isEmpty) return;
+
+    state = state.copyWith(isScanning: true, foundFiles: 0, pendingFiles: 0, updatedFiles: 0);
+    _progresses.clear();
+
+    for (final storage in storages) {
+      await _service.startScan(storage.id);
+    }
+
+    _pollProgress(storages.map((s) => s.id).toList());
+  }
+
+  void _pollProgress(List<int> storageIds) async {
+    if (_service == null) return;
+
+    while (state.isScanning) {
+      await Future.delayed(const Duration(seconds: 1));
+
+      int totalFound = 0, totalUpdated = 0;
+      bool anyRunning = false;
+
+      for (final id in storageIds) {
+        final response = await _service.getScanProgress(id);
+        if (response.isSuccess && response.data != null) {
+          _progresses[id] = response.data!;
+          if (response.data!.isRunning) anyRunning = true;
+        }
+      }
+
+      for (final p in _progresses.values) {
+        totalFound += p.totalFiles;
+        totalUpdated += p.scannedFiles;
+      }
+
+      state = state.copyWith(
+        foundFiles: totalFound,
+        pendingFiles: totalFound - totalUpdated,
+        updatedFiles: totalUpdated,
+        isScanning: anyRunning,
+      );
+
+      if (!anyRunning) break;
+    }
+  }
+
+  void dismiss() {
+    state = const GlobalScanState();
+  }
+}
 
 class ScanStateNotifier extends StateNotifier<ScanState> {
   final StorageService? _service;
