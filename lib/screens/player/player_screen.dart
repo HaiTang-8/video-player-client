@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,7 @@ import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/episode.dart';
+import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
 import 'widgets/custom_video_controls.dart';
 
@@ -42,6 +45,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _isFullscreen = false;
   bool _isDisposing = false;
   int _currentEpisodeIndex = 0;
+  Timer? _progressTimer;
+  Duration _lastSavedPosition = Duration.zero;
+  MediaService? _mediaService;
 
   @override
   void initState() {
@@ -92,14 +98,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player.stream.completed.listen((completed) {
       if (!mounted || _isDisposing) return;
       if (completed) {
-        // 播放完成，可返回上一页或显示提示
+        _saveProgress(); // 播放完成时保存进度
       }
     });
+  }
+
+  void _startProgressTimer() {
+    _progressTimer?.cancel();
+    _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _saveProgress();
+    });
+  }
+
+  void _saveProgress() {
+    final position = _player.state.position;
+    final duration = _player.state.duration;
+
+    // 跳过无效数据或位置未变化
+    if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
+    _lastSavedPosition = position;
+
+    final service = _mediaService;
+    if (service == null) return;
+
+    if (widget.type == 'movie') {
+      service.updateWatchProgress(
+        mediaType: 'movie',
+        mediaId: widget.id,
+        position: position.inSeconds,
+        duration: duration.inSeconds,
+      );
+    } else if (widget.type == 'episode' && widget.tvShowId != null) {
+      final episodeId = _currentEpisode?.id ?? widget.id;
+      service.updateWatchProgress(
+        mediaType: 'tv',
+        mediaId: widget.tvShowId!,
+        episodeId: episodeId,
+        position: position.inSeconds,
+        duration: duration.inSeconds,
+      );
+    }
   }
 
   @override
   void dispose() {
     _isDisposing = true;
+    _progressTimer?.cancel();
+    _saveProgress(); // 退出时保存最终进度
     if (_isFullscreen) {
       _exitFullscreen();
     }
@@ -192,6 +237,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       await _player.open(Media(fullUrl));
 
       if (!mounted) return;
+      _mediaService ??= ref.read(mediaServiceProvider); // 确保 service 已缓存
+      _startProgressTimer(); // 视频加载成功后启动进度保存定时器
       setState(() {
         _isLoading = false;
       });

@@ -6,6 +6,7 @@ import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../providers/providers.dart';
 import 'widgets/category_row.dart';
+import 'widgets/watch_history_row.dart';
 
 /// 媒体库页面 - 分类横向滚动展示
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -21,6 +22,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(categoriesProvider.notifier).load();
+      ref.read(watchHistoryProvider.notifier).load();
     });
   }
 
@@ -59,7 +61,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ],
             ),
       body: RefreshIndicator(
-        onRefresh: () => ref.read(categoriesProvider.notifier).refresh(),
+        onRefresh: () async {
+          await Future.wait([
+            ref.read(categoriesProvider.notifier).refresh(),
+            ref.read(watchHistoryProvider.notifier).refresh(),
+          ]);
+        },
         child: _buildBody(categoriesState),
       ),
     );
@@ -77,11 +84,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       );
     }
 
-    // 过滤掉空分类
-    final nonEmptyCategories =
-        state.categories.where((c) => c.count > 0).toList();
+    // 过滤掉空分类和 recent 分类（最近观看由 WatchHistoryRow 单独处理）
+    final nonEmptyCategories = state.categories
+        .where((c) => c.count > 0 && c.id != 'recent')
+        .toList();
 
-    if (nonEmptyCategories.isEmpty) {
+    final watchHistoryState = ref.watch(watchHistoryProvider);
+    final hasWatchHistory = watchHistoryState.items.isNotEmpty;
+
+    if (nonEmptyCategories.isEmpty && !hasWatchHistory) {
       return const EmptyWidget(
         message: '暂无媒体内容\n请先添加存储源并扫描',
         icon: Icons.movie_outlined,
@@ -90,9 +101,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.only(top: 8, bottom: 16),
-      itemCount: nonEmptyCategories.length,
+      itemCount: nonEmptyCategories.length + (hasWatchHistory ? 1 : 0),
       itemBuilder: (context, index) {
-        return CategoryRow(category: nonEmptyCategories[index]);
+        // 第一项显示最近观看
+        if (hasWatchHistory && index == 0) {
+          return const WatchHistoryRow();
+        }
+        final categoryIndex = hasWatchHistory ? index - 1 : index;
+        return CategoryRow(category: nonEmptyCategories[categoryIndex]);
       },
     );
   }

@@ -30,11 +30,13 @@ class WatchHistoryMediaInfo {
   final String title;
   final String? posterPath;
   final int? year;
+  final WatchHistoryEpisodeInfo? episodeInfo;
 
   WatchHistoryMediaInfo({
     required this.title,
     this.posterPath,
     this.year,
+    this.episodeInfo,
   });
 
   factory WatchHistoryMediaInfo.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,34 @@ class WatchHistoryMediaInfo {
       title: json['title'] as String? ?? '',
       posterPath: json['poster_path'] as String?,
       year: (json['year'] as num?)?.toInt(),
+      episodeInfo: json['episode_info'] != null
+          ? WatchHistoryEpisodeInfo.fromJson(
+              json['episode_info'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+/// 观看历史剧集详细信息
+class WatchHistoryEpisodeInfo {
+  final int seasonNumber;
+  final int episodeNumber;
+  final String? episodeName;
+  final String? stillPath;
+
+  WatchHistoryEpisodeInfo({
+    required this.seasonNumber,
+    required this.episodeNumber,
+    this.episodeName,
+    this.stillPath,
+  });
+
+  factory WatchHistoryEpisodeInfo.fromJson(Map<String, dynamic> json) {
+    return WatchHistoryEpisodeInfo(
+      seasonNumber: (json['season_number'] as num?)?.toInt() ?? 0,
+      episodeNumber: (json['episode_number'] as num?)?.toInt() ?? 0,
+      episodeName: json['episode_name'] as String?,
+      stillPath: json['still_path'] as String?,
     );
   }
 }
