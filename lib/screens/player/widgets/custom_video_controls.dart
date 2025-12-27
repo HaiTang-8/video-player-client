@@ -568,14 +568,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             // 中间：播放控制
             _buildPlayControls(),
             const Spacer(),
-            // 右侧：全屏 + 音效 + 字幕 + 列表
+            // 右侧：全屏 + 音轨 + 字幕 + 列表
             _buildIconButton(
               widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
               widget.onToggleFullscreen,
             ),
-            _buildIconButton(Icons.equalizer, () => _showAudioTrackSheet()),
+            _buildIconButton(Icons.audiotrack, () => _showAudioTrackSheet()),
             _buildIconButton(
-              Icons.subtitles_outlined,
+              Icons.closed_caption_outlined,
               () => _showSubtitleSheet(),
             ),
             _buildIconButton(Icons.playlist_play, widget.onOpenPlaylist),

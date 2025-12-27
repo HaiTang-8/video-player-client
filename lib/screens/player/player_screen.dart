@@ -22,6 +22,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   final int? seasonId;
   final String? title;
   final List<Episode>? episodes;
+  final int? initialPosition; // 初始播放位置（秒）
 
   const PlayerScreen({
     super.key,
@@ -31,6 +32,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
     this.seasonId,
     this.title,
     this.episodes,
+    this.initialPosition,
   });
 
   @override
@@ -48,6 +50,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Timer? _progressTimer;
   Duration _lastSavedPosition = Duration.zero;
   MediaService? _mediaService;
+  bool _hasSeekToInitialPosition = false;
 
   @override
   void initState() {
@@ -92,6 +95,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player.stream.buffering.listen((buffering) {
       if (!mounted || _isDisposing) return;
       // 可选：显示缓冲状态
+    });
+
+    // 监听视频时长，准备好后 seek 到初始位置
+    _player.stream.duration.listen((duration) {
+      if (!mounted || _isDisposing) return;
+      if (!_hasSeekToInitialPosition &&
+          duration.inSeconds > 0 &&
+          widget.initialPosition != null &&
+          widget.initialPosition! > 0) {
+        _hasSeekToInitialPosition = true;
+        _player.seek(Duration(seconds: widget.initialPosition!));
+      }
     });
 
     // 监听播放完成
@@ -233,10 +248,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final serverUrl = ref.read(serverUrlProvider);
       final fullUrl =
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
-          
+
       await _player.open(Media(fullUrl));
 
       if (!mounted) return;
+
       _mediaService ??= ref.read(mediaServiceProvider); // 确保 service 已缓存
       _startProgressTimer(); // 视频加载成功后启动进度保存定时器
       setState(() {

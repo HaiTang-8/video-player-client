@@ -54,12 +54,14 @@ class WatchHistoryMediaInfo {
 
 /// 观看历史剧集详细信息
 class WatchHistoryEpisodeInfo {
+  final int seasonId;
   final int seasonNumber;
   final int episodeNumber;
   final String? episodeName;
   final String? stillPath;
 
   WatchHistoryEpisodeInfo({
+    required this.seasonId,
     required this.seasonNumber,
     required this.episodeNumber,
     this.episodeName,
@@ -68,6 +70,7 @@ class WatchHistoryEpisodeInfo {
 
   factory WatchHistoryEpisodeInfo.fromJson(Map<String, dynamic> json) {
     return WatchHistoryEpisodeInfo(
+      seasonId: (json['season_id'] as num?)?.toInt() ?? 0,
       seasonNumber: (json['season_number'] as num?)?.toInt() ?? 0,
       episodeNumber: (json['episode_number'] as num?)?.toInt() ?? 0,
       episodeName: json['episode_name'] as String?,

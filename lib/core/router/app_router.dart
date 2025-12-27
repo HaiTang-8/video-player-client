@@ -163,7 +163,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/player/movie/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
-          return PlayerScreen(type: 'movie', id: id);
+          final position = int.tryParse(state.uri.queryParameters['position'] ?? '');
+          return PlayerScreen(type: 'movie', id: id, initialPosition: position);
         },
       ),
 
@@ -174,11 +175,13 @@ final routerProvider = Provider<GoRouter>((ref) {
           final tvShowId = int.parse(state.pathParameters['tvShowId']!);
           final seasonId = int.parse(state.pathParameters['seasonId']!);
           final episodeId = int.parse(state.pathParameters['episodeId']!);
+          final position = int.tryParse(state.uri.queryParameters['position'] ?? '');
           return PlayerScreen(
             type: 'episode',
             id: episodeId,
             tvShowId: tvShowId,
             seasonId: seasonId,
+            initialPosition: position,
           );
         },
       ),

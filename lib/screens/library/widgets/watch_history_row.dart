@@ -89,10 +89,26 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
   }
 
   void _navigateToDetail(WatchHistoryItem item) {
-    if (item.mediaType == 'movie') {
-      context.push('/movie/${item.mediaId}');
+    // 已看完的跳转到详情页，未看完的直接打开播放器继续播放
+    if (item.completed) {
+      if (item.mediaType == 'movie') {
+        context.push('/movie/${item.mediaId}');
+      } else {
+        context.push('/tvshow/${item.mediaId}');
+      }
     } else {
-      context.push('/tvshow/${item.mediaId}');
+      // 直接打开播放器并 seek 到上次位置
+      if (item.mediaType == 'movie') {
+        context.push('/player/movie/${item.mediaId}?position=${item.position}');
+      } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
+        final episodeInfo = item.mediaInfo!.episodeInfo!;
+        context.push(
+          '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}?position=${item.position}',
+        );
+      } else {
+        // fallback 到详情页
+        context.push('/tvshow/${item.mediaId}');
+      }
     }
   }
 }
