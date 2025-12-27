@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../providers/providers.dart';
 
 class MainShell extends ConsumerStatefulWidget {
   final Widget child;
@@ -47,6 +48,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     final index = _destinations.indexWhere((d) => location.startsWith(d.path));
     if (index != -1 && index != _currentIndex) {
       setState(() => _currentIndex = index);
+      // 切换到媒体库时刷新最近观看
+      if (index == 0) {
+        ref.read(watchHistoryProvider.notifier).refresh();
+      }
     }
   }
 
@@ -54,6 +59,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (index != _currentIndex) {
       setState(() => _currentIndex = index);
       context.go(_destinations[index].path);
+      // 切换到媒体库时刷新最近观看
+      if (index == 0) {
+        ref.read(watchHistoryProvider.notifier).refresh();
+      }
     }
   }
 

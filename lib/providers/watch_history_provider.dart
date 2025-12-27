@@ -62,7 +62,13 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
   }
 
   Future<void> refresh({int limit = 20}) async {
-    state = WatchHistoryState();
-    await load(limit: limit);
+    if (_service == null) return;
+    if (state.isLoading) return;
+
+    final response = await _service.getRecentlyWatched(limit: limit);
+
+    if (response.isSuccess && response.data != null) {
+      state = state.copyWith(items: response.data!);
+    }
   }
 }
