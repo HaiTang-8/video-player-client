@@ -163,8 +163,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/player/movie/:id',
         builder: (context, state) {
           final id = int.parse(state.pathParameters['id']!);
-          final position = int.tryParse(state.uri.queryParameters['position'] ?? '');
-          return PlayerScreen(type: 'movie', id: id, initialPosition: position);
+          final extra = state.extra as Map<String, dynamic>?;
+          final position = extra?['position'] as int? ??
+              int.tryParse(state.uri.queryParameters['position'] ?? '');
+          final title = extra?['title'] as String? ??
+              state.uri.queryParameters['title'];
+          return PlayerScreen(type: 'movie', id: id, initialPosition: position, title: title);
         },
       ),
 
@@ -175,13 +179,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           final tvShowId = int.parse(state.pathParameters['tvShowId']!);
           final seasonId = int.parse(state.pathParameters['seasonId']!);
           final episodeId = int.parse(state.pathParameters['episodeId']!);
-          final position = int.tryParse(state.uri.queryParameters['position'] ?? '');
+          final extra = state.extra as Map<String, dynamic>?;
+          final position = extra?['position'] as int? ??
+              int.tryParse(state.uri.queryParameters['position'] ?? '');
+          final title = extra?['title'] as String? ??
+              state.uri.queryParameters['title'];
           return PlayerScreen(
             type: 'episode',
             id: episodeId,
             tvShowId: tvShowId,
             seasonId: seasonId,
             initialPosition: position,
+            title: title,
           );
         },
       ),

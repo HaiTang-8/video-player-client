@@ -97,19 +97,45 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         context.push('/tvshow/${item.mediaId}');
       }
     } else {
+      // 构建标题
+      final title = _buildTitle(item);
+
       // 直接打开播放器并 seek 到上次位置
       if (item.mediaType == 'movie') {
-        context.push('/player/movie/${item.mediaId}?position=${item.position}');
+        context.push(
+          '/player/movie/${item.mediaId}',
+          extra: {'position': item.position, 'title': title},
+        );
       } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
         final episodeInfo = item.mediaInfo!.episodeInfo!;
         context.push(
-          '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}?position=${item.position}',
+          '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
+          extra: {'position': item.position, 'title': title},
         );
       } else {
         // fallback 到详情页
         context.push('/tvshow/${item.mediaId}');
       }
     }
+  }
+
+  String _buildTitle(WatchHistoryItem item) {
+    final mediaInfo = item.mediaInfo;
+    if (mediaInfo == null) return '';
+
+    final episodeInfo = mediaInfo.episodeInfo;
+    if (item.mediaType == 'tv' && episodeInfo != null) {
+      final parts = <String>[mediaInfo.title];
+      if (episodeInfo.seasonNumber > 0) {
+        parts.add('第${episodeInfo.seasonNumber}季');
+      }
+      parts.add('第${episodeInfo.episodeNumber}集');
+      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
+        parts.add(episodeInfo.episodeName!);
+      }
+      return parts.join(' ');
+    }
+    return mediaInfo.title;
   }
 }
 

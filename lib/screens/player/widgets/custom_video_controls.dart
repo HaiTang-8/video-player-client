@@ -61,12 +61,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   bool _isLongPressSpeed = false;
   double _originalSpeed = 1.0;
 
-  // 网速计算
-  int _lastBytes = 0;
-  int _currentBytes = 0;
-  String _networkSpeed = '';
-  Timer? _speedTimer;
-
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
@@ -78,7 +72,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     _initCurrentTracks();
     _setupListeners();
     _startHideTimer();
-    _startSpeedTimer();
   }
 
   Future<void> _initBrightness() async {
@@ -94,26 +87,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     _currentSubtitleTrack = track.subtitle;
     _audioTracks = widget.player.state.tracks.audio;
     _subtitleTracks = widget.player.state.tracks.subtitle;
-  }
-
-  void _startSpeedTimer() {
-    _speedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      final speed = _currentBytes - _lastBytes;
-      _lastBytes = _currentBytes;
-      if (mounted) {
-        setState(() {
-          if (speed > 1024 * 1024) {
-            _networkSpeed = '${(speed / 1024 / 1024).toStringAsFixed(1)} MB/s';
-          } else if (speed > 1024) {
-            _networkSpeed = '${(speed / 1024).toStringAsFixed(0)} KB/s';
-          } else if (speed > 0) {
-            _networkSpeed = '$speed B/s';
-          } else {
-            _networkSpeed = '';
-          }
-        });
-      }
-    });
   }
 
   void _setupListeners() {
@@ -167,17 +140,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         if (mounted) setState(() => _playbackSpeed = rate);
       }),
     );
-    _subscriptions.add(
-      widget.player.stream.buffer.listen((buffer) {
-        _currentBytes = buffer.inMilliseconds;
-      }),
-    );
   }
 
   @override
   void dispose() {
     _hideTimer?.cancel();
-    _speedTimer?.cancel();
     _focusNode.dispose();
     for (final sub in _subscriptions) {
       sub.cancel();
@@ -409,11 +376,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildTopBar() {
-    // 顶部栏对齐项目 AppBar 视觉规范：
-    // - 44 高度
-    // - “<” 返回按钮（AppBackButton）
-    // - 标题靠左（避免 iOS 默认居中）
-    // 同时保留渐变遮罩，确保在视频画面上可读。
     final onBack =
         widget.onBack ??
         () {
@@ -444,6 +406,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   children: [
                     if (WindowControls.isMacOS) const SizedBox(width: 72),
                     AppBackButton(onPressed: onBack, color: Colors.white),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         widget.title ?? '',
@@ -452,25 +415,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
+                        maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (_networkSpeed.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsetsDirectional.only(
-                          start: 8,
-                          end: 12,
-                        ),
-                        child: Text(
-                          _networkSpeed,
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
-                    else
-                      const SizedBox(width: 12),
+                    const SizedBox(width: 16),
                   ],
                 ),
               ),
