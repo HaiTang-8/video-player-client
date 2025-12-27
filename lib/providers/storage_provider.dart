@@ -83,12 +83,14 @@ class GlobalScanState {
   final int foundFiles;      // 已找到（所有存储源的 totalFiles 之和）
   final int pendingFiles;    // 待更新（totalFiles - scannedFiles）
   final int updatedFiles;    // 已更新（scannedFiles）
+  final bool dismissed;      // 用户已手动关闭弹框
 
   const GlobalScanState({
     this.isScanning = false,
     this.foundFiles = 0,
     this.pendingFiles = 0,
     this.updatedFiles = 0,
+    this.dismissed = false,
   });
 
   GlobalScanState copyWith({
@@ -96,12 +98,14 @@ class GlobalScanState {
     int? foundFiles,
     int? pendingFiles,
     int? updatedFiles,
+    bool? dismissed,
   }) {
     return GlobalScanState(
       isScanning: isScanning ?? this.isScanning,
       foundFiles: foundFiles ?? this.foundFiles,
       pendingFiles: pendingFiles ?? this.pendingFiles,
       updatedFiles: updatedFiles ?? this.updatedFiles,
+      dismissed: dismissed ?? this.dismissed,
     );
   }
 }
@@ -154,7 +158,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
     final storages = _storages.valueOrNull ?? [];
     if (storages.isEmpty) return;
 
-    state = state.copyWith(isScanning: true, foundFiles: 0, pendingFiles: 0, updatedFiles: 0);
+    state = state.copyWith(isScanning: true, foundFiles: 0, pendingFiles: 0, updatedFiles: 0, dismissed: false);
     _progresses.clear();
 
     for (final storage in storages) {
@@ -198,7 +202,11 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
   }
 
   void dismiss() {
-    state = const GlobalScanState();
+    state = state.copyWith(dismissed: true);
+  }
+
+  void showPopover() {
+    state = state.copyWith(dismissed: false);
   }
 }
 

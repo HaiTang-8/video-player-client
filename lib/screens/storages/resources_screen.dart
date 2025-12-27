@@ -48,7 +48,9 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                 IconButton(
                   key: _refreshButtonKey,
                   tooltip: '扫描存储源',
-                  onPressed: globalScanState.isScanning ? null : _startGlobalScan,
+                  onPressed: globalScanState.isScanning
+                      ? () => ref.read(globalScanStateProvider.notifier).showPopover()
+                      : _startGlobalScan,
                   icon: globalScanState.isScanning
                       ? const SizedBox(
                           width: 18,
@@ -58,7 +60,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                       : const Icon(CupertinoIcons.refresh),
                 ),
                 IconButton(
-                  tooltip: '添加存储源',
+                  tooltip: '添加���储源',
                   onPressed: () => context.push('/storage-manage'),
                   icon: const Icon(CupertinoIcons.add),
                 ),
@@ -70,7 +72,9 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                 IconButton(
                   key: _refreshButtonKey,
                   tooltip: '扫描存储源',
-                  onPressed: globalScanState.isScanning ? null : _startGlobalScan,
+                  onPressed: globalScanState.isScanning
+                      ? () => ref.read(globalScanStateProvider.notifier).showPopover()
+                      : _startGlobalScan,
                   icon: globalScanState.isScanning
                       ? const SizedBox(
                           width: 18,
@@ -119,7 +123,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               );
             },
           ),
-          if (globalScanState.isScanning || globalScanState.foundFiles > 0)
+          if (!globalScanState.dismissed && (globalScanState.isScanning || globalScanState.foundFiles > 0))
             _ScanPopover(
               buttonKey: _refreshButtonKey,
               state: globalScanState,
