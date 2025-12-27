@@ -66,6 +66,16 @@ class StorageService {
     );
   }
 
+  /// 取消扫描任务
+  Future<ApiResponse<void>> cancelScan(int taskId) async {
+    return _client.post(ApiConstants.taskCancel(taskId));
+  }
+
+  /// 取消所有扫描任务
+  Future<ApiResponse<void>> cancelAllScans() async {
+    return _client.post(ApiConstants.tasksCancelAll);
+  }
+
   /// 浏览目录
   Future<ApiResponse<List<FileInfo>>> browseStorage(
     int storageId, {

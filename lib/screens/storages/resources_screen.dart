@@ -128,6 +128,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               buttonKey: _refreshButtonKey,
               state: globalScanState,
               onClose: () => ref.read(globalScanStateProvider.notifier).dismiss(),
+              onCancel: () => ref.read(globalScanStateProvider.notifier).cancelAllScans(),
             ),
         ],
       ),
@@ -418,11 +419,13 @@ class _ScanPopover extends StatefulWidget {
   final GlobalKey buttonKey;
   final GlobalScanState state;
   final VoidCallback onClose;
+  final VoidCallback onCancel;
 
   const _ScanPopover({
     required this.buttonKey,
     required this.state,
     required this.onClose,
+    required this.onCancel,
   });
 
   @override
@@ -538,6 +541,24 @@ class _ScanPopoverState extends State<_ScanPopover> {
                       fontSize: 13,
                     ),
                   ),
+                  if (widget.state.isScanning) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: widget.onCancel,
+                        style: TextButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text('取消扫描'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

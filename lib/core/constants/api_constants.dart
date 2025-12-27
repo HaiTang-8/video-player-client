@@ -57,6 +57,8 @@ class ApiConstants {
   // 任务
   static const String tasksRunning = '$apiPrefix/tasks/running';
   static String taskDetail(int taskId) => '$apiPrefix/tasks/$taskId';
+  static String taskCancel(int taskId) => '$apiPrefix/tasks/$taskId/cancel';
+  static const String tasksCancelAll = '$apiPrefix/tasks/cancel-all';
 
   // 健康检查
   static const String health = '/health';

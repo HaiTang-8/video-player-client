@@ -208,6 +208,17 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
   void showPopover() {
     state = state.copyWith(dismissed: false);
   }
+
+  /// 取消所有扫描任务
+  Future<void> cancelAllScans() async {
+    if (_service == null) return;
+
+    await _service.cancelAllScans();
+
+    // 重置状态
+    state = const GlobalScanState();
+    _progresses.clear();
+  }
 }
 
 class ScanStateNotifier extends StateNotifier<ScanState> {
