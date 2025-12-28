@@ -29,12 +29,14 @@ class CategoryStats {
 class WatchHistoryMediaInfo {
   final String title;
   final String? posterPath;
+  final String? backdropPath;
   final int? year;
   final WatchHistoryEpisodeInfo? episodeInfo;
 
   WatchHistoryMediaInfo({
     required this.title,
     this.posterPath,
+    this.backdropPath,
     this.year,
     this.episodeInfo,
   });
@@ -43,6 +45,7 @@ class WatchHistoryMediaInfo {
     return WatchHistoryMediaInfo(
       title: json['title'] as String? ?? '',
       posterPath: json['poster_path'] as String?,
+      backdropPath: json['backdrop_path'] as String?,
       year: (json['year'] as num?)?.toInt(),
       episodeInfo: json['episode_info'] != null
           ? WatchHistoryEpisodeInfo.fromJson(

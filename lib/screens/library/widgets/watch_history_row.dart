@@ -85,7 +85,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
           ),
         ),
         SizedBox(
-          height: 220, // 适应 16:9 剧照(124) + 标题(~80) + 间距
+          height: 220, // 16:9 图片(220*9/16≈124) + 标题(~70) + 间距
           child: state.isLoading && state.items.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : state.error != null && state.items.isEmpty
@@ -192,13 +192,14 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
       widget.item.mediaType == 'tv' &&
       widget.item.mediaInfo?.episodeInfo != null;
 
-  // 获取显示图片路径：剧集用剧照，电影用海报
+  // 获取显示图片路径：剧集用剧照，电影用背景图
   String? get _imagePath {
-    final episodeInfo = widget.item.mediaInfo?.episodeInfo;
+    final mediaInfo = widget.item.mediaInfo;
+    final episodeInfo = mediaInfo?.episodeInfo;
     if (_isEpisode && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
       return episodeInfo.stillPath;
     }
-    return widget.item.mediaInfo?.posterPath;
+    return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
   }
 
   // 获取显示标题
@@ -226,8 +227,8 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
-    // 剧集使用 16:9 比例，电影使用 2:3 比例
-    final imageHeight = _isEpisode ? widget.width * 9 / 16 : widget.width * 1.5;
+    // 统一使用 16:9 比例
+    final imageHeight = widget.width * 9 / 16;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
