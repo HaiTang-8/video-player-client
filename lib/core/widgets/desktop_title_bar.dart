@@ -75,10 +75,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
                             child: GestureDetector(
                               behavior: HitTestBehavior.translucent,
                               onPanStart: (_) => WindowControls.startDrag(),
-                              onDoubleTap:
-                                  WindowControls.isWindows
-                                      ? () => WindowControls.toggleMaximize()
-                                      : null,
+                              onDoubleTap: () => WindowControls.toggleMaximize(),
                             ),
                           ),
                         Align(
