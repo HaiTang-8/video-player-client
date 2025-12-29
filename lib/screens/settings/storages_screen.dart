@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pull_down_button/pull_down_button.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -38,13 +37,9 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     return Scaffold(
       appBar:
           isDesktop
-              ? DesktopTitleBar(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                // 与影视详情页保持一致：返回按钮使用“<”样式，标题靠左（不居中）
-                centerTitle: false,
-                leading: AppBackButton(onPressed: () => context.pop()),
+              ? DesktopAppBar(
                 title: const Text('存储源管理'),
+                onBack: () => context.pop(),
               )
               : MobileAppBar(
                 title: const Text('存储源管理'),

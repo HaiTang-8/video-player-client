@@ -1,8 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -56,11 +55,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
 
     return Scaffold(
       appBar: isDesktop
-          ? DesktopTitleBar(
-              centerTitle: false,
-              leading: AppBackButton(
-                onPressed: () => Navigator.pop(context, false),
-              ),
+          ? DesktopAppBar(
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -69,6 +64,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
                   const Text('AI 整理预览'),
                 ],
               ),
+              onBack: () => Navigator.pop(context, false),
             )
           : MobileAppBar(
               title: Row(

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -61,15 +61,13 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
     return Scaffold(
       appBar: isDesktop
-          ? DesktopTitleBar(
-              leading: AppBackButton(onPressed: () => context.pop()),
+          ? DesktopAppBar(
               title: Text(widget.categoryName),
-              centerTitle: true,
+              onBack: () => context.pop(),
             )
-          : AppBar(
-              leadingWidth: kAppBackButtonWidth,
-              leading: AppBackButton(onPressed: () => context.pop()),
+          : MobileAppBar(
               title: Text(widget.categoryName),
+              onBack: () => context.pop(),
             ),
       body: RefreshIndicator(
         onRefresh: () => ref

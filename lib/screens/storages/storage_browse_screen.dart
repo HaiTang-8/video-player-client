@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -50,18 +49,15 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       },
       child: Scaffold(
         appBar: isDesktop
-            ? DesktopTitleBar(
-                centerTitle: false,
-                leading: AppBackButton(
-                  onPressed: () {
-                    if (browseState.currentPath != '/') {
-                      ref.read(browseProvider(widget.storageId).notifier).goBack();
-                      return;
-                    }
-                    context.pop();
-                  },
-                ),
+            ? DesktopAppBar(
                 title: Text(title),
+                onBack: () {
+                  if (browseState.currentPath != '/') {
+                    ref.read(browseProvider(widget.storageId).notifier).goBack();
+                    return;
+                  }
+                  context.pop();
+                },
                 actions: [
                   IconButton(
                     tooltip: '刷新',

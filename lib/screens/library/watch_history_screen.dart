@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/image_proxy.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -33,15 +33,13 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
 
     return Scaffold(
       appBar: isDesktop
-          ? DesktopTitleBar(
-              leading: AppBackButton(onPressed: () => context.pop()),
+          ? DesktopAppBar(
               title: const Text('最近观看'),
-              centerTitle: true,
+              onBack: () => context.pop(),
             )
-          : AppBar(
-              leadingWidth: kAppBackButtonWidth,
-              leading: AppBackButton(onPressed: () => context.pop()),
+          : MobileAppBar(
               title: const Text('最近观看'),
+              onBack: () => context.pop(),
             ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),

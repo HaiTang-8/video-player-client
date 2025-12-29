@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -40,23 +40,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           isDesktop
               ? movieAsync.when(
                 loading:
-                    () => DesktopTitleBar(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      // Desktop 端自绘标题栏：返回按钮使用“<”样式，并让标题紧跟图标靠左展示（不居中）。
-                      centerTitle: false,
-                      leading: AppBackButton(onPressed: () => context.pop()),
+                    () => DesktopAppBar(
                       title: const Text('加载中...'),
-                      actions: const [],
+                      onBack: () => context.pop(),
                     ),
                 error:
-                    (error, stack) => DesktopTitleBar(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      // Desktop 端自绘标题栏：返回按钮使用"<"样式，并让标题紧跟图标靠左展示（不居中）。
-                      centerTitle: false,
-                      leading: AppBackButton(onPressed: () => context.pop()),
+                    (error, stack) => DesktopAppBar(
                       title: const Text('电影详情'),
+                      onBack: () => context.pop(),
                       actions: [
                         IconButton(
                           icon: const Icon(Icons.refresh),
@@ -67,13 +58,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                       ],
                     ),
                 data:
-                    (movie) => DesktopTitleBar(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      // Desktop 端自绘标题栏：返回按钮使用"<"样式，并让"资源名称"紧跟图标靠左展示（不居中）。
-                      centerTitle: false,
-                      leading: AppBackButton(onPressed: () => context.pop()),
+                    (movie) => DesktopAppBar(
                       title: Text(movie?.title ?? '电影详情'),
+                      onBack: () => context.pop(),
                       actions: [
                         if (movie != null)
                           IconButton(

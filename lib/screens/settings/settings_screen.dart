@@ -2,8 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -22,10 +21,9 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: isDesktop
-          ? DesktopTitleBar(
-              leading: AppBackButton(onPressed: () => context.pop()),
+          ? DesktopAppBar(
               title: const Text('设置'),
-              centerTitle: false,
+              onBack: () => context.pop(),
             )
           : MobileAppBar(
               title: const Text('设置'),
