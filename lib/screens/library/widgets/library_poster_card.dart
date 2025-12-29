@@ -36,7 +36,67 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
         final actualWidth = constraints.maxWidth.isFinite
             ? constraints.maxWidth
             : widget.width;
+        final hasFiniteHeight = constraints.maxHeight.isFinite;
         final posterHeight = actualWidth * 1.5;
+
+        Widget posterWidget = AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: actualWidth,
+          height: hasFiniteHeight ? null : posterHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: _isHovered ? 0.3 : 0.15,
+                ),
+                blurRadius: _isHovered ? 16 : 8,
+                offset: Offset(0, _isHovered ? 8 : 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                _buildPosterImage(serverBaseUrl),
+                if (widget.item.rating != null && widget.item.rating! > 0)
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getRatingColor(widget.item.rating!),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        widget.item.rating!.toStringAsFixed(1),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        if (hasFiniteHeight) {
+          posterWidget = Expanded(
+            child: AspectRatio(
+              aspectRatio: 2 / 3,
+              child: posterWidget,
+            ),
+          );
+        }
 
         return MouseRegion(
           onEnter: (_) => setState(() => _isHovered = true),
@@ -53,66 +113,10 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
                 width: actualWidth,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize: hasFiniteHeight ? MainAxisSize.max : MainAxisSize.min,
                   children: [
-                    // 海报图片
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      width: actualWidth,
-                      height: posterHeight,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(
-                              alpha: _isHovered ? 0.3 : 0.15,
-                            ),
-                            blurRadius: _isHovered ? 16 : 8,
-                            offset: Offset(0, _isHovered ? 8 : 4),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Stack(
-                          fit: StackFit.expand,
-                          children: [
-                            // 海报图片
-                            _buildPosterImage(serverBaseUrl),
-
-                            // 评分角标（右下角）
-                            if (widget.item.rating != null &&
-                                widget.item.rating! > 0)
-                              Positioned(
-                                bottom: 8,
-                                right: 8,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: _getRatingColor(widget.item.rating!),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    widget.item.rating!.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-
+                    posterWidget,
                     const SizedBox(height: 8),
-
-                    // 标题
                     Text(
                       widget.item.title,
                       style: theme.textTheme.bodyMedium?.copyWith(
@@ -121,10 +125,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-
                     const SizedBox(height: 2),
-
-                    // 副标题
                     Text(
                       _getSubtitle(),
                       style: theme.textTheme.bodySmall?.copyWith(
