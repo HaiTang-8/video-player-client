@@ -80,7 +80,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     );
   }
 
-  void _navigateToDetail(WatchHistoryItem item) {
+  Future<void> _navigateToDetail(WatchHistoryItem item) async {
     if (item.completed) {
       if (item.mediaType == 'movie') {
         context.push('/movie/${item.mediaId}');
@@ -96,9 +96,13 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         );
       } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
         final episodeInfo = item.mediaInfo!.episodeInfo!;
+        final episodes = await ref.read(
+          seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
+        );
+        if (!mounted) return;
         context.push(
           '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-          extra: {'position': item.position, 'title': title},
+          extra: {'position': item.position, 'title': title, 'episodes': episodes},
         );
       } else {
         context.push('/tvshow/${item.mediaId}');

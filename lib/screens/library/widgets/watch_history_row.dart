@@ -107,7 +107,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     );
   }
 
-  void _navigateToDetail(WatchHistoryItem item) {
+  Future<void> _navigateToDetail(WatchHistoryItem item) async {
     // 已看完的跳转到详情页，未看完的直接打开播放器继续播放
     if (item.completed) {
       if (item.mediaType == 'movie') {
@@ -127,9 +127,13 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         );
       } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
         final episodeInfo = item.mediaInfo!.episodeInfo!;
+        final episodes = await ref.read(
+          seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
+        );
+        if (!mounted) return;
         context.push(
           '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-          extra: {'position': item.position, 'title': title},
+          extra: {'position': item.position, 'title': title, 'episodes': episodes},
         );
       } else {
         // fallback 到详情页
