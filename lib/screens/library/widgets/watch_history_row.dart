@@ -43,6 +43,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             onTap: () => context.push('/watch-history'),
             borderRadius: BorderRadius.circular(8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
                   Icons.history,

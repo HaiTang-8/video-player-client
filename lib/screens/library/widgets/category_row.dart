@@ -40,6 +40,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
             onTap: () => _navigateToCategory(),
             borderRadius: BorderRadius.circular(8),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   widget.category.displayName,
