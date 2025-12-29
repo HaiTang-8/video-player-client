@@ -37,7 +37,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Material(
@@ -85,7 +85,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
           ),
         ),
         SizedBox(
-          height: 220, // 16:9 图片(220*9/16≈124) + 标题(~70) + 间距
+          height: 190,
           child: state.isLoading && state.items.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : state.error != null && state.items.isEmpty
@@ -112,7 +112,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
                       },
                     ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 2),
       ],
     );
   }
@@ -318,7 +318,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                 Text(
                   _displayTitle,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.bold,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,

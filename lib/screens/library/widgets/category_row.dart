@@ -34,7 +34,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
       children: [
         // 分类标题行
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
               Material(
@@ -78,7 +78,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
 
         // 水平滚动海报列表
         SizedBox(
-          height: 280, // 增加高度以容纳标题
+          height: 180,
           child: itemsState.isLoading && itemsState.items.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : itemsState.error != null && itemsState.items.isEmpty
@@ -105,15 +105,14 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
                               padding: const EdgeInsets.only(right: 16), // 增加间距
                               child: LibraryPosterCard(
                                 item: item,
-                                width: 140, // 增大卡片宽度
+                                width: 88,
                                 onTap: () => _navigateToDetail(item),
                               ),
                             );
                           },
                         ),
         ),
-
-        const SizedBox(height: 8),
+        const SizedBox(height: 2),
       ],
     );
   }

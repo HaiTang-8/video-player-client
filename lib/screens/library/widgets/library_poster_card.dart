@@ -109,7 +109,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
                 Text(
                   widget.item.title,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
+                    fontWeight: FontWeight.bold,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
