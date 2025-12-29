@@ -38,50 +38,37 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => context.push('/watch-history'),
-                  borderRadius: BorderRadius.circular(8),
-                  splashColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-                  highlightColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.history,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '最近观看',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${state.items.length}',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ],
-                    ),
+          child: GestureDetector(
+            onTap: () => context.push('/watch-history'),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.history,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '最近观看',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  '${state.items.length}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.outline,
+                ),
+              ],
+            ),
           ),
         ),
         SizedBox(
@@ -112,7 +99,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
                       },
                     ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 16),
       ],
     );
   }

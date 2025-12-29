@@ -35,44 +35,31 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
         // 分类标题行
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => _navigateToCategory(),
-                  borderRadius: BorderRadius.circular(8),
-                  splashColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-                  highlightColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.category.displayName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${widget.category.count}',
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: theme.colorScheme.outline,
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          size: 20,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ],
-                    ),
+          child: GestureDetector(
+            onTap: () => _navigateToCategory(),
+            child: Row(
+              children: [
+                Text(
+                  widget.category.displayName,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                Text(
+                  '${widget.category.count}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.outline,
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.outline,
+                ),
+              ],
+            ),
           ),
         ),
 
@@ -112,7 +99,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
                           },
                         ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 16),
       ],
     );
   }
