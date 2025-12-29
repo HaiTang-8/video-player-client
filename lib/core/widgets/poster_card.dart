@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/server_provider.dart';
+import 'tap_feedback.dart';
 
 /// 海报卡片组件
 class PosterCard extends ConsumerWidget {
@@ -25,8 +26,9 @@ class PosterCard extends ConsumerWidget {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
 
-    return GestureDetector(
+    return TapFeedback(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
       child: Container(
         width: width,
         height: height,

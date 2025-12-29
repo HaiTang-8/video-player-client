@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/tap_feedback.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -177,9 +178,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final selected = index == selectedIndex;
-          return GestureDetector(
-            behavior: HitTestBehavior.opaque,
+          return TapFeedback(
             onTap: () => onSelected(index),
+            borderRadius: BorderRadius.circular(11),
             child: Align(
               alignment: Alignment.center,
               child: Container(

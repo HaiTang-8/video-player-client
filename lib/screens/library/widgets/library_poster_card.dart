@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/widgets/tap_feedback.dart';
 import '../../../data/models/models.dart';
 import '../../../core/utils/image_proxy.dart';
 import '../../../providers/server_provider.dart';
@@ -36,8 +37,9 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
+      child: TapFeedback(
         onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(8),
         child: AnimatedScale(
           scale: _isHovered ? 1.05 : 1.0,
           duration: const Duration(milliseconds: 150),

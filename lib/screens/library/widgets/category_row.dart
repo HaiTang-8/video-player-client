@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/widgets/tap_feedback.dart';
 import '../../../data/models/models.dart';
 import '../../../providers/providers.dart';
 import 'library_poster_card.dart';
@@ -35,8 +36,9 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
         // 分类标题行
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: GestureDetector(
+          child: TapFeedback(
             onTap: () => _navigateToCategory(),
+            borderRadius: BorderRadius.circular(8),
             child: Row(
               children: [
                 Text(
