@@ -1268,7 +1268,7 @@ class _SeasonTabLabel extends ConsumerWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          isSingleSeason ? '第一季' : season.displayName,
+          '第 ${season.seasonNumber} 季',
           style: TextStyle(
             color: isSelected ? Colors.black : Colors.grey,
             fontSize: 18.0,
