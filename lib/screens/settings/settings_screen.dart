@@ -8,80 +8,98 @@ import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
-/// 设置页面
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final themeMode = ref.watch(themeModeProvider);
     final serverUrl = ref.watch(serverUrlProvider);
     final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar:
-          isDesktop
-              ? DesktopTitleBar(
-                leading: AppBackButton(onPressed: () => context.pop()),
-                title: const Text('设置'),
-                centerTitle: false,
-              )
-              : AppBar(
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(onPressed: () => context.pop()),
-                title: const Text('设置'),
-              ),
+      appBar: isDesktop
+          ? DesktopTitleBar(
+              leading: AppBackButton(onPressed: () => context.pop()),
+              title: const Text('设置'),
+              centerTitle: false,
+            )
+          : AppBar(
+              centerTitle: false,
+              automaticallyImplyLeading: false,
+              leadingWidth: kAppBackButtonWidth,
+              titleSpacing: 1,
+              leading: AppBackButton(onPressed: () => context.pop()),
+              title: const Text('设置'),
+            ),
       body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          // 服务器设置
           _buildSectionHeader('服务器', theme),
-          ListTile(
-            leading: const Icon(Icons.dns_outlined),
-            title: const Text('服务器地址'),
-            subtitle: Text(serverUrl ?? '未配置'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showServerDialog(context, ref, serverUrl),
+          _buildSettingsCard(
+            isDark,
+            children: [
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.globe,
+                iconColor: Colors.blue,
+                title: '服务器地址',
+                subtitle: serverUrl ?? '未配置',
+                onTap: () => _showServerDialog(context, ref, serverUrl),
+              ),
+              _buildDivider(isDark),
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.folder,
+                iconColor: Colors.orange,
+                title: '存储源管理',
+                onTap: () => context.push('/storage-manage'),
+              ),
+            ],
           ),
-          ListTile(
-            leading: const Icon(Icons.storage_outlined),
-            title: const Text('存储源管理'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/storage-manage'),
-          ),
-          const Divider(),
-
-          // 外观设置
+          const SizedBox(height: 24),
           _buildSectionHeader('外观', theme),
-          ListTile(
-            leading: const Icon(Icons.palette_outlined),
-            title: const Text('主题'),
-            subtitle: Text(_getThemeModeText(themeMode)),
-            trailing: const Icon(Icons.chevron_right),
-            onTap: () => _showThemeDialog(context, ref, themeMode),
+          _buildSettingsCard(
+            isDark,
+            children: [
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.paintbrush,
+                iconColor: Colors.purple,
+                title: '主题',
+                subtitle: _getThemeModeText(themeMode),
+                onTap: () => _showThemeDialog(context, ref, themeMode),
+              ),
+            ],
           ),
-          const Divider(),
-
-          // 关于
+          const SizedBox(height: 24),
           _buildSectionHeader('关于', theme),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('版本'),
-            subtitle: const Text('1.0.0'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.code),
-            title: const Text('开源许可'),
-            trailing: const Icon(Icons.chevron_right),
-            onTap:
-                () => showLicensePage(
+          _buildSettingsCard(
+            isDark,
+            children: [
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.info,
+                iconColor: Colors.grey,
+                title: '版本',
+                subtitle: '1.0.0',
+                showChevron: false,
+              ),
+              _buildDivider(isDark),
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.doc_text,
+                iconColor: Colors.teal,
+                title: '开源许可',
+                onTap: () => showLicensePage(
                   context: context,
                   applicationName: 'Media Player',
                   applicationVersion: '1.0.0',
                 ),
+              ),
+            ],
           ),
         ],
       ),
@@ -90,12 +108,92 @@ class SettingsScreen extends ConsumerWidget {
 
   Widget _buildSectionHeader(String title, ThemeData theme) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
       child: Text(
         title,
         style: theme.textTheme.titleSmall?.copyWith(
-          color: theme.colorScheme.primary,
-          fontWeight: FontWeight.bold,
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsCard(bool isDark, {required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 60),
+      child: Divider(
+        height: 1,
+        color: isDark ? Colors.grey[800] : Colors.grey[200],
+      ),
+    );
+  }
+
+  Widget _buildListTile(
+    BuildContext context,
+    ThemeData theme,
+    bool isDark, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? subtitle,
+    VoidCallback? onTap,
+    bool showChevron = true,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              if (subtitle != null)
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              if (showChevron && onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 16,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
