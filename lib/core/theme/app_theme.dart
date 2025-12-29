@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/ios_page_transition.dart';
 
 /// 应用主题配置
 class AppTheme {
@@ -68,6 +69,15 @@ class AppTheme {
       surfaceTintColor: Colors.transparent,
       indicatorColor: primaryColor.withValues(alpha: 0.15),
     ),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.iOS: IosPageTransitionsBuilder(),
+        TargetPlatform.android: IosPageTransitionsBuilder(),
+        TargetPlatform.macOS: IosPageTransitionsBuilder(),
+        TargetPlatform.windows: IosPageTransitionsBuilder(),
+        TargetPlatform.linux: IosPageTransitionsBuilder(),
+      },
+    ),
   );
 
   // 暗色主题
@@ -128,6 +138,15 @@ class AppTheme {
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: const Color(0xFF1A1A1A),
       indicatorColor: primaryColor.withValues(alpha: 0.2),
+    ),
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.iOS: IosPageTransitionsBuilder(),
+        TargetPlatform.android: IosPageTransitionsBuilder(),
+        TargetPlatform.macOS: IosPageTransitionsBuilder(),
+        TargetPlatform.windows: IosPageTransitionsBuilder(),
+        TargetPlatform.linux: IosPageTransitionsBuilder(),
+      },
     ),
   );
 }

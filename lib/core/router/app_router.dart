@@ -75,37 +75,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           // 媒体库
           GoRoute(
             path: '/library',
-            pageBuilder:
-                (context, state) => CustomTransitionPage(
-                  key: state.pageKey,
-                  child: const LibraryScreen(),
-                  transitionsBuilder: (
-                    context,
-                    animation,
-                    secondaryAnimation,
-                    child,
-                  ) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                ),
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: LibraryScreen(),
+            ),
           ),
 
           // 资源库（存储管理）
           GoRoute(
             path: '/storages',
-            pageBuilder:
-                (context, state) => CustomTransitionPage(
-                  key: state.pageKey,
-                  child: const ResourcesScreen(),
-                  transitionsBuilder: (
-                    context,
-                    animation,
-                    secondaryAnimation,
-                    child,
-                  ) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                ),
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ResourcesScreen(),
+            ),
             routes: [
               // 存储源目录浏览
               GoRoute(
@@ -122,19 +102,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           // 我的
           GoRoute(
             path: '/profile',
-            pageBuilder:
-                (context, state) => CustomTransitionPage(
-                  key: state.pageKey,
-                  child: const ProfileScreen(),
-                  transitionsBuilder: (
-                    context,
-                    animation,
-                    secondaryAnimation,
-                    child,
-                  ) {
-                    return FadeTransition(opacity: animation, child: child);
-                  },
-                ),
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ProfileScreen(),
+            ),
           ),
         ],
       ),
