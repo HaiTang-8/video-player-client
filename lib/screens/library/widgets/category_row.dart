@@ -102,7 +102,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
                           },
                         ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 1),
       ],
     );
   }
