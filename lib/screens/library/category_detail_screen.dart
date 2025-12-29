@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -80,7 +81,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   Widget _buildBody(CategoryItemsState state) {
     if (state.isLoading && state.items.isEmpty) {
-      return const LoadingWidget(message: '加载中...');
+      return const GridSkeletonLoader();
     }
 
     if (state.error != null && state.items.isEmpty) {

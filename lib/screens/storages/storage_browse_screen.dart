@@ -7,6 +7,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -116,7 +117,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     final isDark = theme.brightness == Brightness.dark;
 
     if (state.isLoading && state.files.isEmpty) {
-      return const LoadingWidget(message: '加载中...');
+      return const ListSkeletonLoader();
     }
 
     if (state.error != null && state.files.isEmpty) {
