@@ -388,6 +388,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         hasNext: _hasNext,
         onToggleFullscreen: _toggleFullscreen,
         isFullscreen: _isFullscreen,
+        episodes: widget.episodes,
+        currentEpisodeIndex: _currentEpisodeIndex,
+        onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
       ),
     );
   }

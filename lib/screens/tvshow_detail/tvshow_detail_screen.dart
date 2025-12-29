@@ -954,6 +954,7 @@ class _EpisodesCarouselDirect extends StatelessWidget {
             tvShowName: tvShowName,
             serverBaseUrl: serverBaseUrl,
             fallbackImageUrl: fallbackImageUrl,
+            episodes: episodes,
           );
         },
       ),
@@ -1025,6 +1026,7 @@ class _EpisodesCarousel extends ConsumerWidget {
                 tvShowName: tvShowName,
                 serverBaseUrl: serverBaseUrl,
                 fallbackImageUrl: fallbackImageUrl,
+                episodes: episodes,
               );
             },
           ),
@@ -1042,6 +1044,7 @@ class _EpisodeCard extends ConsumerWidget {
   final String? tvShowName;
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
+  final List<Episode>? episodes;
 
   const _EpisodeCard({
     required this.episode,
@@ -1050,6 +1053,7 @@ class _EpisodeCard extends ConsumerWidget {
     this.tvShowName,
     required this.serverBaseUrl,
     this.fallbackImageUrl,
+    this.episodes,
   });
 
   @override
@@ -1175,7 +1179,7 @@ class _EpisodeCard extends ConsumerWidget {
         : episode.displayTitle;
     context.push(
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
-      extra: {'position': position, 'title': title},
+      extra: {'position': position, 'title': title, 'episodes': episodes},
     );
   }
 

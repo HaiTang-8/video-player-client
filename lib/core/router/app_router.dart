@@ -155,6 +155,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               int.tryParse(state.uri.queryParameters['position'] ?? '');
           final title = extra?['title'] as String? ??
               state.uri.queryParameters['title'];
+          final episodes = extra?['episodes'] as List<Episode>?;
           return PlayerScreen(
             type: 'episode',
             id: episodeId,
@@ -162,6 +163,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             seasonId: seasonId,
             initialPosition: position,
             title: title,
+            episodes: episodes,
           );
         },
       ),

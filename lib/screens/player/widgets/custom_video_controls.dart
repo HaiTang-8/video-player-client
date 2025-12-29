@@ -6,6 +6,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
+import '../../../data/models/episode.dart';
 
 class CustomVideoControls extends StatefulWidget {
   final Player player;
@@ -19,6 +20,9 @@ class CustomVideoControls extends StatefulWidget {
   final VoidCallback? onOpenPlaylist;
   final VoidCallback? onToggleFullscreen;
   final bool isFullscreen;
+  final List<Episode>? episodes;
+  final int currentEpisodeIndex;
+  final void Function(int index)? onSelectEpisode;
 
   const CustomVideoControls({
     super.key,
@@ -33,6 +37,9 @@ class CustomVideoControls extends StatefulWidget {
     this.onOpenPlaylist,
     this.onToggleFullscreen,
     this.isFullscreen = false,
+    this.episodes,
+    this.currentEpisodeIndex = 0,
+    this.onSelectEpisode,
   });
 
   @override
@@ -528,7 +535,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               Icons.closed_caption_outlined,
               () => _showSubtitleSheet(),
             ),
-            _buildIconButton(Icons.playlist_play, widget.onOpenPlaylist),
+            if (widget.episodes != null && widget.episodes!.isNotEmpty)
+              _buildIconButton(Icons.playlist_play, _showPlaylistMenu),
           ],
         ),
       ),
@@ -831,6 +839,79 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       },
     );
     if (result != null) widget.player.setAudioTrack(result);
+    _startHideTimer();
+  }
+
+  void _showPlaylistMenu() async {
+    final episodes = widget.episodes;
+    if (episodes == null || episodes.isEmpty) return;
+
+    final panelWidth = WindowControls.isDesktop ? 280.0 : MediaQuery.of(context).size.width * 0.7;
+    final result = await showGeneralDialog<int>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (_, __, ___) => const SizedBox(),
+      transitionBuilder: (ctx, anim, _, __) {
+        return Align(
+          alignment: Alignment.centerRight,
+          child: SlideTransition(
+            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            child: Material(
+              color: Colors.black87,
+              child: SizedBox(
+                width: panelWidth,
+                height: double.infinity,
+                child: SafeArea(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
+                        child: Text('选集', style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        )),
+                      ),
+                      const Divider(color: Colors.white24, height: 1),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.only(top: 8),
+                          itemCount: episodes.length,
+                          itemBuilder: (_, index) {
+                            final ep = episodes[index];
+                            final isCurrent = index == widget.currentEpisodeIndex;
+                            return ListTile(
+                              dense: true,
+                              title: Text(
+                                ep.displayTitle,
+                                style: TextStyle(
+                                  color: isCurrent ? Colors.red : Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              trailing: isCurrent ? _buildCheckMark() : null,
+                              onTap: () => Navigator.pop(ctx, index),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+    if (result != null && result != widget.currentEpisodeIndex) {
+      widget.onSelectEpisode?.call(result);
+    }
     _startHideTimer();
   }
 }
