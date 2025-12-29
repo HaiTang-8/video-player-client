@@ -21,8 +21,14 @@ class AppTheme {
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
+      toolbarHeight: 44,
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
+      titleTextStyle: TextStyle(
+        color: Colors.black,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     cardTheme: CardTheme(
       elevation: 2,
@@ -76,7 +82,13 @@ class AppTheme {
     appBarTheme: const AppBarTheme(
       centerTitle: true,
       elevation: 0,
+      toolbarHeight: 44,
       backgroundColor: Color(0xFF0F0F0F),
+      titleTextStyle: TextStyle(
+        color: Colors.white,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     cardTheme: CardTheme(
       elevation: 2,
