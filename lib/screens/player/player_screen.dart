@@ -85,6 +85,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player.stream.error.listen((error) {
       if (!mounted || _isDisposing) return;
       if (error.isNotEmpty) {
+        if (error.contains('Could not open/initialize audio device')) return;
         setState(() {
           _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
           _isLoading = false;

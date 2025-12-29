@@ -431,10 +431,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildProgressBar() {
+    final bottomPadding = WindowControls.isDesktop ? 0.0 : MediaQuery.of(context).padding.bottom;
     return Positioned(
       left: 16,
       right: 16,
-      bottom: 56,
+      bottom: 56 + bottomPadding,
       child: Row(
         children: [
           Text(
@@ -681,125 +682,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     );
   }
 
-  void _showSubtitleSheet() {
-    if (WindowControls.isDesktop) {
-      _showSubtitleMenu();
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.black87,
-      builder:
-          (ctx) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    '字幕',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-                ListTile(
-                  title: const Text(
-                    '关闭',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                  trailing:
-                      _currentSubtitleTrack?.id == 'no'
-                          ? const Icon(Icons.check, color: Colors.red)
-                          : null,
-                  onTap: () {
-                    widget.player.setSubtitleTrack(SubtitleTrack.no());
-                    Navigator.pop(ctx);
-                  },
-                ),
-                ..._subtitleTracks
-                    .where((t) => t.id != 'no')
-                    .map(
-                      (t) => ListTile(
-                        title: Text(
-                          t.title ?? t.language ?? t.id,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        trailing:
-                            _currentSubtitleTrack?.id == t.id
-                                ? const Icon(Icons.check, color: Colors.red)
-                                : null,
-                        onTap: () {
-                          widget.player.setSubtitleTrack(t);
-                          Navigator.pop(ctx);
-                        },
-                      ),
-                    ),
-                if (_subtitleTracks.where((t) => t.id != 'no').isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      '无可用字幕',
-                      style: TextStyle(color: Colors.white38),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-    );
-  }
+  void _showSubtitleSheet() => _showSubtitleMenu();
 
-  void _showAudioTrackSheet() {
-    if (WindowControls.isDesktop) {
-      _showAudioTrackMenu();
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.black87,
-      builder:
-          (ctx) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    '音轨',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-                ..._audioTracks
-                    .where((t) => t.id != 'no')
-                    .map(
-                      (t) => ListTile(
-                        title: Text(
-                          t.title ?? t.language ?? t.id,
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        trailing:
-                            _currentAudioTrack?.id == t.id
-                                ? const Icon(Icons.check, color: Colors.red)
-                                : null,
-                        onTap: () {
-                          widget.player.setAudioTrack(t);
-                          Navigator.pop(ctx);
-                        },
-                      ),
-                    ),
-                if (_audioTracks.where((t) => t.id != 'no').isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Text(
-                      '无可用音轨',
-                      style: TextStyle(color: Colors.white38),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-    );
-  }
+  void _showAudioTrackSheet() => _showAudioTrackMenu();
 
   void _showSubtitleMenu() async {
+    final panelWidth = WindowControls.isDesktop ? 200.0 : MediaQuery.of(context).size.width * 0.6;
     final result = await showGeneralDialog<SubtitleTrack?>(
       context: context,
       barrierDismissible: true,
@@ -817,7 +705,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             child: Material(
               color: Colors.black87,
               child: SizedBox(
-                width: 200,
+                width: panelWidth,
                 height: double.infinity,
                 child: SafeArea(
                   child: Column(
@@ -877,6 +765,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   void _showAudioTrackMenu() async {
+    final panelWidth = WindowControls.isDesktop ? 200.0 : MediaQuery.of(context).size.width * 0.6;
     final result = await showGeneralDialog<AudioTrack>(
       context: context,
       barrierDismissible: true,
@@ -894,7 +783,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             child: Material(
               color: Colors.black87,
               child: SizedBox(
-                width: 200,
+                width: panelWidth,
                 height: double.infinity,
                 child: SafeArea(
                   child: Column(
