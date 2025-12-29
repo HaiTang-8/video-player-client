@@ -7,6 +7,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -76,23 +77,15 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                   ),
                 ],
               )
-            : AppBar(
-                elevation: 0,
-                toolbarHeight: 44,
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(
-                  onPressed: () {
-                    if (browseState.currentPath != '/') {
-                      ref.read(browseProvider(widget.storageId).notifier).goBack();
-                      return;
-                    }
-                    context.pop();
-                  },
-                ),
+            : MobileAppBar(
                 title: Text(title),
+                onBack: () {
+                  if (browseState.currentPath != '/') {
+                    ref.read(browseProvider(widget.storageId).notifier).goBack();
+                    return;
+                  }
+                  context.pop();
+                },
                 actions: [
                   IconButton(
                     tooltip: '刷新',

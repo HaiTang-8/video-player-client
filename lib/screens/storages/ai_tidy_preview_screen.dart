@@ -5,6 +5,7 @@ import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../data/services/api_client.dart';
@@ -69,16 +70,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
                 ],
               ),
             )
-          : AppBar(
-              elevation: 0,
-              toolbarHeight: 44,
-              centerTitle: false,
-              automaticallyImplyLeading: false,
-              leadingWidth: kAppBackButtonWidth,
-              titleSpacing: 1,
-              leading: AppBackButton(
-                onPressed: () => Navigator.pop(context, false),
-              ),
+          : MobileAppBar(
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -87,6 +79,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
                   const Text('AI 整理预览'),
                 ],
               ),
+              onBack: () => Navigator.pop(context, false),
             ),
       body: FutureBuilder<ApiResponse<AiTidyPlan>>(
         future: _future,

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
@@ -26,13 +27,9 @@ class SettingsScreen extends ConsumerWidget {
               title: const Text('设置'),
               centerTitle: false,
             )
-          : AppBar(
-              centerTitle: false,
-              automaticallyImplyLeading: false,
-              leadingWidth: kAppBackButtonWidth,
-              titleSpacing: 1,
-              leading: AppBackButton(onPressed: () => context.pop()),
+          : MobileAppBar(
               title: const Text('设置'),
+              onBack: () => context.pop(),
             ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -48,14 +45,6 @@ class SettingsScreen extends ConsumerWidget {
                 title: '服务器地址',
                 subtitle: serverUrl ?? '未配置',
                 onTap: () => _showServerDialog(context, ref, serverUrl),
-              ),
-              _buildDivider(isDark),
-              _buildListTile(
-                context, theme, isDark,
-                icon: CupertinoIcons.folder,
-                iconColor: Colors.orange,
-                title: '存储源管理',
-                onTap: () => context.push('/storage-manage'),
               ),
             ],
           ),

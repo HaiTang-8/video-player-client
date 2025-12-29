@@ -407,23 +407,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
-      // 移动端顶部导航：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）。
-      centerTitle: false,
+      centerTitle: true,
       automaticallyImplyLeading: false,
       leadingWidth: kAppBackButtonWidth,
-      titleSpacing: 1,
       leading: AppBackButton(
         onPressed: () => context.pop(),
         color: Colors.black,
       ),
-      title: Text(
-        tvShow.name,
-        style: const TextStyle(
-          color: Colors.black,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
+      title: Text(tvShow.name),
       actions: [
         IconButton(
           icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),

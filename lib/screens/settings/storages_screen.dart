@@ -6,6 +6,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/models.dart';
@@ -45,27 +46,9 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                 leading: AppBackButton(onPressed: () => context.pop()),
                 title: const Text('存储源管理'),
               )
-              : AppBar(
-                backgroundColor: Colors.white,
-                elevation: 0,
-                toolbarHeight: 44,
-                // 与影视详情页保持一致：返回按钮使用“<”样式，标题靠左（避免 iOS 默认居中）
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(
-                  onPressed: () => context.pop(),
-                  color: Colors.black,
-                ),
-                title: const Text(
-                  '存储源管理',
-                  style: TextStyle(
-                    color: Colors.black,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              : MobileAppBar(
+                title: const Text('存储源管理'),
+                onBack: () => context.pop(),
               ),
       body: storagesAsync.when(
         loading: () => const LoadingWidget(message: '加载中...'),
