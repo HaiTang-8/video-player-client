@@ -4,7 +4,9 @@ import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/ios_ui_utils.dart';
 import 'providers/providers.dart';
+import 'providers/error_notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,7 +38,6 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp> {
   @override
   void initState() {
     super.initState();
-    // 尝试连接到已保存的服务器
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(serverConnectionProvider.notifier).connectToSavedServer();
     });
@@ -46,6 +47,21 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
+
+    ref.listen<String?>(errorNotificationProvider, (_, error) {
+      if (error != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final navigatorState = router.routerDelegate.navigatorKey.currentState;
+          if (navigatorState?.overlay != null) {
+            IosUiUtils.showToastWithOverlay(
+              overlay: navigatorState!.overlay!,
+              message: error,
+              isError: true,
+            );
+          }
+        });
+      }
+    });
 
     return MaterialApp.router(
       title: 'Media Player',

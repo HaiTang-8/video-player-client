@@ -379,11 +379,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     debugPrint('[_playMovie] final position=$position, title=${movie.title}');
     if (!context.mounted) return;
+    debugPrint('[_playMovie] before push');
     await context.push(
       '/player/movie/${movie.id}',
       extra: {'position': position, 'title': movie.title},
     );
+    debugPrint('[_playMovie] after push, waiting 500ms');
     await Future.delayed(const Duration(milliseconds: 500));
+    debugPrint('[_playMovie] calling refresh');
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 

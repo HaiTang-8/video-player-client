@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 import '../data/services/api_client.dart';
 import '../data/services/storage_service.dart';
+import 'error_notification_provider.dart';
 
 /// SharedPreferences Provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -37,7 +38,10 @@ final apiClientProvider = Provider<ApiClient?>((ref) {
   if (serverUrl == null || serverUrl.isEmpty) {
     return null;
   }
-  return ApiClient(baseUrl: serverUrl);
+  return ApiClient(
+    baseUrl: serverUrl,
+    onError: (msg) => ref.read(errorNotificationProvider.notifier).notify(msg),
+  );
 });
 
 /// 服务器连接状态

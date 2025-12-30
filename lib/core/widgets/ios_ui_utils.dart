@@ -65,6 +65,18 @@ class IosUiUtils {
     bool isError = false,
   }) {
     final overlay = Overlay.of(context);
+    _insertToast(overlay, message, isError);
+  }
+
+  static void showToastWithOverlay({
+    required OverlayState overlay,
+    required String message,
+    bool isError = false,
+  }) {
+    _insertToast(overlay, message, isError);
+  }
+
+  static void _insertToast(OverlayState overlay, String message, bool isError) {
     final overlayEntry = OverlayEntry(
       builder: (context) => _ToastWidget(
         message: message,

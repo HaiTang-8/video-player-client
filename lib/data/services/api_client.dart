@@ -5,8 +5,9 @@ import 'package:logger/logger.dart';
 class ApiClient {
   final Dio _dio;
   final Logger _logger = Logger();
+  final void Function(String)? onError;
 
-  ApiClient({required String baseUrl})
+  ApiClient({required String baseUrl, this.onError})
     : _dio = Dio(
         BaseOptions(
           baseUrl: baseUrl,
@@ -189,6 +190,8 @@ class ApiClient {
     }
 
     _logger.e('API Error: $errorMessage', error: e);
+
+    onError?.call(errorMessage);
 
     return ApiResponse<T>(success: false, error: errorMessage);
   }
