@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +8,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -52,8 +52,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           onPressed:
-                              () =>
-                                  ref.invalidate(movieDetailProvider(widget.movieId)),
+                              () => ref.invalidate(
+                                movieDetailProvider(widget.movieId),
+                              ),
                         ),
                       ],
                     ),
@@ -66,14 +67,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                           IconButton(
                             tooltip: '重新刮削',
                             icon: const Icon(Icons.auto_fix_high),
-                            onPressed:
-                                () => _scrapeMovie(context, movie.id),
+                            onPressed: () => _scrapeMovie(context, movie.id),
                           ),
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           onPressed:
-                              () =>
-                                  ref.invalidate(movieDetailProvider(widget.movieId)),
+                              () => ref.invalidate(
+                                movieDetailProvider(widget.movieId),
+                              ),
                         ),
                       ],
                     ),
@@ -84,7 +85,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         error:
             (error, stack) => AppErrorWidget(
               message: error.toString(),
-              onRetry: () => ref.invalidate(movieDetailProvider(widget.movieId)),
+              onRetry:
+                  () => ref.invalidate(movieDetailProvider(widget.movieId)),
             ),
         data: (movie) {
           if (movie == null) {
@@ -119,10 +121,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               ),
 
               // 剧情简介（移动端）
-              if (!isDesktop && movie.overview != null && movie.overview!.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _buildOverviewSection(movie),
-                ),
+              if (!isDesktop &&
+                  movie.overview != null &&
+                  movie.overview!.isNotEmpty)
+                SliverToBoxAdapter(child: _buildOverviewSection(movie)),
 
               // 相关演员区（优先使用 cast_detail 以展示头像/角色；没有则回退 cast 姓名列表）
               if (cast.isNotEmpty)
@@ -250,9 +252,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           left: 12,
           right: 12,
           bottom: 24,
-          child: isDesktop
-              ? _buildDesktopHeroContent(context, movie)
-              : _buildMobileHeroContent(context, movie),
+          child:
+              isDesktop
+                  ? _buildDesktopHeroContent(context, movie)
+                  : _buildMobileHeroContent(context, movie),
         ),
       ],
     );
@@ -265,7 +268,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       children: [
         Text(
           movie.title,
-          style: const TextStyle(color: Colors.black, fontSize: 28, fontWeight: FontWeight.bold, height: 1.2),
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+          ),
         ),
         const SizedBox(height: 16),
         Row(
@@ -282,7 +290,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                     const SizedBox(height: 8),
                     Text(
                       movie.overview!,
-                      style: TextStyle(color: Colors.black.withValues(alpha: 0.8), fontSize: 14, height: 1.5),
+                      style: TextStyle(
+                        color: Colors.black.withValues(alpha: 0.8),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -304,7 +316,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         // 第一行：标题
         Text(
           movie.title,
-          style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 8),
         // 第二行：评分 | 发布时间 | 时长
@@ -321,41 +337,58 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   Widget _buildMobileMetadataRow1(Movie movie) {
     final items = <Widget>[];
-    final textStyle = TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13);
+    final textStyle = TextStyle(
+      color: Colors.black.withValues(alpha: 0.7),
+      fontSize: 13,
+    );
     final iconColor = Colors.black.withValues(alpha: 0.5);
 
     // 评分
     if (movie.rating != null && movie.rating! > 0) {
-      items.add(Text('豆 ${movie.rating!.toStringAsFixed(1)}', style: const TextStyle(color: Colors.green, fontSize: 13, fontWeight: FontWeight.bold)));
+      items.add(
+        Text(
+          '豆 ${movie.rating!.toStringAsFixed(1)}',
+          style: const TextStyle(
+            color: Colors.green,
+            fontSize: 13,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
     }
 
     // 发布时间
     if (movie.releaseDate != null || movie.year != null) {
       if (items.isNotEmpty) items.add(_buildDivider());
-      final dateText = movie.releaseDate != null
-          ? '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}'
-          : '${movie.year}';
-      items.add(Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.calendar_today, size: 14, color: iconColor),
-          const SizedBox(width: 4),
-          Text(dateText, style: textStyle),
-        ],
-      ));
+      final dateText =
+          movie.releaseDate != null
+              ? '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}'
+              : '${movie.year}';
+      items.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_today, size: 14, color: iconColor),
+            const SizedBox(width: 4),
+            Text(dateText, style: textStyle),
+          ],
+        ),
+      );
     }
 
     // 时长
     if (movie.runtime != null) {
       if (items.isNotEmpty) items.add(_buildDivider());
-      items.add(Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.access_time, size: 14, color: iconColor),
-          const SizedBox(width: 4),
-          Text(movie.formattedRuntime, style: textStyle),
-        ],
-      ));
+      items.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.access_time, size: 14, color: iconColor),
+            const SizedBox(width: 4),
+            Text(movie.formattedRuntime, style: textStyle),
+          ],
+        ),
+      );
     }
 
     return Wrap(spacing: 0, runSpacing: 6, children: items);
@@ -363,7 +396,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   Widget _buildMobileMetadataRow2(Movie movie) {
     final items = <Widget>[];
-    final textStyle = TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13);
+    final textStyle = TextStyle(
+      color: Colors.black.withValues(alpha: 0.7),
+      fontSize: 13,
+    );
 
     // 类型
     if (movie.genres != null && movie.genres!.isNotEmpty) {
@@ -382,7 +418,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Widget _buildDivider() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Text('|', style: TextStyle(color: Colors.black.withValues(alpha: 0.3), fontSize: 13)),
+      child: Text(
+        '|',
+        style: TextStyle(
+          color: Colors.black.withValues(alpha: 0.3),
+          fontSize: 13,
+        ),
+      ),
     );
   }
 
@@ -402,7 +444,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               children: [
                 Icon(Icons.play_arrow, color: Colors.white, size: 24),
                 SizedBox(width: 8),
-                Text('播放', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '播放',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -419,14 +468,22 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         children: [
           const Text(
             '剧情简介',
-            style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
-          _ExpandableText(
-            text: movie.overview!,
-            maxLines: 3,
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13, height: 1.6),
+          OverviewPreviewText(
             title: movie.title,
+            overview: movie.overview!,
+            maxLines: 3,
+            style: TextStyle(
+              color: Colors.black.withValues(alpha: 0.7),
+              fontSize: 13,
+              height: 1.6,
+            ),
           ),
         ],
       ),
@@ -500,9 +557,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (service != null) {
       final historyResp = await service.getWatchProgress('movie', movie.id);
-      debugPrint('[_playMovie] historyResp.isSuccess=${historyResp.isSuccess}, data=${historyResp.data}, error=${historyResp.error}');
+      debugPrint(
+        '[_playMovie] historyResp.isSuccess=${historyResp.isSuccess}, data=${historyResp.data}, error=${historyResp.error}',
+      );
       if (historyResp.isSuccess && historyResp.data != null) {
-        debugPrint('[_playMovie] position=${historyResp.data!.position}, completed=${historyResp.data!.completed}');
+        debugPrint(
+          '[_playMovie] position=${historyResp.data!.position}, completed=${historyResp.data!.completed}',
+        );
         if (!historyResp.data!.completed) {
           position = historyResp.data!.position;
         }
@@ -539,40 +600,65 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     // 发布时间
     if (movie.releaseDate != null) {
-      final dateText = '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}';
+      final dateText =
+          '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}';
       items.add(_buildMetadataItem(dateText, null, forOverlay: forOverlay));
     } else if (movie.year != null) {
-      items.add(_buildMetadataItem('${movie.year}', null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem('${movie.year}', null, forOverlay: forOverlay),
+      );
     }
 
     // 时长
     if (movie.runtime != null) {
-      items.add(_buildMetadataItem(movie.formattedRuntime, null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(
+          movie.formattedRuntime,
+          null,
+          forOverlay: forOverlay,
+        ),
+      );
     }
 
     // 文件大小
     if (movie.fileSize != null) {
-      items.add(_buildMetadataItem(movie.formattedFileSize, null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(
+          movie.formattedFileSize,
+          null,
+          forOverlay: forOverlay,
+        ),
+      );
     }
 
     return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 
-  Widget _buildMetadataItem(String text, Color? color, {bool forOverlay = false}) {
-    final defaultColor = forOverlay
-        ? Colors.white.withValues(alpha: 0.85)
-        : Colors.black.withValues(alpha: 0.7);
+  Widget _buildMetadataItem(
+    String text,
+    Color? color, {
+    bool forOverlay = false,
+  }) {
+    final defaultColor =
+        forOverlay
+            ? Colors.white.withValues(alpha: 0.85)
+            : Colors.black.withValues(alpha: 0.7);
     return Text(
       text,
       style: TextStyle(
         color: color ?? defaultColor,
         fontSize: 14,
         fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
-        shadows: forOverlay
-            ? const [
-                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black45),
-              ]
-            : null,
+        shadows:
+            forOverlay
+                ? const [
+                  Shadow(
+                    offset: Offset(0, 1),
+                    blurRadius: 2,
+                    color: Colors.black45,
+                  ),
+                ]
+                : null,
       ),
     );
   }
@@ -716,7 +802,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       return;
     }
 
-    IosUiUtils.showToast(context: context, message: resp.error ?? '刮削失败', isError: true);
+    IosUiUtils.showToast(
+      context: context,
+      message: resp.error ?? '刮削失败',
+      isError: true,
+    );
   }
 
   /// 构建文件信息区
@@ -823,108 +913,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 可展开文本组件
-class _ExpandableText extends StatelessWidget {
-  final String text;
-  final int maxLines;
-  final TextStyle style;
-  final String title;
-
-  const _ExpandableText({
-    required this.text,
-    required this.maxLines,
-    required this.style,
-    required this.title,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final textSpan = TextSpan(text: text, style: style);
-        final textPainter = TextPainter(
-          text: textSpan,
-          maxLines: maxLines,
-          textDirection: TextDirection.ltr,
-        )..layout(maxWidth: constraints.maxWidth);
-
-        final isOverflow = textPainter.didExceedMaxLines;
-
-        if (!isOverflow) {
-          return Text(text, style: style);
-        }
-
-        // 使用二分法找到合适的截断位置
-        int low = 0;
-        int high = text.length;
-        int bestEnd = 0;
-
-        while (low <= high) {
-          final mid = (low + high) ~/ 2;
-          final testSpan = TextSpan(
-            children: [
-              TextSpan(text: '${text.substring(0, mid)}...全部', style: style),
-            ],
-          );
-          final testPainter = TextPainter(
-            text: testSpan,
-            maxLines: maxLines,
-            textDirection: TextDirection.ltr,
-          )..layout(maxWidth: constraints.maxWidth);
-
-          if (!testPainter.didExceedMaxLines) {
-            bestEnd = mid;
-            low = mid + 1;
-          } else {
-            high = mid - 1;
-          }
-        }
-
-        final truncatedText = text.substring(0, bestEnd);
-
-        return GestureDetector(
-          onTap: () => _showFullText(context),
-          child: Text.rich(
-            TextSpan(
-              children: [
-                TextSpan(text: '$truncatedText...', style: style),
-                TextSpan(
-                  text: '全部',
-                  style: style.copyWith(color: Colors.blue),
-                ),
-              ],
-            ),
-            maxLines: maxLines,
-          ),
-        );
-      },
-    );
-  }
-
-  void _showFullText(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.white,
-          appBar: AppBar(
-            backgroundColor: Colors.white,
-            elevation: 0,
-            title: Text(title, style: const TextStyle(color: Colors.black)),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          body: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Text(text, style: style),
-          ),
-        ),
-      ),
     );
   }
 }

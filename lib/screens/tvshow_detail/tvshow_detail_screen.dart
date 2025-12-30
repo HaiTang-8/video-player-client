@@ -1,5 +1,4 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +8,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -119,10 +119,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   ? tvShow.seasons![_selectedSeasonIndex]
                   : null;
 
-          final seasonBackdrop = tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
-              ? tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length]
-              : null;
-          final episodeFallbackImage = seasonBackdrop ?? selectedSeason?.posterPath ?? tvShow.backdropPath ?? tvShow.posterPath;
+          final seasonBackdrop =
+              tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
+                  ? tvShow.backdrops![_selectedSeasonIndex %
+                      tvShow.backdrops!.length]
+                  : null;
+          final episodeFallbackImage =
+              seasonBackdrop ??
+              selectedSeason?.posterPath ??
+              tvShow.backdropPath ??
+              tvShow.posterPath;
 
           return CustomScrollView(
             slivers: [
@@ -172,10 +178,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 ),
 
               // 剧情简介
-              if (!isDesktop && tvShow.overview != null && tvShow.overview!.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _buildOverviewSection(tvShow),
-                ),
+              if (!isDesktop &&
+                  tvShow.overview != null &&
+                  tvShow.overview!.isNotEmpty)
+                SliverToBoxAdapter(child: _buildOverviewSection(tvShow)),
 
               // 相关演员区
               if ((selectedSeason?.castDetail != null &&
@@ -320,21 +326,28 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           left: 12,
           right: 12,
           bottom: 24,
-          child: isDesktop
-              ? _buildDesktopHeroContent(context, tvShow, selectedSeason)
-              : _buildMobileHeroContent(context, tvShow, selectedSeason),
+          child:
+              isDesktop
+                  ? _buildDesktopHeroContent(context, tvShow, selectedSeason)
+                  : _buildMobileHeroContent(context, tvShow, selectedSeason),
         ),
       ],
     );
   }
 
-  Widget _buildDesktopHeroContent(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+  Widget _buildDesktopHeroContent(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
+          (tvShow.seasons != null &&
+                  tvShow.seasons!.length > 1 &&
+                  selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
           style: const TextStyle(
@@ -355,19 +368,29 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
-                  if (selectedSeason?.overview != null && selectedSeason!.overview!.isNotEmpty) ...[
+                  if (selectedSeason?.overview != null &&
+                      selectedSeason!.overview!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
                       selectedSeason.overview!,
-                      style: TextStyle(color: Colors.black.withValues(alpha: 0.8), fontSize: 14, height: 1.5),
+                      style: TextStyle(
+                        color: Colors.black.withValues(alpha: 0.8),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
-                  ] else if (tvShow.overview != null && tvShow.overview!.isNotEmpty) ...[
+                  ] else if (tvShow.overview != null &&
+                      tvShow.overview!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
                       tvShow.overview!,
-                      style: TextStyle(color: Colors.black.withValues(alpha: 0.8), fontSize: 14, height: 1.5),
+                      style: TextStyle(
+                        color: Colors.black.withValues(alpha: 0.8),
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -381,17 +404,27 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  Widget _buildMobileHeroContent(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+  Widget _buildMobileHeroContent(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         // 第一行：标题
         Text(
-          (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
+          (tvShow.seasons != null &&
+                  tvShow.seasons!.length > 1 &&
+                  selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
-          style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         const SizedBox(height: 8),
         // 第二行：元数据
@@ -419,7 +452,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               children: [
                 Icon(Icons.play_arrow, color: Colors.white, size: 24),
                 SizedBox(width: 8),
-                Text('播放', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text(
+                  '播放',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
             ),
           ),
@@ -436,14 +476,22 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         children: [
           const Text(
             '剧情简介',
-            style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
           ),
           const SizedBox(height: 8),
-          Text(
-            tvShow.overview!,
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13, height: 1.6),
+          OverviewPreviewText(
+            title: tvShow.name,
+            overview: tvShow.overview!,
             maxLines: 3,
-            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.black.withValues(alpha: 0.7),
+              fontSize: 13,
+              height: 1.6,
+            ),
           ),
         ],
       ),
@@ -512,7 +560,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建元数据行
-  Widget _buildMetadataRow(TvShow tvShow, Season? selectedSeason, {bool forOverlay = false}) {
+  Widget _buildMetadataRow(
+    TvShow tvShow,
+    Season? selectedSeason, {
+    bool forOverlay = false,
+  }) {
     final items = <Widget>[];
 
     // 评分
@@ -536,39 +588,65 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       );
     } else if (tvShow.year != null) {
-      items.add(_buildMetadataItem('${tvShow.year}', null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem('${tvShow.year}', null, forOverlay: forOverlay),
+      );
     }
 
     // 剧集数
     if (selectedSeason?.episodeCount != null) {
-      items.add(_buildMetadataItem('共${selectedSeason!.episodeCount}集', null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(
+          '共${selectedSeason!.episodeCount}集',
+          null,
+          forOverlay: forOverlay,
+        ),
+      );
     } else if (tvShow.numberOfEpisodes != null) {
-      items.add(_buildMetadataItem('共${tvShow.numberOfEpisodes}集', null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(
+          '共${tvShow.numberOfEpisodes}集',
+          null,
+          forOverlay: forOverlay,
+        ),
+      );
     }
 
     // 状态
     if (tvShow.status != null) {
-      items.add(_buildMetadataItem(tvShow.statusText, null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(tvShow.statusText, null, forOverlay: forOverlay),
+      );
     }
 
     return Wrap(spacing: 16, runSpacing: 8, children: items);
   }
 
-  Widget _buildMetadataItem(String text, Color? color, {bool forOverlay = false}) {
-    final defaultColor = forOverlay
-        ? Colors.white.withValues(alpha: 0.85)
-        : Colors.black.withValues(alpha: 0.7);
+  Widget _buildMetadataItem(
+    String text,
+    Color? color, {
+    bool forOverlay = false,
+  }) {
+    final defaultColor =
+        forOverlay
+            ? Colors.white.withValues(alpha: 0.85)
+            : Colors.black.withValues(alpha: 0.7);
     return Text(
       text,
       style: TextStyle(
         color: color ?? defaultColor,
         fontSize: 14,
         fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
-        shadows: forOverlay
-            ? const [
-                Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black45),
-              ]
-            : null,
+        shadows:
+            forOverlay
+                ? const [
+                  Shadow(
+                    offset: Offset(0, 1),
+                    blurRadius: 2,
+                    color: Colors.black45,
+                  ),
+                ]
+                : null,
       ),
     );
   }
@@ -918,7 +996,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return;
     }
 
-    IosUiUtils.showToast(context: context, message: resp.error ?? '刮削失败', isError: true);
+    IosUiUtils.showToast(
+      context: context,
+      message: resp.error ?? '刮削失败',
+      isError: true,
+    );
   }
 
   /// 构建文件信息区
@@ -984,18 +1066,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     ),
                   ),
                 ),
-              if (tvShow.sourceFolders != null && tvShow.sourceFolders!.isNotEmpty)
-                ...tvShow.sourceFolders!.map((folder) => Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '路径: $folder',
-                    style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      fontSize: 11,
-                      fontFamily: 'monospace',
+              if (tvShow.sourceFolders != null &&
+                  tvShow.sourceFolders!.isNotEmpty)
+                ...tvShow.sourceFolders!.map(
+                  (folder) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '路径: $folder',
+                      style: TextStyle(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      ),
                     ),
                   ),
-                )),
+                ),
             ],
           ),
         ),
@@ -1145,10 +1230,7 @@ class _EpisodeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GestureDetector(
-      onTap:
-          episode.hasFile
-              ? () => _playEpisode(context, ref)
-              : null,
+      onTap: episode.hasFile ? () => _playEpisode(context, ref) : null,
       child: SizedBox(
         width: 160,
         child: Column(
@@ -1252,7 +1334,8 @@ class _EpisodeCard extends ConsumerWidget {
 
     if (service != null) {
       final historyResp = await service.getWatchProgress('tv', tvShowId);
-      if (historyResp.isSuccess && historyResp.data != null &&
+      if (historyResp.isSuccess &&
+          historyResp.data != null &&
           historyResp.data!.episodeId == episode.id &&
           !historyResp.data!.completed) {
         position = historyResp.data!.position;
@@ -1260,9 +1343,10 @@ class _EpisodeCard extends ConsumerWidget {
     }
 
     if (!context.mounted) return;
-    final title = tvShowName != null
-        ? '$tvShowName - ${episode.displayTitle}'
-        : episode.displayTitle;
+    final title =
+        tvShowName != null
+            ? '$tvShowName - ${episode.displayTitle}'
+            : episode.displayTitle;
     debugPrint('[_playEpisode] before push');
     await context.push(
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
@@ -1377,7 +1461,10 @@ class _SeasonTabLabel extends ConsumerWidget {
     );
   }
 
-  void _showSourceGroupsDialog(BuildContext context, List<SourceGroup>? groups) {
+  void _showSourceGroupsDialog(
+    BuildContext context,
+    List<SourceGroup>? groups,
+  ) {
     if (groups == null || groups.isEmpty) return;
     showModalBottomSheet(
       context: context,
@@ -1385,12 +1472,13 @@ class _SeasonTabLabel extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) => _SourceGroupsSheet(
-        tvShowId: tvShowId,
-        seasonId: season.id,
-        seasonName: isSingleSeason ? '第一季' : season.displayName,
-        groups: groups,
-      ),
+      builder:
+          (context) => _SourceGroupsSheet(
+            tvShowId: tvShowId,
+            seasonId: season.id,
+            seasonName: isSingleSeason ? '第一季' : season.displayName,
+            groups: groups,
+          ),
     );
   }
 }
@@ -1446,7 +1534,9 @@ class _SourceGroupsSheet extends ConsumerWidget {
               shrinkWrap: true,
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: groups.length,
-              separatorBuilder: (_, __) => const Divider(height: 1, indent: 20, endIndent: 20),
+              separatorBuilder:
+                  (_, __) =>
+                      const Divider(height: 1, indent: 20, endIndent: 20),
               itemBuilder: (context, index) {
                 final group = groups[index];
                 return _SourceGroupTile(
@@ -1461,7 +1551,11 @@ class _SourceGroupsSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _onSelectSource(BuildContext context, WidgetRef ref, SourceGroup group) async {
+  Future<void> _onSelectSource(
+    BuildContext context,
+    WidgetRef ref,
+    SourceGroup group,
+  ) async {
     if (group.isPrimary) {
       Navigator.pop(context);
       return;
@@ -1472,10 +1566,16 @@ class _SourceGroupsSheet extends ConsumerWidget {
 
     Navigator.pop(context);
 
-    final response = await service.setSeasonPrimarySource(tvShowId, seasonId, group.folderPath);
+    final response = await service.setSeasonPrimarySource(
+      tvShowId,
+      seasonId,
+      group.folderPath,
+    );
     if (response.isSuccess) {
       // 刷新播放源分组数据
-      ref.invalidate(seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)));
+      ref.invalidate(
+        seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)),
+      );
     }
   }
 }
@@ -1535,7 +1635,11 @@ class _SourceGroupTile extends StatelessWidget {
           // 文件数量和大小
           Row(
             children: [
-              Icon(Icons.video_file_outlined, size: 14, color: Colors.grey[600]),
+              Icon(
+                Icons.video_file_outlined,
+                size: 14,
+                color: Colors.grey[600],
+              ),
               const SizedBox(width: 4),
               Text(
                 '${group.fileCount} 个文件',
@@ -1550,9 +1654,10 @@ class _SourceGroupTile extends StatelessWidget {
           ),
         ],
       ),
-      trailing: group.isPrimary
-          ? const Icon(Icons.check_circle, color: Colors.blue)
-          : const Icon(Icons.chevron_right, color: Colors.grey),
+      trailing:
+          group.isPrimary
+              ? const Icon(Icons.check_circle, color: Colors.blue)
+              : const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
     );
   }
