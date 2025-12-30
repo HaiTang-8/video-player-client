@@ -171,6 +171,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   ),
                 ),
 
+              // 剧情简介
+              if (!isDesktop && tvShow.overview != null && tvShow.overview!.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: _buildOverviewSection(tvShow),
+                ),
+
               // 相关演员区
               if ((selectedSeason?.castDetail != null &&
                       selectedSeason!.castDetail!.isNotEmpty) ||
@@ -311,79 +317,136 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
         // Hero 内容（叠加在渐变蒙版上）
         Positioned(
-          left: 24,
-          right: 24,
+          left: 12,
+          right: 12,
           bottom: 24,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // 第一行：剧集标题（只有一季时不显示季度信息）
-              Text(
-                (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
-                    ? '${tvShow.name} ${selectedSeason.displayName}'
-                    : tvShow.name,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // 第二行：左侧播放按钮 + 右侧（元数据+简介）
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // 左侧 - 播放按钮
-                  _buildPlayButton(context),
-                  const SizedBox(width: 24),
-
-                  // 右侧 - 元数据 + 简介
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 元数据行
-                        _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
-                        // 简介
-                        if (selectedSeason?.overview != null &&
-                            selectedSeason!.overview!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            selectedSeason.overview!,
-                            style: TextStyle(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              fontSize: 14,
-                              height: 1.5,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ] else if (tvShow.overview != null &&
-                            tvShow.overview!.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            tvShow.overview!,
-                            style: TextStyle(
-                              color: Colors.black.withValues(alpha: 0.8),
-                              fontSize: 14,
-                              height: 1.5,
-                            ),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+          child: isDesktop
+              ? _buildDesktopHeroContent(context, tvShow, selectedSeason)
+              : _buildMobileHeroContent(context, tvShow, selectedSeason),
         ),
       ],
+    );
+  }
+
+  Widget _buildDesktopHeroContent(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
+              ? '${tvShow.name} ${selectedSeason.displayName}'
+              : tvShow.name,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildPlayButton(context),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
+                  if (selectedSeason?.overview != null && selectedSeason!.overview!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      selectedSeason.overview!,
+                      style: TextStyle(color: Colors.black.withValues(alpha: 0.8), fontSize: 14, height: 1.5),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ] else if (tvShow.overview != null && tvShow.overview!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      tvShow.overview!,
+                      style: TextStyle(color: Colors.black.withValues(alpha: 0.8), fontSize: 14, height: 1.5),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMobileHeroContent(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // 第一行：标题
+        Text(
+          (tvShow.seasons != null && tvShow.seasons!.length > 1 && selectedSeason != null)
+              ? '${tvShow.name} ${selectedSeason.displayName}'
+              : tvShow.name,
+          style: const TextStyle(color: Colors.black, fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        // 第二行：元数据
+        _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
+        const SizedBox(height: 12),
+        // 第三行：全宽播放按钮
+        _buildFullWidthPlayButton(context),
+      ],
+    );
+  }
+
+  Widget _buildFullWidthPlayButton(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: () {},
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                SizedBox(width: 8),
+                Text('播放', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverviewSection(TvShow tvShow) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '剧情简介',
+            style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            tvShow.overview!,
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13, height: 1.6),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -517,7 +580,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     TvShow tvShow,
   ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -593,7 +656,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         children: [
           // 区域标题
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               title,
               style: const TextStyle(
@@ -609,10 +672,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           SizedBox(
             height: 120,
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
               itemCount: cast.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 return _buildCastCard(cast[index], serverBaseUrl);
               },
@@ -668,7 +731,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               title,
               style: const TextStyle(
@@ -682,10 +745,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           SizedBox(
             height: 120,
             child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               scrollDirection: Axis.horizontal,
               itemCount: crew.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              separatorBuilder: (_, __) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 return _buildCrewCard(crew[index], serverBaseUrl);
               },
@@ -869,7 +932,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       children: [
         // 分割线
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Divider(
             color: Colors.black.withValues(alpha: 0.1),
             height: 48,
@@ -878,7 +941,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
         // 文件信息
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -939,9 +1002,9 @@ class _EpisodesCarouselDirect extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 180,
+      height: 140,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         scrollDirection: Axis.horizontal,
         itemCount: episodes.length,
         separatorBuilder: (_, __) => const SizedBox(width: 16),
@@ -986,7 +1049,7 @@ class _EpisodesCarousel extends ConsumerWidget {
     return episodesAsync.when(
       loading:
           () => const SizedBox(
-            height: 180,
+            height: 140,
             child: Center(
               child: CircularProgressIndicator(color: Colors.black),
             ),
@@ -1011,9 +1074,9 @@ class _EpisodesCarousel extends ConsumerWidget {
         }
 
         return SizedBox(
-          height: 180,
+          height: 140,
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: episodes.length,
             separatorBuilder: (_, __) => const SizedBox(width: 16),

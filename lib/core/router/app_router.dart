@@ -19,6 +19,7 @@ import '../../screens/library/category_detail_screen.dart';
 import '../../screens/library/watch_history_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
 import '../../screens/settings/database_backup_screen.dart';
+import '../../screens/tvshow_detail/overview_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -213,6 +214,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/database-backup',
         builder: (context, state) => const DatabaseBackupScreen(),
+      ),
+
+      // 剧情简介页面
+      GoRoute(
+        path: '/overview',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return OverviewScreen(
+            title: extra['title'] as String,
+            overview: extra['overview'] as String,
+          );
+        },
       ),
     ],
     errorBuilder:
