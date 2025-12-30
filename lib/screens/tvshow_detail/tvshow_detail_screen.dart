@@ -973,6 +973,29 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     ),
                   ),
                 ),
+              if (tvShow.storageName != null && tvShow.storageName!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '存储: ${tvShow.storageName}',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              if (tvShow.sourceFolders != null && tvShow.sourceFolders!.isNotEmpty)
+                ...tvShow.sourceFolders!.map((folder) => Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '路径: $folder',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                )),
             ],
           ),
         ),

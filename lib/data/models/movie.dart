@@ -23,6 +23,9 @@ class Movie {
   final String? imdbId;
   final String? filePath;
   final int? fileSize;
+  final int? storageId;
+  final String? storageName;
+  final List<String>? sourceFolders;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -44,6 +47,9 @@ class Movie {
     this.imdbId,
     this.filePath,
     this.fileSize,
+    this.storageId,
+    this.storageName,
+    this.sourceFolders,
     this.createdAt,
     this.updatedAt,
   });
@@ -69,6 +75,9 @@ class Movie {
       imdbId: json['imdb_id']?.toString(),
       filePath: json['file_path'] as String?,
       fileSize: (json['file_size'] as num?)?.toInt(),
+      storageId: (json['storage_id'] as num?)?.toInt(),
+      storageName: json['storage_name'] as String?,
+      sourceFolders: _parseStringList(json['source_folders']),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -96,6 +105,9 @@ class Movie {
         'imdb_id': imdbId,
         'file_path': filePath,
         'file_size': fileSize,
+        'storage_id': storageId,
+        'storage_name': storageName,
+        'source_folders': sourceFolders,
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };

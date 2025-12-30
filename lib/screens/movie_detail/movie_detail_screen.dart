@@ -422,11 +422,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             style: TextStyle(color: Colors.black, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          Text(
-            movie.overview!,
-            style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13, height: 1.6),
+          _ExpandableText(
+            text: movie.overview!,
             maxLines: 3,
-            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: Colors.black.withValues(alpha: 0.7), fontSize: 13, height: 1.6),
+            title: movie.title,
           ),
         ],
       ),
@@ -725,6 +725,19 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     ThemeData theme,
     Movie movie,
   ) {
+    // 从路径中提取文件名
+    String? fileName;
+    String? dirPath;
+    if (movie.filePath != null && movie.filePath!.isNotEmpty) {
+      final lastSlash = movie.filePath!.lastIndexOf('/');
+      if (lastSlash >= 0) {
+        fileName = movie.filePath!.substring(lastSlash + 1);
+        dirPath = movie.filePath!.substring(0, lastSlash);
+      } else {
+        fileName = movie.filePath;
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -771,10 +784,147 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                     ),
                   ),
                 ),
+              if (movie.storageName != null && movie.storageName!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '存储: ${movie.storageName}',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              if (fileName != null && fileName.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '文件: $fileName',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
+              if (dirPath != null && dirPath.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '路径: $dirPath',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 可展开文本组件
+class _ExpandableText extends StatelessWidget {
+  final String text;
+  final int maxLines;
+  final TextStyle style;
+  final String title;
+
+  const _ExpandableText({
+    required this.text,
+    required this.maxLines,
+    required this.style,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textSpan = TextSpan(text: text, style: style);
+        final textPainter = TextPainter(
+          text: textSpan,
+          maxLines: maxLines,
+          textDirection: TextDirection.ltr,
+        )..layout(maxWidth: constraints.maxWidth);
+
+        final isOverflow = textPainter.didExceedMaxLines;
+
+        if (!isOverflow) {
+          return Text(text, style: style);
+        }
+
+        // 使用二分法找到合适的截断位置
+        int low = 0;
+        int high = text.length;
+        int bestEnd = 0;
+
+        while (low <= high) {
+          final mid = (low + high) ~/ 2;
+          final testSpan = TextSpan(
+            children: [
+              TextSpan(text: '${text.substring(0, mid)}...全部', style: style),
+            ],
+          );
+          final testPainter = TextPainter(
+            text: testSpan,
+            maxLines: maxLines,
+            textDirection: TextDirection.ltr,
+          )..layout(maxWidth: constraints.maxWidth);
+
+          if (!testPainter.didExceedMaxLines) {
+            bestEnd = mid;
+            low = mid + 1;
+          } else {
+            high = mid - 1;
+          }
+        }
+
+        final truncatedText = text.substring(0, bestEnd);
+
+        return GestureDetector(
+          onTap: () => _showFullText(context),
+          child: Text.rich(
+            TextSpan(
+              children: [
+                TextSpan(text: '$truncatedText...', style: style),
+                TextSpan(
+                  text: '全部',
+                  style: style.copyWith(color: Colors.blue),
+                ),
+              ],
+            ),
+            maxLines: maxLines,
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFullText(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.white,
+          appBar: AppBar(
+            backgroundColor: Colors.white,
+            elevation: 0,
+            title: Text(title, style: const TextStyle(color: Colors.black)),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(16),
+            child: Text(text, style: style),
+          ),
+        ),
+      ),
     );
   }
 }

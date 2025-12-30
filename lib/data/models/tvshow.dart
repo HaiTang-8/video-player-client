@@ -30,6 +30,9 @@ class TvShow {
   final String? imdbId;
   final String? status;
   final List<Season>? seasons;
+  final int? storageId;
+  final String? storageName;
+  final List<String>? sourceFolders;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -54,6 +57,9 @@ class TvShow {
     this.imdbId,
     this.status,
     this.seasons,
+    this.storageId,
+    this.storageName,
+    this.sourceFolders,
     this.createdAt,
     this.updatedAt,
   });
@@ -86,6 +92,9 @@ class TvShow {
       imdbId: json['imdb_id']?.toString(),
       status: json['status'] as String?,
       seasons: _parseSeasons(json['seasons']),
+      storageId: (json['storage_id'] as num?)?.toInt(),
+      storageName: json['storage_name'] as String?,
+      sourceFolders: _parseGenres(json['source_folders']),
       createdAt:
           json['created_at'] != null
               ? DateTime.tryParse(json['created_at'].toString())
@@ -118,6 +127,9 @@ class TvShow {
     'imdb_id': imdbId,
     'status': status,
     'seasons': seasons?.map((e) => e.toJson()).toList(),
+    'storage_id': storageId,
+    'storage_name': storageName,
+    'source_folders': sourceFolders,
     'created_at': createdAt?.toIso8601String(),
     'updated_at': updatedAt?.toIso8601String(),
   };

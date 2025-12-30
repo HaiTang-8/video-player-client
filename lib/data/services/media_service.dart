@@ -111,9 +111,10 @@ class MediaService {
       ApiConstants.tvShowDetail(id),
       fromJson: (json) {
         final data = json as Map<String, dynamic>;
-        // API 返回格式: {"tv_show": {...}, "seasons": [{"season": {...}, "episodes": [...]}]}
+        // API 返回格式: {"tv_show": {...}, "seasons": [...], "storage_name": "..."}
         final tvShowData = data['tv_show'] as Map<String, dynamic>?;
         final seasonsData = data['seasons'] as List<dynamic>?;
+        final storageName = data['storage_name'] as String?;
 
         if (tvShowData == null) {
           throw Exception('Invalid response: tv_show is null');
@@ -137,10 +138,13 @@ class MediaService {
           }).toList();
         }
 
-        // 创建 TvShow 并注入 seasons
+        // 创建 TvShow 并注入 seasons 和 storage_name
         final tvShowWithSeasons = Map<String, dynamic>.from(tvShowData);
         if (seasons != null) {
           tvShowWithSeasons['seasons'] = seasons.map((s) => s.toJson()).toList();
+        }
+        if (storageName != null) {
+          tvShowWithSeasons['storage_name'] = storageName;
         }
 
         return TvShow.fromJson(tvShowWithSeasons);
