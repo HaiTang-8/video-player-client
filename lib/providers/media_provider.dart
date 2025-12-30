@@ -184,6 +184,7 @@ final seasonSourceGroupsProvider = FutureProvider.family<List<SourceGroup>?,
 class SearchState {
   final List<MediaItem> items;
   final bool isLoading;
+  final bool isLoadingMore;
   final String? error;
   final String query;
   final String category;
@@ -191,10 +192,13 @@ class SearchState {
   final String genre;
   final String region;
   final String year;
+  final int currentPage;
+  final bool hasMore;
 
   SearchState({
     this.items = const [],
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.error,
     this.query = '',
     this.category = '全部',
@@ -202,11 +206,14 @@ class SearchState {
     this.genre = '类型',
     this.region = '地区',
     this.year = '年份',
+    this.currentPage = 0,
+    this.hasMore = true,
   });
 
   SearchState copyWith({
     List<MediaItem>? items,
     bool? isLoading,
+    bool? isLoadingMore,
     String? error,
     String? query,
     String? category,
@@ -214,10 +221,13 @@ class SearchState {
     String? genre,
     String? region,
     String? year,
+    int? currentPage,
+    bool? hasMore,
   }) {
     return SearchState(
       items: items ?? this.items,
       isLoading: isLoading ?? this.isLoading,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       error: error,
       query: query ?? this.query,
       category: category ?? this.category,
@@ -225,6 +235,8 @@ class SearchState {
       genre: genre ?? this.genre,
       region: region ?? this.region,
       year: year ?? this.year,
+      currentPage: currentPage ?? this.currentPage,
+      hasMore: hasMore ?? this.hasMore,
     );
   }
 
@@ -270,13 +282,8 @@ class SearchNotifier extends StateNotifier<SearchState> {
   /// 执行搜索
   Future<void> search(String query) async {
     if (_service == null) return;
-    if (query.isEmpty && state.category == '全部' && state.genre == '类型' &&
-        state.region == '地区' && state.year == '年份') {
-      state = SearchState();
-      return;
-    }
 
-    state = state.copyWith(isLoading: true, query: query, error: null);
+    state = state.copyWith(isLoading: true, query: query, error: null, currentPage: 1, hasMore: true);
 
     final response = await _service.search(
       query: query,
@@ -285,17 +292,46 @@ class SearchNotifier extends StateNotifier<SearchState> {
       genre: state.genre,
       region: state.region,
       year: state.year,
+      page: 1,
     );
 
     state = state.copyWith(
       items: response.data ?? [],
       isLoading: false,
       error: response.error,
+      hasMore: (response.data?.length ?? 0) >= 20,
+    );
+  }
+
+  /// 加载更多
+  Future<void> loadMore() async {
+    if (_service == null || state.isLoading || state.isLoadingMore || !state.hasMore) return;
+
+    state = state.copyWith(isLoadingMore: true);
+    final nextPage = state.currentPage + 1;
+
+    final response = await _service.search(
+      query: state.query,
+      category: state.category,
+      sort: _mapSort(state.sort),
+      genre: state.genre,
+      region: state.region,
+      year: state.year,
+      page: nextPage,
+    );
+
+    state = state.copyWith(
+      items: [...state.items, ...response.data ?? []],
+      isLoadingMore: false,
+      currentPage: nextPage,
+      hasMore: (response.data?.length ?? 0) >= 20,
+      error: response.error,
     );
   }
 
   /// 更新筛选条件并搜索
   Future<void> updateFilters({
+    String? query,
     String? category,
     String? sort,
     String? genre,
@@ -303,6 +339,7 @@ class SearchNotifier extends StateNotifier<SearchState> {
     String? year,
   }) async {
     state = state.copyWith(
+      query: query,
       category: category,
       sort: sort,
       genre: genre,

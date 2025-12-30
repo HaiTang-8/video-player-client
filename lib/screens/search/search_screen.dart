@@ -18,6 +18,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   Timer? _debounceTimer;
 
   int _selectedCategory = 0;
@@ -33,10 +34,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   static const _years = ['年份', '2020年代', '2025', '2024', '2023', '2022', '2021', '2020', '2010年代', '2000年代', '90年代', '80年代', '70年代', '60年代', '更早'];
 
   @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _doSearch());
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      ref.read(searchProvider.notifier).loadMore();
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -53,13 +68,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
   void _doSearchWithFilters(String query) {
     ref.read(searchProvider.notifier).updateFilters(
+      query: query,
       category: _categories[_selectedCategory],
       sort: _sorts[_selectedSort],
       genre: _types[_selectedType],
       region: _regions[_selectedRegion],
       year: _years[_selectedYear],
     );
-    ref.read(searchProvider.notifier).search(query);
   }
 
   void _onFilterChanged() {
@@ -227,6 +242,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     return GridView.builder(
+      controller: _scrollController,
       padding: const EdgeInsets.all(16),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
