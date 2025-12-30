@@ -15,6 +15,9 @@ class ApiConstants {
   static const String historyUpdate = '$apiPrefix/history';
   static String historyGet(String mediaType, int mediaId) =>
       '$apiPrefix/history/$mediaType/$mediaId';
+  static String historyDelete(int id) => '$apiPrefix/history/$id';
+  static const String historyBatchDelete = '$apiPrefix/history/batch-delete';
+  static const String historyDeleteAll = '$apiPrefix/history';
 
   // 电影
   static const String movies = '$apiPrefix/movies';

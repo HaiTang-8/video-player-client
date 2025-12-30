@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,9 @@ class WatchHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
+  bool _isEditMode = false;
+  final Set<int> _selectedIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -26,24 +30,130 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     });
   }
 
+  void _toggleEditMode() {
+    setState(() {
+      _isEditMode = !_isEditMode;
+      if (!_isEditMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final ids = _selectedIds.toList();
+    await ref.read(watchHistoryProvider.notifier).deleteBatch(ids);
+    setState(() => _selectedIds.clear());
+  }
+
+  Future<void> _deleteAll() async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('确认清空'),
+        content: const Text('确定要清空所有观看记录吗？'),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await ref.read(watchHistoryProvider.notifier).deleteAll();
+      setState(() {
+        _selectedIds.clear();
+        _isEditMode = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(watchHistoryProvider);
     final isDesktop = WindowControls.isDesktop;
+    final hasItems = state.items.isNotEmpty;
+
+    final editAction = hasItems
+        ? CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            onPressed: _toggleEditMode,
+            child: Text(_isEditMode ? '完成' : '编辑'),
+          )
+        : null;
 
     return Scaffold(
       appBar: isDesktop
           ? DesktopAppBar(
               title: const Text('最近观看'),
               onBack: () => context.pop(),
+              actions: editAction != null ? [editAction] : [],
             )
           : MobileAppBar(
               title: const Text('最近观看'),
               onBack: () => context.pop(),
+              actions: editAction != null ? [editAction] : null,
             ),
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),
-        child: _buildBody(state),
+      body: Column(
+        children: [
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),
+              child: _buildBody(state),
+            ),
+          ),
+          if (_isEditMode && hasItems) _buildBottomBar(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBottomBar() {
+    final hasSelection = _selectedIds.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: CupertinoTheme.of(context).barBackgroundColor,
+        border: const Border(top: BorderSide(color: CupertinoColors.separator, width: 0.5)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: _deleteAll,
+              child: const Text('全部清空', style: TextStyle(fontSize: 16)),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: hasSelection ? _deleteSelected : null,
+              child: Text(
+                '删除',
+                style: TextStyle(
+                  color: hasSelection ? CupertinoColors.destructiveRed : CupertinoColors.inactiveGray,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -72,9 +182,28 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       itemCount: state.items.length,
       itemBuilder: (context, index) {
         final item = state.items[index];
-        return _WatchHistoryListItem(
-          item: item,
-          onTap: () => _navigateToDetail(item),
+        if (_isEditMode) {
+          return _WatchHistoryListItem(
+            item: item,
+            isEditMode: true,
+            isSelected: _selectedIds.contains(item.id),
+            onTap: () => _toggleSelection(item.id),
+          );
+        }
+        return Dismissible(
+          key: ValueKey(item.id),
+          direction: DismissDirection.endToStart,
+          background: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20),
+            color: CupertinoColors.destructiveRed,
+            child: const Icon(CupertinoIcons.delete, color: CupertinoColors.white),
+          ),
+          onDismissed: (_) => ref.read(watchHistoryProvider.notifier).delete(item.id),
+          child: _WatchHistoryListItem(
+            item: item,
+            onTap: () => _navigateToDetail(item),
+          ),
         );
       },
     );
@@ -132,8 +261,15 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
 class _WatchHistoryListItem extends ConsumerWidget {
   final WatchHistoryItem item;
   final VoidCallback? onTap;
+  final bool isEditMode;
+  final bool isSelected;
 
-  const _WatchHistoryListItem({required this.item, this.onTap});
+  const _WatchHistoryListItem({
+    required this.item,
+    this.onTap,
+    this.isEditMode = false,
+    this.isSelected = false,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -141,60 +277,83 @@ class _WatchHistoryListItem extends ConsumerWidget {
     final serverBaseUrl = ref.watch(serverUrlProvider);
     final isEpisode = item.mediaType == 'tv' && item.mediaInfo?.episodeInfo != null;
 
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(6),
-        child: SizedBox(
-          width: isEpisode ? 100 : 60,
-          height: isEpisode ? 56 : 90,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildImage(serverBaseUrl, isEpisode),
-              if (!item.completed)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    height: 3,
-                    color: Colors.black45,
-                    child: FractionallySizedBox(
-                      alignment: Alignment.centerLeft,
-                      widthFactor: item.progress.clamp(0.0, 1.0),
-                      child: Container(color: const Color(0xFF3D5BF6)),
-                    ),
-                  ),
-                ),
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            if (isEditMode) ...[
+              Icon(
+                isSelected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.inactiveGray,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
             ],
-          ),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: isEpisode ? 100 : 60,
+                height: isEpisode ? 56 : 90,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _buildImage(serverBaseUrl, isEpisode),
+                    if (!item.completed)
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          height: 3,
+                          color: CupertinoColors.black.withValues(alpha: 0.45),
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: item.progress.clamp(0.0, 1.0),
+                            child: Container(color: CupertinoColors.activeBlue),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _displayTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _subtitle,
+                    style: theme.textTheme.bodySmall?.copyWith(color: CupertinoColors.secondaryLabel),
+                  ),
+                ],
+              ),
+            ),
+            if (!isEditMode && item.completed)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: CupertinoColors.activeGreen,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: const Text(
+                  '已看完',
+                  style: TextStyle(color: CupertinoColors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                ),
+              ),
+          ],
         ),
       ),
-      title: Text(
-        _displayTitle,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-      ),
-      subtitle: Text(
-        _subtitle,
-        style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
-      ),
-      trailing: item.completed
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.green.shade600,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                '已看完',
-                style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-            )
-          : null,
-      onTap: onTap,
     );
   }
 
@@ -253,8 +412,8 @@ class _WatchHistoryListItem extends ConsumerWidget {
 
   Widget _buildPlaceholder() {
     return Container(
-      color: Colors.grey[300],
-      child: const Center(child: Icon(Icons.movie_outlined, size: 24, color: Colors.grey)),
+      color: CupertinoColors.systemGrey5,
+      child: const Center(child: Icon(CupertinoIcons.film, size: 24, color: CupertinoColors.systemGrey)),
     );
   }
 }

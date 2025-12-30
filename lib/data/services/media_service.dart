@@ -338,6 +338,21 @@ class MediaService {
     );
   }
 
+  /// 删除观看历史
+  Future<ApiResponse<void>> deleteWatchHistory(int id) async {
+    return _client.delete(ApiConstants.historyDelete(id));
+  }
+
+  /// 批量删除观看历史
+  Future<ApiResponse<void>> deleteWatchHistoryBatch(List<int> ids) async {
+    return _client.post(ApiConstants.historyBatchDelete, data: {'ids': ids});
+  }
+
+  /// 清空所有观看历史
+  Future<ApiResponse<void>> deleteAllWatchHistory() async {
+    return _client.delete(ApiConstants.historyDeleteAll);
+  }
+
   /// 获取单个媒体的观看进度
   Future<ApiResponse<WatchHistoryItem>> getWatchProgress(
     String mediaType,

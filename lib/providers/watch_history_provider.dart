@@ -71,4 +71,41 @@ class WatchHistoryNotifier extends StateNotifier<WatchHistoryState> {
       state = state.copyWith(items: response.data!);
     }
   }
+
+  Future<bool> delete(int id) async {
+    if (_service == null) return false;
+
+    final response = await _service.deleteWatchHistory(id);
+    if (response.isSuccess) {
+      state = state.copyWith(
+        items: state.items.where((item) => item.id != id).toList(),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> deleteBatch(List<int> ids) async {
+    if (_service == null) return false;
+
+    final response = await _service.deleteWatchHistoryBatch(ids);
+    if (response.isSuccess) {
+      state = state.copyWith(
+        items: state.items.where((item) => !ids.contains(item.id)).toList(),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> deleteAll() async {
+    if (_service == null) return false;
+
+    final response = await _service.deleteAllWatchHistory();
+    if (response.isSuccess) {
+      state = state.copyWith(items: []);
+      return true;
+    }
+    return false;
+  }
 }
