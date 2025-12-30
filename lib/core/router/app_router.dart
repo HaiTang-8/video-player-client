@@ -18,6 +18,7 @@ import '../../screens/storages/storage_browse_screen.dart';
 import '../../screens/library/category_detail_screen.dart';
 import '../../screens/library/watch_history_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
+import '../../screens/settings/database_backup_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -206,6 +207,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/playback-settings',
         builder: (context, state) => const PlaybackSettingsScreen(),
+      ),
+
+      // 数据库备份页面
+      GoRoute(
+        path: '/database-backup',
+        builder: (context, state) => const DatabaseBackupScreen(),
       ),
     ],
     errorBuilder:

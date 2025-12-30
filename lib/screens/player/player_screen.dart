@@ -10,6 +10,7 @@ import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/episode.dart';
+import '../../data/models/subtitle_info.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
 import 'widgets/custom_video_controls.dart';
@@ -52,6 +53,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Duration _lastSavedPosition = Duration.zero;
   MediaService? _mediaService;
   bool _hasSeekToInitialPosition = false;
+  List<SubtitleInfo> _externalSubtitles = [];
 
   @override
   void initState() {
@@ -163,6 +165,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _isDisposing = true;
     _progressTimer?.cancel();
+    _toastOverlay?.remove();
     _saveProgress(); // 退出时保存最终进度
     if (_isFullscreen) {
       _exitFullscreen();
@@ -216,15 +219,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _isLoading = true;
       _error = null;
       _currentStreamUrl = null;
+      _externalSubtitles = [];
       if (episodeIndex != null) _currentEpisodeIndex = episodeIndex;
     });
 
     try {
       String? streamUrl;
+      int? storageId;
+      String? filePath;
 
       if (widget.type == 'movie') {
         final response = await ref.read(movieStreamProvider(widget.id).future);
         streamUrl = response?.url;
+        storageId = response?.storageId;
+        filePath = response?.filePath;
       } else if (widget.type == 'episode' &&
           widget.tvShowId != null &&
           widget.seasonId != null) {
@@ -237,6 +245,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           )).future,
         );
         streamUrl = response?.url;
+        storageId = response?.storageId;
+        filePath = response?.filePath;
       }
 
       if (!mounted) return;
@@ -261,6 +271,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       _mediaService ??= ref.read(mediaServiceProvider); // 确保 service 已缓存
       _startProgressTimer(); // 视频加载成功后启动进度保存定时器
+
+      // 加载外挂字幕
+      _loadExternalSubtitles(storageId, filePath);
+
       setState(() {
         _isLoading = false;
       });
@@ -271,6 +285,76 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<void> _loadExternalSubtitles(int? storageId, String? filePath) async {
+    if (storageId == null || filePath == null) return;
+
+    final service = _mediaService ?? ref.read(mediaServiceProvider);
+    if (service == null) return;
+
+    try {
+      final response = await service.getSubtitles(
+        storageId: storageId,
+        filePath: filePath,
+      );
+      if (!mounted) return;
+
+      final subtitles = response.data ?? [];
+      setState(() {
+        _externalSubtitles = subtitles;
+      });
+
+      // 自动加载最佳匹配字幕（score >= 85）
+      if (subtitles.isNotEmpty && subtitles.first.score >= 85) {
+        final serverUrl = ref.read(serverUrlProvider);
+        final subUrl = subtitles.first.url.startsWith('http')
+            ? subtitles.first.url
+            : '$serverUrl${subtitles.first.url}';
+        await _player.setSubtitleTrack(SubtitleTrack.uri(subUrl, title: subtitles.first.displayName));
+
+        // 显示提示
+        if (mounted) {
+          _showSubtitleToast('已自动加载字幕: ${subtitles.first.displayName}');
+        }
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] Failed to load external subtitles: $e');
+    }
+  }
+
+  OverlayEntry? _toastOverlay;
+
+  void _showSubtitleToast(String message) {
+    _toastOverlay?.remove();
+    _toastOverlay = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 60,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_toastOverlay!);
+    Future.delayed(const Duration(seconds: 2), () {
+      _toastOverlay?.remove();
+      _toastOverlay = null;
+    });
   }
 
   Episode? get _currentEpisode {
@@ -391,6 +475,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         episodes: widget.episodes,
         currentEpisodeIndex: _currentEpisodeIndex,
         onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
+        externalSubtitles: _externalSubtitles,
+        serverUrl: ref.read(serverUrlProvider),
       ),
     );
   }

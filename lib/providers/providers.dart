@@ -6,3 +6,4 @@ export 'theme_provider.dart';
 export 'category_provider.dart';
 export 'playback_settings_provider.dart';
 export 'watch_history_provider.dart';
+export 'database_backup_provider.dart';

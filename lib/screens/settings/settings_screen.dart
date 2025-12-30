@@ -62,6 +62,20 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 24),
+          _buildSectionHeader('数据', theme),
+          _buildSettingsCard(
+            isDark,
+            children: [
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.archivebox,
+                iconColor: Colors.orange,
+                title: '数据库备份',
+                onTap: () => context.push('/database-backup'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
           _buildSectionHeader('关于', theme),
           _buildSettingsCard(
             isDark,

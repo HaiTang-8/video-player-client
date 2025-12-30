@@ -61,6 +61,15 @@ class ApiConstants {
   static String taskCancel(int taskId) => '$apiPrefix/tasks/$taskId/cancel';
   static const String tasksCancelAll = '$apiPrefix/tasks/cancel-all';
 
+  // 字幕
+  static const String subtitles = '$apiPrefix/subtitles';
+
   // 健康检查
   static const String health = '/health';
+
+  // 数据库备份
+  static const String databaseBackups = '$apiPrefix/system/database/backups';
+  static String databaseBackupDelete(String name) =>
+      '$apiPrefix/system/database/backups/$name';
+  static const String databaseRollback = '$apiPrefix/system/database/rollback';
 }

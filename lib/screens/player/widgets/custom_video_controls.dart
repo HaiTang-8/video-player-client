@@ -7,6 +7,7 @@ import 'package:screen_brightness/screen_brightness.dart';
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
+import '../../../data/models/subtitle_info.dart';
 
 class CustomVideoControls extends StatefulWidget {
   final Player player;
@@ -23,6 +24,8 @@ class CustomVideoControls extends StatefulWidget {
   final List<Episode>? episodes;
   final int currentEpisodeIndex;
   final void Function(int index)? onSelectEpisode;
+  final List<SubtitleInfo> externalSubtitles;
+  final String? serverUrl;
 
   const CustomVideoControls({
     super.key,
@@ -40,6 +43,8 @@ class CustomVideoControls extends StatefulWidget {
     this.episodes,
     this.currentEpisodeIndex = 0,
     this.onSelectEpisode,
+    this.externalSubtitles = const [],
+    this.serverUrl,
   });
 
   @override
@@ -692,7 +697,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   void _showSubtitleMenu() async {
     final panelWidth = WindowControls.isDesktop ? 200.0 : MediaQuery.of(context).size.width * 0.6;
-    final result = await showGeneralDialog<SubtitleTrack?>(
+    final result = await showGeneralDialog<dynamic>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '',
@@ -701,6 +706,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       pageBuilder: (_, __, ___) => const SizedBox(),
       transitionBuilder: (ctx, anim, _, __) {
         final currentId = _currentSubtitleTrack?.id;
+        final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
+        final externalSubs = widget.externalSubtitles;
+
         return Align(
           alignment: Alignment.centerRight,
           child: SlideTransition(
@@ -736,18 +744,41 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                                   : null,
                               onTap: () => Navigator.pop(ctx, SubtitleTrack.no()),
                             ),
-                            ..._subtitleTracks.where((t) => t.id != 'no').map(
-                                  (t) => ListTile(
-                                    dense: true,
-                                    title: Text(t.title ?? t.language ?? t.id,
-                                        style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                    trailing: currentId == t.id
-                                        ? _buildCheckMark()
-                                        : null,
-                                    onTap: () => Navigator.pop(ctx, t),
-                                  ),
+                            if (embeddedTracks.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                                child: Text('内嵌字幕', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              ),
+                              ...embeddedTracks.map(
+                                (t) => ListTile(
+                                  dense: true,
+                                  title: Text(t.title ?? t.language ?? t.id,
+                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                  trailing: currentId == t.id
+                                      ? _buildCheckMark()
+                                      : null,
+                                  onTap: () => Navigator.pop(ctx, t),
                                 ),
-                            if (_subtitleTracks.where((t) => t.id != 'no').isEmpty)
+                              ),
+                            ],
+                            if (externalSubs.isNotEmpty) ...[
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+                                child: Text('外挂字幕', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                              ),
+                              ...externalSubs.map(
+                                (sub) => ListTile(
+                                  dense: true,
+                                  title: Text(sub.displayName,
+                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
+                                  trailing: currentId == 'external_${sub.path}'
+                                      ? _buildCheckMark()
+                                      : null,
+                                  onTap: () => Navigator.pop(ctx, {'external': sub}),
+                                ),
+                              ),
+                            ],
+                            if (embeddedTracks.isEmpty && externalSubs.isEmpty)
                               const Padding(
                                 padding: EdgeInsets.all(16),
                                 child: Text('无可用字幕', style: TextStyle(color: Colors.white38)),
@@ -764,7 +795,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         );
       },
     );
-    if (result != null) widget.player.setSubtitleTrack(result);
+
+    if (result != null) {
+      if (result is SubtitleTrack) {
+        widget.player.setSubtitleTrack(result);
+      } else if (result is Map && result['external'] != null) {
+        final sub = result['external'] as SubtitleInfo;
+        final subUrl = sub.url.startsWith('http')
+            ? sub.url
+            : '${widget.serverUrl ?? ''}${sub.url}';
+        widget.player.setSubtitleTrack(SubtitleTrack.uri(subUrl, title: sub.displayName));
+      }
+    }
     _startHideTimer();
   }
 

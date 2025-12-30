@@ -349,4 +349,23 @@ class MediaService {
           WatchHistoryItem.fromJson(json as Map<String, dynamic>),
     );
   }
+
+  // ==================== 字幕相关 ====================
+
+  /// 获取外挂字幕列表
+  Future<ApiResponse<List<SubtitleInfo>>> getSubtitles({
+    required int storageId,
+    required String filePath,
+  }) async {
+    return _client.get<List<SubtitleInfo>>(
+      ApiConstants.subtitles,
+      queryParameters: {
+        'storage_id': storageId,
+        'file_path': filePath,
+      },
+      fromJson: (json) => (json as List)
+          .map((e) => SubtitleInfo.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
 }

@@ -12,3 +12,5 @@ export 'category.dart';
 export 'ai_tidy.dart';
 export 'playback_settings.dart';
 export 'source_group.dart';
+export 'subtitle_info.dart';
+export 'database_backup.dart';
