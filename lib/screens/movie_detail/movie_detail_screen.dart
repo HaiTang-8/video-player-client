@@ -379,10 +379,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     debugPrint('[_playMovie] final position=$position, title=${movie.title}');
     if (!context.mounted) return;
-    context.push(
+    await context.push(
       '/player/movie/${movie.id}',
       extra: {'position': position, 'title': movie.title},
     );
+    await Future.delayed(const Duration(milliseconds: 500));
+    ref.read(watchHistoryProvider.notifier).refresh();
   }
 
   /// 构建元数据行

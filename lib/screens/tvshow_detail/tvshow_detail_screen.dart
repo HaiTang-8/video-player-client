@@ -1177,10 +1177,12 @@ class _EpisodeCard extends ConsumerWidget {
     final title = tvShowName != null
         ? '$tvShowName - ${episode.displayTitle}'
         : episode.displayTitle;
-    context.push(
+    await context.push(
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
       extra: {'position': position, 'title': title, 'episodes': episodes},
     );
+    await Future.delayed(const Duration(milliseconds: 500));
+    ref.read(watchHistoryProvider.notifier).refresh();
   }
 
   Widget _buildThumbnail() {
