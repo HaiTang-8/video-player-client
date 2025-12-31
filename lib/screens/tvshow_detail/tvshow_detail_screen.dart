@@ -133,7 +133,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           return CustomScrollView(
             slivers: [
               // 顶部导航栏
-              if (!isDesktop) _buildAppBar(context, tvShow),
+              if (!isDesktop) _buildAppBar(context, tvShow, selectedSeason),
 
               // 背景图区域（含渐变蒙版和 Hero 内容）
               SliverToBoxAdapter(
@@ -499,7 +499,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建顶部导航栏
-  Widget _buildAppBar(BuildContext context, TvShow tvShow) {
+  Widget _buildAppBar(BuildContext context, TvShow tvShow, Season? selectedSeason) {
     return SliverAppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -514,6 +514,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       ),
       title: Text(tvShow.name),
       actions: [
+        if (selectedSeason != null &&
+            selectedSeason.episodes != null &&
+            selectedSeason.episodes!.any((e) => e.hasFile))
+          IconButton(
+            icon: const Icon(Icons.download_outlined, color: Colors.black, size: 20),
+            onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
+          ),
         IconButton(
           icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),
           onPressed: () => _scrapeTvShow(context, widget.tvShowId),
@@ -525,6 +532,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       ],
     );
+  }
+
+  void _navigateToDownload(BuildContext context, TvShow tvShow, Season season) {
+    context.push('/download-episodes', extra: {
+      'tvShowName': tvShow.name,
+      'seasonNumber': season.seasonNumber,
+      'season': season,
+      'storageName': tvShow.storageName,
+    });
   }
 
   /// 构建播放按钮

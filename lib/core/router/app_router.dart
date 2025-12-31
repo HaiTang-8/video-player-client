@@ -20,6 +20,8 @@ import '../../screens/library/watch_history_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
 import '../../screens/settings/database_backup_screen.dart';
 import '../../screens/tvshow_detail/overview_screen.dart';
+import '../../screens/download/download_episodes_screen.dart';
+import '../../screens/download/download_manager_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -226,6 +228,26 @@ final routerProvider = Provider<GoRouter>((ref) {
             overview: extra['overview'] as String,
           );
         },
+      ),
+
+      // 下载选择页面
+      GoRoute(
+        path: '/download-episodes',
+        builder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return DownloadEpisodesScreen(
+            tvShowName: extra['tvShowName'] as String,
+            seasonNumber: extra['seasonNumber'] as int,
+            season: extra['season'] as Season,
+            storageName: extra['storageName'] as String?,
+          );
+        },
+      ),
+
+      // 下载管理页面
+      GoRoute(
+        path: '/download-manager',
+        builder: (context, state) => const DownloadManagerScreen(),
       ),
     ],
     errorBuilder:
