@@ -116,10 +116,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         context.push('/tvshow/${item.mediaId}');
       }
     } else {
-      // 构建标题
       final title = _buildTitle(item);
-
-      // 直接打开播放器并 seek 到上次位置
       if (item.mediaType == 'movie') {
         await context.push(
           '/player/movie/${item.mediaId}',
@@ -127,6 +124,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         );
       } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
         final episodeInfo = item.mediaInfo!.episodeInfo!;
+        if (!mounted) return;
         final episodes = await ref.read(
           seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
         );
@@ -136,11 +134,12 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
           extra: {'position': item.position, 'title': title, 'episodes': episodes},
         );
       } else {
-        // fallback 到详情页
         context.push('/tvshow/${item.mediaId}');
         return;
       }
+      if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
       ref.read(watchHistoryProvider.notifier).refresh();
     }
   }

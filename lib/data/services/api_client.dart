@@ -81,7 +81,7 @@ class ApiClient {
     String path, {
     Map<String, dynamic>? queryParameters,
     T Function(dynamic json)? fromJson,
-    // 可选：针对“AI 整理/长任务”单独放宽超时，避免 Dio 默认 30s 触发“接收超时”
+    // 可选：针对"AI 整理/长任务"单独放宽超时，避免 Dio 默认 30s 触发"接收超时"
     Duration? receiveTimeout,
   }) async {
     try {
@@ -89,6 +89,25 @@ class ApiClient {
         path,
         queryParameters: queryParameters,
         options: _buildOptions(receiveTimeout: receiveTimeout),
+      );
+      return _handleResponse(response, fromJson);
+    } on DioException catch (e) {
+      return _handleError(e);
+    }
+  }
+
+  /// PUT 请求
+  Future<ApiResponse<T>> put<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic json)? fromJson,
+  }) async {
+    try {
+      final response = await _dio.put(
+        path,
+        data: data,
+        queryParameters: queryParameters,
       );
       return _handleResponse(response, fromJson);
     } on DioException catch (e) {

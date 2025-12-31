@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/download_indicators.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/season.dart';
 import '../../providers/download_provider.dart';
@@ -137,6 +138,7 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
     final notDownloaded = episodes.where((e) =>
         !downloadState.isEpisodeDownloaded(e.id) &&
         !downloadState.isEpisodeDownloading(e.id)).toList();
+    final hasActiveDownloads = downloadState.downloadingTasks.isNotEmpty;
 
     return Container(
       padding: EdgeInsets.only(
@@ -176,9 +178,18 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
                   color: Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(8),
                   onPressed: () => context.push('/download-manager'),
-                  child: const Text(
-                    '下载管理',
-                    style: TextStyle(color: Colors.black87, fontSize: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (hasActiveDownloads) ...[
+                        const AnimatedDownloadIndicator(size: 18),
+                        const SizedBox(width: 6),
+                      ],
+                      const Text(
+                        '下载管理',
+                        style: TextStyle(color: Colors.black87, fontSize: 16),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -323,13 +334,13 @@ class _EpisodeDownloadItem extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          _buildActionButton(isDownloaded, isDownloading, isPending),
+          _buildActionButton(isDownloaded, isDownloading, isPending, task?.progress ?? 0),
         ],
       ),
     );
   }
 
-  Widget _buildActionButton(bool isDownloaded, bool isDownloading, bool isPending) {
+  Widget _buildActionButton(bool isDownloaded, bool isDownloading, bool isPending, double progress) {
     if (isDownloaded) {
       return Icon(
         CupertinoIcons.checkmark_circle_fill,
@@ -338,8 +349,12 @@ class _EpisodeDownloadItem extends StatelessWidget {
       );
     }
 
-    if (isDownloading || isPending) {
-      return const CupertinoActivityIndicator(radius: 12);
+    if (isDownloading) {
+      return DownloadProgressIcon(progress: progress, size: 28);
+    }
+
+    if (isPending) {
+      return const AnimatedDownloadIndicator(size: 28);
     }
 
     return GestureDetector(

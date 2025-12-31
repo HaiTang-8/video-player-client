@@ -6,15 +6,26 @@ enum DownloadStatus {
   failed,
 }
 
+enum DownloadType {
+  movie,
+  episode,
+}
+
 class DownloadTask {
   final String id;
-  final int episodeId;
-  final int tvShowId;
-  final int seasonId;
-  final int seasonNumber;
-  final int episodeNumber;
-  final String episodeName;
-  final String tvShowName;
+  final DownloadType type;
+  // Movie fields
+  final int? movieId;
+  final String? movieTitle;
+  // Episode fields
+  final int? episodeId;
+  final int? tvShowId;
+  final int? seasonId;
+  final int? seasonNumber;
+  final int? episodeNumber;
+  final String? episodeName;
+  final String? tvShowName;
+  // Common fields
   final String? fileName;
   final int? fileSize;
   final int? runtime;
@@ -24,19 +35,23 @@ class DownloadTask {
   final DownloadStatus status;
   final double progress;
   final int downloadedBytes;
+  final double downloadSpeed;
   final String? errorMessage;
   final DateTime createdAt;
   final DateTime? completedAt;
 
   DownloadTask({
     required this.id,
-    required this.episodeId,
-    required this.tvShowId,
-    required this.seasonId,
-    required this.seasonNumber,
-    required this.episodeNumber,
-    required this.episodeName,
-    required this.tvShowName,
+    required this.type,
+    this.movieId,
+    this.movieTitle,
+    this.episodeId,
+    this.tvShowId,
+    this.seasonId,
+    this.seasonNumber,
+    this.episodeNumber,
+    this.episodeName,
+    this.tvShowName,
     this.fileName,
     this.fileSize,
     this.runtime,
@@ -46,6 +61,7 @@ class DownloadTask {
     this.status = DownloadStatus.pending,
     this.progress = 0.0,
     this.downloadedBytes = 0,
+    this.downloadSpeed = 0,
     this.errorMessage,
     required this.createdAt,
     this.completedAt,
@@ -53,6 +69,9 @@ class DownloadTask {
 
   DownloadTask copyWith({
     String? id,
+    DownloadType? type,
+    int? movieId,
+    String? movieTitle,
     int? episodeId,
     int? tvShowId,
     int? seasonId,
@@ -69,12 +88,16 @@ class DownloadTask {
     DownloadStatus? status,
     double? progress,
     int? downloadedBytes,
+    double? downloadSpeed,
     String? errorMessage,
     DateTime? createdAt,
     DateTime? completedAt,
   }) {
     return DownloadTask(
       id: id ?? this.id,
+      type: type ?? this.type,
+      movieId: movieId ?? this.movieId,
+      movieTitle: movieTitle ?? this.movieTitle,
       episodeId: episodeId ?? this.episodeId,
       tvShowId: tvShowId ?? this.tvShowId,
       seasonId: seasonId ?? this.seasonId,
@@ -91,6 +114,7 @@ class DownloadTask {
       status: status ?? this.status,
       progress: progress ?? this.progress,
       downloadedBytes: downloadedBytes ?? this.downloadedBytes,
+      downloadSpeed: downloadSpeed ?? this.downloadSpeed,
       errorMessage: errorMessage ?? this.errorMessage,
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
@@ -99,6 +123,9 @@ class DownloadTask {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'type': type.index,
+        'movie_id': movieId,
+        'movie_title': movieTitle,
         'episode_id': episodeId,
         'tv_show_id': tvShowId,
         'season_id': seasonId,
@@ -123,13 +150,18 @@ class DownloadTask {
   factory DownloadTask.fromJson(Map<String, dynamic> json) {
     return DownloadTask(
       id: json['id'] as String,
-      episodeId: json['episode_id'] as int,
-      tvShowId: json['tv_show_id'] as int,
-      seasonId: json['season_id'] as int,
-      seasonNumber: json['season_number'] as int,
-      episodeNumber: json['episode_number'] as int,
-      episodeName: json['episode_name'] as String,
-      tvShowName: json['tv_show_name'] as String,
+      type: json['type'] != null
+          ? DownloadType.values[json['type'] as int]
+          : DownloadType.episode,
+      movieId: json['movie_id'] as int?,
+      movieTitle: json['movie_title'] as String?,
+      episodeId: json['episode_id'] as int?,
+      tvShowId: json['tv_show_id'] as int?,
+      seasonId: json['season_id'] as int?,
+      seasonNumber: json['season_number'] as int?,
+      episodeNumber: json['episode_number'] as int?,
+      episodeName: json['episode_name'] as String?,
+      tvShowName: json['tv_show_name'] as String?,
       fileName: json['file_name'] as String?,
       fileSize: json['file_size'] as int?,
       runtime: json['runtime'] as int?,
@@ -139,6 +171,7 @@ class DownloadTask {
       status: DownloadStatus.values[json['status'] as int],
       progress: (json['progress'] as num).toDouble(),
       downloadedBytes: json['downloaded_bytes'] as int,
+      downloadSpeed: 0,
       errorMessage: json['error_message'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
       completedAt: json['completed_at'] != null
@@ -147,7 +180,25 @@ class DownloadTask {
     );
   }
 
-  String get displayTitle => '$episodeNumber. $episodeName';
+  String get displayTitle {
+    if (type == DownloadType.movie) {
+      return movieTitle ?? '未知电影';
+    }
+    if (episodeNumber != null && episodeName != null) {
+      return '$episodeNumber. $episodeName';
+    }
+    return episodeName ?? '未知剧集';
+  }
+
+  String get displaySubtitle {
+    if (type == DownloadType.movie) {
+      return storageName ?? '';
+    }
+    final parts = <String>[];
+    if (tvShowName != null) parts.add(tvShowName!);
+    if (seasonNumber != null) parts.add('第 $seasonNumber 季');
+    return parts.join(' · ');
+  }
 
   String get formattedFileSize {
     if (fileSize == null) return '';
@@ -169,6 +220,21 @@ class DownloadTask {
     return '${downloadedMB.toStringAsFixed(1)}/${totalMB.toStringAsFixed(1)} MB';
   }
 
+  String get formattedSpeed {
+    if (downloadSpeed <= 0) return '0 B/s';
+    if (downloadSpeed < 1024) {
+      return '${downloadSpeed.toStringAsFixed(0)} B/s';
+    }
+    final speedKB = downloadSpeed / 1024;
+    if (speedKB < 1024) {
+      return '${speedKB.toStringAsFixed(0)} KB/s';
+    }
+    final speedMB = speedKB / 1024;
+    return '${speedMB.toStringAsFixed(2)} MB/s';
+  }
+
+  bool get isMovie => type == DownloadType.movie;
+  bool get isEpisode => type == DownloadType.episode;
   bool get isDownloading => status == DownloadStatus.downloading;
   bool get isCompleted => status == DownloadStatus.completed;
   bool get isPaused => status == DownloadStatus.paused;

@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,7 @@ import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../data/models/episode.dart';
+import '../../data/models/storage.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
@@ -43,6 +46,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final Player _player;
   late final VideoController _controller;
+  late final Dio _dio;
   bool _isLoading = true;
   String? _error;
   String? _currentStreamUrl; // 当前播放地址，用于错误显示
@@ -58,6 +62,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ),
+    );
     _player = Player();
     _controller = VideoController(_player);
     _initEpisodeIndex();
@@ -263,9 +273,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final serverUrl = ref.read(serverUrlProvider);
       final fullUrl =
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
-      _currentStreamUrl = fullUrl;
+      final resolvedUrl = await _resolveRedirectTarget(fullUrl);
+      final playUrl = resolvedUrl ?? fullUrl;
+      final headers = await _buildAuthHeadersForPlayUrl(
+        playUrl,
+        storageId: storageId,
+      );
 
-      await _player.open(Media(fullUrl));
+      _currentStreamUrl = playUrl;
+      await _player.open(Media(playUrl, httpHeaders: headers));
 
       if (!mounted) return;
 
@@ -285,6 +301,99 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  Future<String?> _resolveRedirectTarget(String url) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        url,
+        options: Options(
+          followRedirects: false,
+          validateStatus:
+              (status) => status != null && status >= 200 && status < 400,
+          responseType: ResponseType.bytes,
+          // 保险起见：即便服务端没重定向（走代理），也只拉取 1 字节避免误触发大流量。
+          headers: const {'Range': 'bytes=0-0'},
+        ),
+      );
+
+      final code = response.statusCode ?? 0;
+      if (code >= 300 && code < 400) {
+        final loc = response.headers.value('location');
+        if (loc != null && loc.trim().isNotEmpty) {
+          return Uri.parse(url).resolve(loc.trim()).toString();
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Storage?> _getStorageById(int storageId) async {
+    final current = ref.read(storagesProvider).valueOrNull;
+    if (current != null) {
+      try {
+        return current.firstWhere((s) => s.id == storageId);
+      } catch (_) {}
+    }
+
+    await ref.read(storagesProvider.notifier).loadStorages();
+    final loaded = ref.read(storagesProvider).valueOrNull;
+    if (loaded == null) return null;
+    try {
+      return loaded.firstWhere((s) => s.id == storageId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _basicAuthHeader(String username, String password) {
+    final token = base64Encode(utf8.encode('$username:$password'));
+    return 'Basic $token';
+  }
+
+  int _effectivePort(Uri uri) {
+    if (uri.hasPort && uri.port > 0) return uri.port;
+    switch (uri.scheme.toLowerCase()) {
+      case 'https':
+        return 443;
+      case 'http':
+        return 80;
+      default:
+        return uri.port;
+    }
+  }
+
+  bool _sameOrigin(Uri? a, Uri? b) {
+    if (a == null || b == null) return false;
+    if (a.scheme.toLowerCase() != b.scheme.toLowerCase()) return false;
+    if (a.host.toLowerCase() != b.host.toLowerCase()) return false;
+    return _effectivePort(a) == _effectivePort(b);
+  }
+
+  Future<Map<String, String>?> _buildAuthHeadersForPlayUrl(
+    String playUrl, {
+    required int? storageId,
+  }) async {
+    if (storageId == null) return null;
+    final storage = await _getStorageById(storageId);
+    if (storage == null) return null;
+
+    if (storage.type.toLowerCase() != 'webdav') return null;
+    final settings = storage.settings;
+    if (settings == null) return null;
+
+    final webdavUrl = settings['url'];
+    final username = settings['username'];
+    final password = settings['password'];
+    if (webdavUrl == null || username == null || password == null) return null;
+    if (username.isEmpty) return null;
+
+    final webdavUri = Uri.tryParse(webdavUrl);
+    final playUri = Uri.tryParse(playUrl);
+
+    // 仅当目标 origin 与 WebDAV origin 一致时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
+    if (!_sameOrigin(webdavUri, playUri)) return null;
+    return {'Authorization': _basicAuthHeader(username, password)};
   }
 
   Future<void> _loadExternalSubtitles(int? storageId, String? filePath) async {

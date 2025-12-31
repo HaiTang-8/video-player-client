@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
@@ -492,6 +494,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   /// 构建顶部导航栏
   Widget _buildAppBar(BuildContext context, Movie movie) {
+    final hasFile = movie.filePath != null && movie.filePath!.isNotEmpty;
+
     return SliverAppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -506,16 +510,39 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       ),
       title: Text(movie.title),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),
-          onPressed: () => _scrapeMovie(context, movie.id),
-        ),
-        IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.black, size: 20),
-          onPressed: () => ref.invalidate(movieDetailProvider(widget.movieId)),
+        if (hasFile)
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            onPressed: () => _downloadMovie(context, movie),
+            child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
+          ),
+        PullDownButton(
+          itemBuilder: (context) => [
+            PullDownMenuItem(
+              title: '重新刮削',
+              icon: CupertinoIcons.wand_stars,
+              onTap: () => _scrapeMovie(context, movie.id),
+            ),
+            PullDownMenuItem(
+              title: '刷新',
+              icon: CupertinoIcons.refresh,
+              onTap: () => ref.invalidate(movieDetailProvider(widget.movieId)),
+            ),
+          ],
+          buttonBuilder: (context, showMenu) => CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            onPressed: showMenu,
+            child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
+          ),
         ),
       ],
     );
+  }
+
+  Future<void> _downloadMovie(BuildContext context, Movie movie) async {
+    final downloadManager = ref.read(downloadManagerProvider.notifier);
+    downloadManager.addMovieDownload(movie: movie);
+    IosUiUtils.showToast(context: context, message: '已添加到下载队列');
   }
 
   /// 构建播放按钮

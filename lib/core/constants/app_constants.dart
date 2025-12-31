@@ -6,7 +6,9 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   // 本地存储 Key
-  static const String serverUrlKey = 'server_url';
+  static const String serverUrlKey = 'server_url'; // 兼容旧版
+  static const String serverListKey = 'server_list';
+  static const String currentServerIdKey = 'current_server_id';
   static const String themeKey = 'theme_mode';
   static const String localeKey = 'locale';
   static const String seekDurationKey = 'playback_seek_duration';

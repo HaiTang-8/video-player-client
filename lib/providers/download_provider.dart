@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/download_task.dart';
 import '../data/models/episode.dart';
+import '../data/models/movie.dart';
 import '../data/services/download_service.dart';
 import 'server_provider.dart';
 
@@ -27,7 +28,7 @@ class DownloadManagerState {
   }
 
   List<DownloadTask> get downloadingTasks =>
-      tasks.where((t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending).toList();
+      tasks.where((t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending || t.status == DownloadStatus.paused).toList();
 
   List<DownloadTask> get completedTasks =>
       tasks.where((t) => t.status == DownloadStatus.completed).toList();
@@ -39,7 +40,10 @@ class DownloadManagerState {
       tasks.any((t) => t.episodeId == episodeId && t.status == DownloadStatus.completed);
 
   bool isEpisodeDownloading(int episodeId) =>
-      tasks.any((t) => t.episodeId == episodeId && (t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending));
+      tasks.any((t) => t.episodeId == episodeId &&
+          (t.status == DownloadStatus.downloading ||
+           t.status == DownloadStatus.pending ||
+           t.status == DownloadStatus.paused));
 
   DownloadTask? getTaskByEpisodeId(int episodeId) {
     try {
@@ -48,10 +52,29 @@ class DownloadManagerState {
       return null;
     }
   }
+
+  bool isMovieDownloaded(int movieId) =>
+      tasks.any((t) => t.movieId == movieId && t.status == DownloadStatus.completed);
+
+  bool isMovieDownloading(int movieId) =>
+      tasks.any((t) => t.movieId == movieId &&
+          (t.status == DownloadStatus.downloading ||
+           t.status == DownloadStatus.pending ||
+           t.status == DownloadStatus.paused));
+
+  DownloadTask? getTaskByMovieId(int movieId) {
+    try {
+      return tasks.firstWhere((t) => t.movieId == movieId);
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   final DownloadService _service;
+  DateTime? _lastSaveTime;
+  static const _saveThrottleMs = 2000;
 
   DownloadManagerNotifier(this._service) : super(const DownloadManagerState()) {
     _loadTasks();
@@ -67,10 +90,16 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
     await _service.saveTasks(state.tasks);
   }
 
-  void _updateTask(DownloadTask task) {
+  void _updateTask(DownloadTask task, {bool forceSave = false}) {
     final tasks = state.tasks.map((t) => t.id == task.id ? task : t).toList();
     state = state.copyWith(tasks: tasks);
-    _saveTasks();
+
+    final now = DateTime.now();
+    if (forceSave || _lastSaveTime == null ||
+        now.difference(_lastSaveTime!).inMilliseconds >= _saveThrottleMs) {
+      _lastSaveTime = now;
+      _saveTasks();
+    }
   }
 
   Future<void> addDownload({
@@ -130,12 +159,26 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
     }
   }
 
+  Future<void> addMovieDownload({required Movie movie}) async {
+    if (state.tasks.any((t) => t.movieId == movie.id)) {
+      debugPrint('Movie ${movie.id} already in download list');
+      return;
+    }
+
+    final task = await _service.createMovieTask(movie: movie);
+
+    state = state.copyWith(tasks: [...state.tasks, task]);
+    await _saveTasks();
+
+    _startDownload(task);
+  }
+
   void _startDownload(DownloadTask task) {
     _service.startDownload(
       task,
       (updated) => _updateTask(updated),
       (completed) {
-        _updateTask(completed);
+        _updateTask(completed, forceSave: true);
         _processNextInQueue();
       },
       (failed, error) {
@@ -143,7 +186,7 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
           status: DownloadStatus.failed,
           errorMessage: error,
         );
-        _updateTask(updatedTask);
+        _updateTask(updatedTask, forceSave: true);
         _processNextInQueue();
       },
     );
@@ -161,13 +204,13 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   void pauseDownload(String taskId) {
     _service.pauseDownload(taskId);
     final task = state.tasks.firstWhere((t) => t.id == taskId);
-    _updateTask(task.copyWith(status: DownloadStatus.paused));
+    _updateTask(task.copyWith(status: DownloadStatus.paused), forceSave: true);
   }
 
   void resumeDownload(String taskId) {
     final task = state.tasks.firstWhere((t) => t.id == taskId);
     final updatedTask = task.copyWith(status: DownloadStatus.pending);
-    _updateTask(updatedTask);
+    _updateTask(updatedTask, forceSave: true);
     _startDownload(updatedTask);
   }
 
@@ -186,7 +229,7 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
       downloadedBytes: 0,
       errorMessage: null,
     );
-    _updateTask(updatedTask);
+    _updateTask(updatedTask, forceSave: true);
     _startDownload(updatedTask);
   }
 

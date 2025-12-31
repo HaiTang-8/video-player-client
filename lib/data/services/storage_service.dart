@@ -38,6 +38,20 @@ class StorageService {
     return _client.delete(ApiConstants.storageDetail(id));
   }
 
+  /// 更新存储源
+  Future<ApiResponse<Storage>> updateStorage({
+    required int id,
+    required String name,
+    required String type,
+    required Map<String, String> settings,
+  }) async {
+    return _client.put<Storage>(
+      ApiConstants.storageDetail(id),
+      data: {'name': name, 'type': type, 'settings': settings},
+      fromJson: (json) => Storage.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 启动扫描
   Future<ApiResponse<ScanProgress>> startScan(
     int storageId, {

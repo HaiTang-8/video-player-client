@@ -225,6 +225,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         );
       } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
         final episodeInfo = item.mediaInfo!.episodeInfo!;
+        if (!mounted) return;
         final episodes = await ref.read(
           seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
         );
@@ -237,7 +238,9 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         context.push('/tvshow/${item.mediaId}');
         return;
       }
+      if (!mounted) return;
       await Future.delayed(const Duration(milliseconds: 500));
+      if (!mounted) return;
       ref.read(watchHistoryProvider.notifier).refresh();
     }
   }

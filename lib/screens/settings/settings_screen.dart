@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
@@ -16,7 +15,8 @@ class SettingsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final themeMode = ref.watch(themeModeProvider);
-    final serverUrl = ref.watch(serverUrlProvider);
+    final serverState = ref.watch(serverListProvider);
+    final currentServer = serverState.currentServer;
     final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
@@ -40,9 +40,9 @@ class SettingsScreen extends ConsumerWidget {
                 context, theme, isDark,
                 icon: CupertinoIcons.globe,
                 iconColor: Colors.blue,
-                title: '服务器地址',
-                subtitle: serverUrl ?? '未配置',
-                onTap: () => _showServerDialog(context, ref, serverUrl),
+                title: '服务器管理',
+                subtitle: currentServer?.name ?? '未配置',
+                onTap: () => context.push('/server-config'),
               ),
             ],
           ),
@@ -271,62 +271,5 @@ class SettingsScreen extends ConsumerWidget {
         ref.read(themeModeProvider.notifier).setThemeMode(value);
       }
     });
-  }
-
-  void _showServerDialog(BuildContext context, WidgetRef ref, String? current) {
-    final controller = TextEditingController(text: current);
-
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('服务器地址'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: CupertinoTextField(
-            controller: controller,
-            placeholder: 'http://192.168.1.100:8080',
-            keyboardType: TextInputType.url,
-            autofocus: true,
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () async {
-              final url = controller.text.trim();
-              if (url.isNotEmpty) {
-                final success = await ref
-                    .read(serverConnectionProvider.notifier)
-                    .testConnection(url);
-                if (success) {
-                  await ref
-                      .read(serverUrlProvider.notifier)
-                      .setServerUrl(url);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    IosUiUtils.showToast(
-                      context: context,
-                      message: '服务器连接成功',
-                    );
-                  }
-                } else {
-                  if (context.mounted) {
-                    IosUiUtils.showToast(
-                      context: context,
-                      message: '无法连接到服务器',
-                      isError: true,
-                    );
-                  }
-                }
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
-    );
   }
 }

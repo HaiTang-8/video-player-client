@@ -7,8 +7,11 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/constants/api_constants.dart';
 import '../models/download_task.dart';
 import '../models/episode.dart';
+import '../models/movie.dart';
+import '../models/storage.dart';
 
 typedef ProgressCallback = void Function(int received, int total);
 
@@ -16,6 +19,7 @@ class DownloadService {
   final Dio _dio;
   final String _serverUrl;
   final Map<String, CancelToken> _cancelTokens = {};
+  final Map<int, Storage> _storageCache = {};
 
   static const String _tasksKey = 'download_tasks';
 
@@ -30,8 +34,137 @@ class DownloadService {
     return downloadDir.path;
   }
 
-  String _buildDownloadUrl(int episodeId) {
-    return '$_serverUrl/api/v1/stream/episode/$episodeId';
+  Future<(String?, int?, String?, String?)> _fetchStreamUrl(
+    int tvShowId,
+    int seasonId,
+    int episodeId,
+  ) async {
+    try {
+      final response = await _dio.get(
+        '$_serverUrl${ApiConstants.episodeStream(tvShowId, seasonId, episodeId)}',
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final url = data['safe_url'] as String? ?? data['url'] as String?;
+          final storageId = data['storage_id'] as int?;
+          final filePath = data['file_path'] as String?;
+          if (url != null && url.isNotEmpty) {
+            final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
+            return (fullUrl, storageId, filePath, null);
+          }
+        }
+      }
+      return (null, null, null, '服务器返回数据格式错误');
+    } on DioException catch (e) {
+      return (null, null, null, e.message ?? '网络请求失败: ${e.type}');
+    } catch (e) {
+      return (null, null, null, '获取下载地址失败: $e');
+    }
+  }
+
+  Future<(String?, int?, String?, String?)> _fetchMovieStreamUrl(int movieId) async {
+    try {
+      final response = await _dio.get(
+        '$_serverUrl${ApiConstants.movieStream(movieId)}',
+      );
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'] as Map<String, dynamic>?;
+        if (data != null) {
+          final url = data['safe_url'] as String? ?? data['url'] as String?;
+          final storageId = data['storage_id'] as int?;
+          final filePath = data['file_path'] as String?;
+          if (url != null && url.isNotEmpty) {
+            final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
+            return (fullUrl, storageId, filePath, null);
+          }
+        }
+      }
+      return (null, null, null, '服务器返回数据格式错误');
+    } on DioException catch (e) {
+      return (null, null, null, e.message ?? '网络请求失败: ${e.type}');
+    } catch (e) {
+      return (null, null, null, '获取下载地址失败: $e');
+    }
+  }
+
+  Future<Storage?> _getStorageById(int storageId) async {
+    final cached = _storageCache[storageId];
+    if (cached != null) return cached;
+
+    try {
+      final response = await _dio.get('$_serverUrl${ApiConstants.storages}');
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'];
+        if (data is List) {
+          for (final item in data) {
+            if (item is! Map<String, dynamic>) continue;
+            final storage = Storage.fromJson(item);
+            _storageCache[storage.id] = storage;
+          }
+        }
+      }
+    } catch (_) {
+      // Ignore; fall through
+    }
+
+    return _storageCache[storageId];
+  }
+
+  String _basicAuthHeader(String username, String password) {
+    final token = base64Encode(utf8.encode('$username:$password'));
+    return 'Basic $token';
+  }
+
+  int _effectivePort(Uri uri) {
+    if (uri.hasPort && uri.port > 0) return uri.port;
+    switch (uri.scheme.toLowerCase()) {
+      case 'https':
+        return 443;
+      case 'http':
+        return 80;
+      default:
+        return uri.port;
+    }
+  }
+
+  bool _sameOrigin(Uri? a, Uri? b) {
+    if (a == null || b == null) return false;
+    if (a.scheme.toLowerCase() != b.scheme.toLowerCase()) return false;
+    if (a.host.toLowerCase() != b.host.toLowerCase()) return false;
+    return _effectivePort(a) == _effectivePort(b);
+  }
+
+  Future<String?> _resolveRedirectTarget(
+    String url, {
+    required CancelToken cancelToken,
+  }) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        url,
+        cancelToken: cancelToken,
+        options: Options(
+          followRedirects: false,
+          // 需要拿到 3xx 的 Location，所以把 3xx 视为“可接受状态”
+          validateStatus:
+              (status) => status != null && status >= 200 && status < 400,
+          responseType: ResponseType.bytes,
+          // 保险起见：即便服务端没重定向（走代理），也只拉取 1 字节避免误触发大流量。
+          headers: const {'Range': 'bytes=0-0'},
+        ),
+      );
+
+      final code = response.statusCode ?? 0;
+      if (code >= 300 && code < 400) {
+        final loc = response.headers.value('location');
+        if (loc != null && loc.trim().isNotEmpty) {
+          return Uri.parse(url).resolve(loc.trim()).toString();
+        }
+      }
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.cancel) return null;
+    } catch (_) {}
+    return null;
   }
 
   String _sanitizeFileName(String fileName) {
@@ -53,6 +186,7 @@ class DownloadService {
 
     final task = DownloadTask(
       id: 'ep_${episode.id}_${DateTime.now().millisecondsSinceEpoch}',
+      type: DownloadType.episode,
       episodeId: episode.id,
       tvShowId: episode.tvShowId,
       seasonId: episode.seasonId,
@@ -64,7 +198,34 @@ class DownloadService {
       fileSize: episode.fileSize,
       runtime: episode.runtime,
       storageName: storageName,
-      downloadUrl: _buildDownloadUrl(episode.id),
+      downloadUrl: '',
+      localPath: localPath,
+      status: DownloadStatus.pending,
+      createdAt: DateTime.now(),
+    );
+
+    return task;
+  }
+
+  Future<DownloadTask> createMovieTask({
+    required Movie movie,
+  }) async {
+    final dir = await _downloadDir;
+    final fileName = movie.filePath?.split('/').last ?? 'movie_${movie.id}.mp4';
+    final sanitizedFileName = _sanitizeFileName(fileName);
+
+    final localPath = '$dir/Movies/$sanitizedFileName';
+
+    final task = DownloadTask(
+      id: 'movie_${movie.id}_${DateTime.now().millisecondsSinceEpoch}',
+      type: DownloadType.movie,
+      movieId: movie.id,
+      movieTitle: movie.title,
+      fileName: fileName,
+      fileSize: movie.fileSize,
+      runtime: movie.runtime,
+      storageName: movie.storageName,
+      downloadUrl: '',
       localPath: localPath,
       status: DownloadStatus.pending,
       createdAt: DateTime.now(),
@@ -79,11 +240,40 @@ class DownloadService {
     void Function(DownloadTask) onComplete,
     void Function(DownloadTask, String) onError,
   ) async {
+    String? streamUrl;
+    int? storageId;
+    String? fetchError;
+
+    if (task.isMovie) {
+      final result = await _fetchMovieStreamUrl(task.movieId!);
+      streamUrl = result.$1;
+      storageId = result.$2;
+      fetchError = result.$4;
+    } else {
+      final result = await _fetchStreamUrl(
+        task.tvShowId!,
+        task.seasonId!,
+        task.episodeId!,
+      );
+      streamUrl = result.$1;
+      storageId = result.$2;
+      fetchError = result.$4;
+    }
+
+    if (streamUrl == null) {
+      onError(task, fetchError ?? '无法获取下载地址');
+      return;
+    }
+
+    // Update task with the actual download URL
+    var updatedTask = task.copyWith(downloadUrl: streamUrl);
+
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
+    IOSink? sink;
     try {
-      final file = File(task.localPath);
+      final file = File(updatedTask.localPath);
       final parentDir = file.parent;
       if (!await parentDir.exists()) {
         await parentDir.create(recursive: true);
@@ -94,27 +284,66 @@ class DownloadService {
         downloadedBytes = await file.length();
       }
 
+      // 尝试解析后端 /stream 的 302 直链；若后端当前为 proxy 模式，则 directUrl 为 null，仍走原 URL。
+      final directUrl = await _resolveRedirectTarget(
+        updatedTask.downloadUrl,
+        cancelToken: cancelToken,
+      );
+      final targetUrl = directUrl ?? updatedTask.downloadUrl;
+
+      // 仅在“目标 host 与 WebDAV host 一致”时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
+      final headers = <String, dynamic>{};
+      if (downloadedBytes > 0) {
+        headers['Range'] = 'bytes=$downloadedBytes-';
+      }
+      if (storageId != null) {
+        final storage = await _getStorageById(storageId);
+        if (storage?.type.toLowerCase() == 'webdav') {
+          final settings = storage?.settings;
+          final webdavUrl = settings?['url'];
+          final username = settings?['username'];
+          final password = settings?['password'];
+          if (webdavUrl != null &&
+              username != null &&
+              password != null &&
+              username.isNotEmpty) {
+            final webdavUri = Uri.tryParse(webdavUrl);
+            final targetUri = Uri.tryParse(targetUrl);
+            if (_sameOrigin(webdavUri, targetUri)) {
+              headers['Authorization'] = _basicAuthHeader(username, password);
+            }
+          }
+        }
+      }
+
       final options = Options(
-        headers: downloadedBytes > 0 ? {'Range': 'bytes=$downloadedBytes-'} : null,
+        headers: headers.isEmpty ? null : headers,
         responseType: ResponseType.stream,
       );
 
       final response = await _dio.get<ResponseBody>(
-        task.downloadUrl,
+        targetUrl,
         options: options,
         cancelToken: cancelToken,
       );
 
       final totalBytes = _parseContentLength(response, downloadedBytes);
 
-      final sink = file.openWrite(mode: downloadedBytes > 0 ? FileMode.append : FileMode.write);
+      sink = file.openWrite(mode: downloadedBytes > 0 ? FileMode.append : FileMode.write);
 
-      var updatedTask = task.copyWith(
+      updatedTask = updatedTask.copyWith(
         status: DownloadStatus.downloading,
         downloadedBytes: downloadedBytes,
-        fileSize: totalBytes > 0 ? totalBytes : task.fileSize,
+        fileSize: totalBytes > 0 ? totalBytes : updatedTask.fileSize,
       );
       onProgress(updatedTask);
+
+      // Speed calculation variables (Exponential Moving Average)
+      var lastUpdateTime = DateTime.now();
+      var lastBytes = downloadedBytes;
+      double smoothedSpeed = 0;
+      const double alpha = 0.3;
+      bool isFirstSpeedCalc = true;
 
       await for (final chunk in response.data!.stream) {
         if (cancelToken.isCancelled) break;
@@ -122,16 +351,30 @@ class DownloadService {
         sink.add(chunk);
         downloadedBytes += chunk.length;
 
+        // Calculate speed every 500ms using EMA
+        final now = DateTime.now();
+        final elapsed = now.difference(lastUpdateTime).inMilliseconds;
+        if (elapsed >= 500) {
+          final bytesDiff = downloadedBytes - lastBytes;
+          final instantSpeed = bytesDiff / (elapsed / 1000);
+          if (isFirstSpeedCalc) {
+            smoothedSpeed = instantSpeed;
+            isFirstSpeedCalc = false;
+          } else {
+            smoothedSpeed = alpha * instantSpeed + (1 - alpha) * smoothedSpeed;
+          }
+          lastUpdateTime = now;
+          lastBytes = downloadedBytes;
+        }
+
         final progress = totalBytes > 0 ? downloadedBytes / totalBytes : 0.0;
         updatedTask = updatedTask.copyWith(
           progress: progress,
           downloadedBytes: downloadedBytes,
+          downloadSpeed: smoothedSpeed,
         );
         onProgress(updatedTask);
       }
-
-      await sink.flush();
-      await sink.close();
 
       if (!cancelToken.isCancelled) {
         updatedTask = updatedTask.copyWith(
@@ -145,10 +388,15 @@ class DownloadService {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
-      onError(task, e.message ?? '下载失败');
+      onError(updatedTask, e.message ?? '下载失败');
     } catch (e) {
-      onError(task, e.toString());
+      onError(updatedTask, e.toString());
     } finally {
+      // 确保文件流被正确关闭
+      try {
+        await sink?.flush();
+        await sink?.close();
+      } catch (_) {}
       _cancelTokens.remove(task.id);
     }
   }
@@ -180,9 +428,20 @@ class DownloadService {
 
   Future<void> deleteDownload(DownloadTask task) async {
     cancelDownload(task.id);
+    // 等待文件流关闭
+    await Future.delayed(const Duration(milliseconds: 100));
+
     final file = File(task.localPath);
     if (await file.exists()) {
-      await file.delete();
+      try {
+        await file.delete();
+      } catch (_) {
+        // 文件可能仍被占用，稍后重试
+        await Future.delayed(const Duration(milliseconds: 200));
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
     }
 
     final parentDir = file.parent;

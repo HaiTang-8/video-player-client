@@ -11,6 +11,7 @@ import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import '../../core/widgets/download_indicators.dart';
 
 class ResourcesScreen extends ConsumerStatefulWidget {
   const ResourcesScreen({super.key});
@@ -87,6 +88,8 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   Widget build(BuildContext context) {
     final storagesAsync = ref.watch(storagesProvider);
     final globalScanState = ref.watch(globalScanStateProvider);
+    final downloadState = ref.watch(downloadManagerProvider);
+    final hasActiveDownloads = downloadState.downloadingTasks.isNotEmpty;
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -115,6 +118,13 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               title: const Text('资源库'),
               centerTitle: true,
               actions: [
+                IconButton(
+                  tooltip: '下载管理',
+                  onPressed: () => context.push('/download-manager'),
+                  icon: hasActiveDownloads
+                      ? const AnimatedDownloadIndicator(size: 20)
+                      : const Icon(CupertinoIcons.arrow_down_circle),
+                ),
                 CompositedTransformTarget(
                   link: _refreshButtonLink,
                   child: globalScanState.isScanning
@@ -148,6 +158,13 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
           : AppBar(
               title: const Text('资源库'),
               actions: [
+                IconButton(
+                  tooltip: '下载管理',
+                  onPressed: () => context.push('/download-manager'),
+                  icon: hasActiveDownloads
+                      ? const AnimatedDownloadIndicator(size: 20)
+                      : const Icon(CupertinoIcons.arrow_down_circle),
+                ),
                 CompositedTransformTarget(
                   link: _refreshButtonLink,
                   child: globalScanState.isScanning
@@ -269,7 +286,244 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   }
 
   void _editStorage(Storage storage) {
-    context.push('/storage-manage');
+    final settings = storage.settings ?? {};
+    final nameController = TextEditingController(text: storage.name);
+    final urlController = TextEditingController(
+      text: settings['url'] ?? settings['path'] ?? '',
+    );
+    final usernameController = TextEditingController(
+      text: settings['username'] ?? '',
+    );
+    final passwordController = TextEditingController(
+      text: settings['password'] ?? '',
+    );
+    final proxyUrlController = TextEditingController(
+      text: settings['proxy_url'] ?? '',
+    );
+    final publicBaseUrlController = TextEditingController(
+      text:
+          settings['public_base_url'] ??
+          settings['base_url'] ??
+          settings['public_url'] ??
+          '',
+    );
+    String selectedType = storage.type;
+    bool useProxy = settings['use_proxy'] == 'true';
+    String streamMode =
+        settings['stream_mode'] ??
+        (selectedType == 'local' ? 'proxy' : 'redirect');
+    bool obscurePassword = true;
+    bool isTesting = false;
+
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => CupertinoAlertDialog(
+          title: const Text('编辑存储源'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoTextField(
+                    controller: nameController,
+                    placeholder: '名称',
+                  ),
+                  const SizedBox(height: 12),
+                  if (selectedType == 'webdav') ...[
+                    CupertinoTextField(
+                      controller: urlController,
+                      placeholder: 'WebDAV URL',
+                      keyboardType: TextInputType.url,
+                    ),
+                    const SizedBox(height: 8),
+                    CupertinoTextField(
+                      controller: usernameController,
+                      placeholder: '用户名',
+                    ),
+                    const SizedBox(height: 8),
+                    CupertinoTextField(
+                      controller: passwordController,
+                      placeholder: '密码',
+                      obscureText: obscurePassword,
+                      suffix: GestureDetector(
+                        onTap: () => setState(() => obscurePassword = !obscurePassword),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Icon(
+                            obscurePassword ? CupertinoIcons.eye : CupertinoIcons.eye_slash,
+                            size: 20,
+                            color: CupertinoColors.systemGrey,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('使用代理访问', style: TextStyle(fontSize: 14)),
+                        CupertinoSwitch(
+                          value: useProxy,
+                          onChanged: (value) {
+                            setState(() {
+                              useProxy = value;
+                              if (!useProxy) proxyUrlController.clear();
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (useProxy) ...[
+                      const SizedBox(height: 8),
+                      CupertinoTextField(
+                        controller: proxyUrlController,
+                        placeholder: '代理地址（可选）',
+                        keyboardType: TextInputType.url,
+                      ),
+                    ],
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
+                        CupertinoSlidingSegmentedControl<String>(
+                          groupValue: streamMode,
+                          children: const {
+                            'proxy': Text('代理'),
+                            'redirect': Text('直连'),
+                          },
+                          onValueChanged: (value) {
+                            setState(() => streamMode = value!);
+                          },
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    CupertinoTextField(
+                      controller: urlController,
+                      placeholder: '路径',
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
+                        CupertinoSlidingSegmentedControl<String>(
+                          groupValue: streamMode,
+                          children: const {
+                            'proxy': Text('代理'),
+                            'redirect': Text('直连'),
+                          },
+                          onValueChanged: (value) {
+                            setState(() {
+                              streamMode = value!;
+                              if (streamMode != 'redirect') {
+                                publicBaseUrlController.clear();
+                              }
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (streamMode == 'redirect') ...[
+                      const SizedBox(height: 8),
+                      CupertinoTextField(
+                        controller: publicBaseUrlController,
+                        placeholder: '直连基地址（如：http://nas.local:8081/media）',
+                        keyboardType: TextInputType.url,
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              onPressed: isTesting ? null : () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) {
+                  IosUiUtils.showToast(context: context, message: '请输入名称', isError: true);
+                  return;
+                }
+
+                Map<String, String> newSettings;
+                if (selectedType == 'webdav') {
+                  newSettings = {
+                    'url': urlController.text.trim(),
+                    'username': usernameController.text.trim(),
+                    'password': passwordController.text,
+                    'use_proxy': useProxy.toString(),
+                    'stream_mode': streamMode,
+                  };
+                  final proxyUrl = proxyUrlController.text.trim();
+                  if (proxyUrl.isNotEmpty) newSettings['proxy_url'] = proxyUrl;
+                } else {
+                  if (streamMode == 'redirect' &&
+                      publicBaseUrlController.text.trim().isEmpty) {
+                    IosUiUtils.showToast(
+                      context: context,
+                      message: '直连模式需要填写直连基地址',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  newSettings = {
+                    'path': urlController.text.trim(),
+                    'stream_mode': streamMode,
+                  };
+                  final publicBaseUrl = publicBaseUrlController.text.trim();
+                  if (publicBaseUrl.isNotEmpty) {
+                    newSettings['public_base_url'] = publicBaseUrl;
+                  }
+                }
+
+                setState(() => isTesting = true);
+
+                final success = await ref.read(storagesProvider.notifier).updateStorage(
+                  id: storage.id,
+                  name: name,
+                  type: selectedType,
+                  settings: newSettings,
+                );
+
+                if (!success) {
+                  setState(() => isTesting = false);
+                  if (context.mounted) {
+                    IosUiUtils.showToast(context: context, message: '保存失败', isError: true);
+                  }
+                  return;
+                }
+
+                await ref.read(browseProvider(storage.id).notifier).browse('/');
+                setState(() => isTesting = false);
+
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  final browseState = ref.read(browseProvider(storage.id));
+                  if (browseState.error != null) {
+                    IosUiUtils.showToast(context: context, message: '已保存，但连接测试失败', isError: true);
+                  } else {
+                    IosUiUtils.showToast(context: context, message: '保存成功');
+                  }
+                }
+              },
+              child: isTesting
+                  ? const CupertinoActivityIndicator()
+                  : const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDeleteStorage(Storage storage) async {

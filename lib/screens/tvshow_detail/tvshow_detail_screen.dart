@@ -1,7 +1,9 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
@@ -500,6 +502,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   /// 构建顶部导航栏
   Widget _buildAppBar(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+    final hasDownloadableEpisodes = selectedSeason != null &&
+        selectedSeason.episodes != null &&
+        selectedSeason.episodes!.any((e) => e.hasFile);
+
     return SliverAppBar(
       backgroundColor: Colors.white,
       elevation: 0,
@@ -514,21 +520,30 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       ),
       title: Text(tvShow.name),
       actions: [
-        if (selectedSeason != null &&
-            selectedSeason.episodes != null &&
-            selectedSeason.episodes!.any((e) => e.hasFile))
-          IconButton(
-            icon: const Icon(Icons.download_outlined, color: Colors.black, size: 20),
+        if (hasDownloadableEpisodes)
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
             onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
+            child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
           ),
-        IconButton(
-          icon: const Icon(Icons.auto_fix_high, color: Colors.black, size: 20),
-          onPressed: () => _scrapeTvShow(context, widget.tvShowId),
-        ),
-        IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.black, size: 20),
-          onPressed:
-              () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
+        PullDownButton(
+          itemBuilder: (context) => [
+            PullDownMenuItem(
+              title: '重新刮削',
+              icon: CupertinoIcons.wand_stars,
+              onTap: () => _scrapeTvShow(context, widget.tvShowId),
+            ),
+            PullDownMenuItem(
+              title: '刷新',
+              icon: CupertinoIcons.refresh,
+              onTap: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
+            ),
+          ],
+          buttonBuilder: (context, showMenu) => CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            onPressed: showMenu,
+            child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
+          ),
         ),
       ],
     );
@@ -1592,6 +1607,8 @@ class _SourceGroupsSheet extends ConsumerWidget {
       ref.invalidate(
         seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)),
       );
+      // 刷新剧集详情（包含 episodes 数据，下载列表需要）
+      ref.invalidate(tvShowDetailProvider(tvShowId));
     }
   }
 }

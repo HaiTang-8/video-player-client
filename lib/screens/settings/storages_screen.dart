@@ -124,8 +124,11 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
     final proxyUrlController = TextEditingController();
+    final publicBaseUrlController = TextEditingController();
     String selectedType = 'webdav';
     bool useProxy = false;
+    // WebDAV 默认直连；本地默认代理（保持兼容）。
+    String streamMode = 'redirect';
 
     showCupertinoDialog<void>(
       context: context,
@@ -158,6 +161,13 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                       onValueChanged: (value) {
                         setState(() {
                           selectedType = value!;
+                          // 根据类型重置默认值，避免“切换类型后残留上一次配置”造成误用。
+                          if (selectedType == 'webdav') {
+                            streamMode = 'redirect';
+                            publicBaseUrlController.clear();
+                          } else {
+                            streamMode = 'proxy';
+                          }
                         });
                       },
                     ),
@@ -206,11 +216,60 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                         keyboardType: TextInputType.url,
                       ),
                     ],
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
+                        CupertinoSlidingSegmentedControl<String>(
+                          groupValue: streamMode,
+                          children: const {
+                            'proxy': Text('代理'),
+                            'redirect': Text('直连'),
+                          },
+                          onValueChanged: (value) {
+                            setState(() {
+                              streamMode = value!;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
                   ] else ...[
                     CupertinoTextField(
                       controller: urlController,
                       placeholder: '路径（如：/path/to/media）',
                     ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
+                        CupertinoSlidingSegmentedControl<String>(
+                          groupValue: streamMode,
+                          children: const {
+                            'proxy': Text('代理'),
+                            'redirect': Text('直连'),
+                          },
+                          onValueChanged: (value) {
+                            setState(() {
+                              streamMode = value!;
+                              if (streamMode != 'redirect') {
+                                publicBaseUrlController.clear();
+                              }
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (streamMode == 'redirect') ...[
+                      const SizedBox(height: 8),
+                      CupertinoTextField(
+                        controller: publicBaseUrlController,
+                        placeholder: '直连基地址（如：http://nas.local:8081/media）',
+                        keyboardType: TextInputType.url,
+                      ),
+                    ],
                   ],
                 ],
               ),
@@ -236,13 +295,31 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                     'username': usernameController.text.trim(),
                     'password': passwordController.text,
                     'use_proxy': useProxy.toString(),
+                    'stream_mode': streamMode,
                   };
                   final proxyUrl = proxyUrlController.text.trim();
                   if (proxyUrl.isNotEmpty) {
                     settings['proxy_url'] = proxyUrl;
                   }
                 } else {
-                  settings = {'path': urlController.text.trim()};
+                  if (streamMode == 'redirect' &&
+                      publicBaseUrlController.text.trim().isEmpty) {
+                    IosUiUtils.showToast(
+                      context: context,
+                      message: '直连模式需要填写直连基地址',
+                      isError: true,
+                    );
+                    return;
+                  }
+
+                  settings = {
+                    'path': urlController.text.trim(),
+                    'stream_mode': streamMode,
+                  };
+                  final publicBaseUrl = publicBaseUrlController.text.trim();
+                  if (publicBaseUrl.isNotEmpty) {
+                    settings['public_base_url'] = publicBaseUrl;
+                  }
                 }
 
                 final success = await ref

@@ -75,6 +75,29 @@ class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
     }
     return false;
   }
+
+  /// 更新存储源
+  Future<bool> updateStorage({
+    required int id,
+    required String name,
+    required String type,
+    required Map<String, String> settings,
+  }) async {
+    if (_service == null) return false;
+
+    final response = await _service.updateStorage(
+      id: id,
+      name: name,
+      type: type,
+      settings: settings,
+    );
+
+    if (response.isSuccess) {
+      await loadStorages();
+      return true;
+    }
+    return false;
+  }
 }
 
 /// 全局扫描聚合状态

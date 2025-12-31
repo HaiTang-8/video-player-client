@@ -218,6 +218,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const DatabaseBackupScreen(),
       ),
 
+      // 服务器管理页面（从设置进入）
+      GoRoute(
+        path: '/server-config',
+        builder: (context, state) => const ServerConfigScreen(),
+      ),
+
       // 剧情简介页面
       GoRoute(
         path: '/overview',
