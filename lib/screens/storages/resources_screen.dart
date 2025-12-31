@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,40 @@ class ResourcesScreen extends ConsumerStatefulWidget {
 
 class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   final GlobalKey _refreshButtonKey = GlobalKey();
+  final LayerLink _refreshButtonLink = LayerLink();
+  OverlayEntry? _popoverEntry;
+
+  @override
+  void dispose() {
+    _removePopover();
+    super.dispose();
+  }
+
+  void _removePopover() {
+    _popoverEntry?.remove();
+    _popoverEntry = null;
+  }
+
+  void _showPopover() {
+    _removePopover();
+    _popoverEntry = OverlayEntry(
+      builder: (context) {
+        final state = ref.read(globalScanStateProvider);
+        return _ScanPopoverOverlay(
+          link: _refreshButtonLink,
+          state: state,
+          onClose: () {
+            ref.read(globalScanStateProvider.notifier).dismiss();
+            _removePopover();
+          },
+          onCancel: () {
+            ref.read(globalScanStateProvider.notifier).cancelAllScans();
+          },
+        );
+      },
+    );
+    Overlay.of(context).insert(_popoverEntry!);
+  }
 
   @override
   void initState() {
@@ -55,6 +91,23 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    // 监听扫描状态变化，自动管理弹窗
+    ref.listen<GlobalScanState>(globalScanStateProvider, (prev, next) {
+      final shouldShow = !next.dismissed && (next.isScanning || next.foundFiles > 0);
+      final wasShowing = prev != null && !prev.dismissed && (prev.isScanning || prev.foundFiles > 0);
+
+      if (shouldShow && !wasShowing) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _showPopover();
+        });
+      } else if (!shouldShow && wasShowing) {
+        _removePopover();
+      } else if (shouldShow && _popoverEntry != null) {
+        // 更新弹窗内容
+        _popoverEntry!.markNeedsBuild();
+      }
+    });
+
     return Scaffold(
       backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
       appBar: isDesktop
@@ -62,27 +115,29 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               title: const Text('资源库'),
               centerTitle: true,
               actions: [
-                if (globalScanState.isScanning)
-                  IconButton(
-                    key: _refreshButtonKey,
-                    tooltip: '扫描存储源',
-                    onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
-                    icon: const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  PullDownButton(
-                    key: _refreshButtonKey,
-                    itemBuilder: (context) => _buildScanMenuItems(),
-                    buttonBuilder: (context, showMenu) => IconButton(
-                      tooltip: '扫描存储源',
-                      onPressed: showMenu,
-                      icon: const Icon(CupertinoIcons.refresh),
-                    ),
-                  ),
+                CompositedTransformTarget(
+                  link: _refreshButtonLink,
+                  child: globalScanState.isScanning
+                      ? IconButton(
+                          key: _refreshButtonKey,
+                          tooltip: '扫描存储源',
+                          onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
+                          icon: const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : PullDownButton(
+                          key: _refreshButtonKey,
+                          itemBuilder: (context) => _buildScanMenuItems(),
+                          buttonBuilder: (context, showMenu) => IconButton(
+                            tooltip: '扫描存储源',
+                            onPressed: showMenu,
+                            icon: const Icon(CupertinoIcons.refresh),
+                          ),
+                        ),
+                ),
                 IconButton(
                   tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
@@ -93,27 +148,29 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
           : AppBar(
               title: const Text('资源库'),
               actions: [
-                if (globalScanState.isScanning)
-                  IconButton(
-                    key: _refreshButtonKey,
-                    tooltip: '扫描存储源',
-                    onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
-                    icon: const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                else
-                  PullDownButton(
-                    key: _refreshButtonKey,
-                    itemBuilder: (context) => _buildScanMenuItems(),
-                    buttonBuilder: (context, showMenu) => IconButton(
-                      tooltip: '扫描存储源',
-                      onPressed: showMenu,
-                      icon: const Icon(CupertinoIcons.refresh),
-                    ),
-                  ),
+                CompositedTransformTarget(
+                  link: _refreshButtonLink,
+                  child: globalScanState.isScanning
+                      ? IconButton(
+                          key: _refreshButtonKey,
+                          tooltip: '扫描存储源',
+                          onPressed: () => ref.read(globalScanStateProvider.notifier).showPopover(),
+                          icon: const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : PullDownButton(
+                          key: _refreshButtonKey,
+                          itemBuilder: (context) => _buildScanMenuItems(),
+                          buttonBuilder: (context, showMenu) => IconButton(
+                            tooltip: '扫描存储源',
+                            onPressed: showMenu,
+                            icon: const Icon(CupertinoIcons.refresh),
+                          ),
+                        ),
+                ),
                 IconButton(
                   tooltip: '添加存储源',
                   onPressed: () => context.push('/storage-manage'),
@@ -154,13 +211,6 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               );
             },
           ),
-          if (!globalScanState.dismissed && (globalScanState.isScanning || globalScanState.foundFiles > 0))
-            _ScanPopover(
-              buttonKey: _refreshButtonKey,
-              state: globalScanState,
-              onClose: () => ref.read(globalScanStateProvider.notifier).dismiss(),
-              onCancel: () => ref.read(globalScanStateProvider.notifier).cancelAllScans(),
-            ),
         ],
       ),
     );
@@ -356,154 +406,120 @@ class _StorageTile extends StatelessWidget {
   }
 }
 
-class _ScanPopover extends StatefulWidget {
-  final GlobalKey buttonKey;
+class _ScanPopoverOverlay extends StatelessWidget {
+  final LayerLink link;
   final GlobalScanState state;
   final VoidCallback onClose;
   final VoidCallback onCancel;
 
-  const _ScanPopover({
-    required this.buttonKey,
+  const _ScanPopoverOverlay({
+    required this.link,
     required this.state,
     required this.onClose,
     required this.onCancel,
   });
 
   @override
-  State<_ScanPopover> createState() => _ScanPopoverState();
-}
-
-class _ScanPopoverState extends State<_ScanPopover> {
-  double? _buttonCenterX;
-  double? _buttonBottom;
-
-  @override
-  void initState() {
-    super.initState();
-    _schedulePositionUpdate();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ScanPopover oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _schedulePositionUpdate();
-  }
-
-  void _schedulePositionUpdate() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _updatePosition();
-    });
-  }
-
-  void _updatePosition() {
-    final renderBox = widget.buttonKey.currentContext?.findRenderObject() as RenderBox?;
-    if (renderBox != null && renderBox.hasSize) {
-      final pos = renderBox.localToGlobal(Offset.zero);
-      if (mounted) {
-        setState(() {
-          _buttonCenterX = pos.dx + renderBox.size.width / 2;
-          _buttonBottom = pos.dy + renderBox.size.height;
-        });
-      }
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (_buttonCenterX == null || _buttonBottom == null) {
-      return const SizedBox.shrink();
-    }
-
-    const popoverWidth = 220.0;
     final screenWidth = MediaQuery.of(context).size.width;
-    // body 的坐标系从 AppBar 下方开始，需要减去 AppBar 高度
-    final appBarHeight = WindowControls.isDesktop ? 52.0 : kToolbarHeight;
+    const desiredWidthMobile = 280.0;
+    const horizontalMargin = 16.0;
+    final maxWidth = math.max(0.0, screenWidth - horizontalMargin * 2);
+    final popoverWidth = math.min(desiredWidthMobile, maxWidth);
 
-    // 计算气泡左边位置，确保不超出屏幕
-    double popoverLeft = _buttonCenterX! - popoverWidth / 2;
-    popoverLeft = popoverLeft.clamp(16.0, screenWidth - popoverWidth - 16);
-
-    // 计算小三角相对于气泡的偏移（让三角对准按钮中心）
-    final triangleOffset = _buttonCenterX! - popoverLeft - 8; // 8 是三角宽度的一半
+    // 三角形相对于弹窗右边缘的偏移（让三角指向按钮中心）
+    const triangleRightOffset = 40.0;
 
     return Positioned(
-      left: popoverLeft,
-      top: _buttonBottom! - appBarHeight + 8,
-      child: Material(
-        color: Colors.transparent,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 小三角（通过 Padding 偏移到按钮正下方）
-            Padding(
-              padding: EdgeInsets.only(left: triangleOffset.clamp(8.0, popoverWidth - 24)),
-              child: CustomPaint(
-                size: const Size(16, 8),
-                painter: _TrianglePainter(),
-              ),
+      top: 0,
+      left: 0,
+      child: CompositedTransformFollower(
+        link: link,
+        targetAnchor: Alignment.bottomCenter,
+        followerAnchor: Alignment.topRight,
+        offset: const Offset(triangleRightOffset + 8, 8), // 向左偏移，让右边缘留出空间
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            width: popoverWidth,
+            constraints: BoxConstraints(
+              maxWidth: screenWidth - horizontalMargin * 2,
             ),
-            // 气泡主体
-            Container(
-              width: popoverWidth,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2563EB),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // 小三角（右侧偏移）
+                Padding(
+                  padding: const EdgeInsets.only(right: triangleRightOffset),
+                  child: CustomPaint(
+                    size: const Size(16, 8),
+                    painter: _TrianglePainter(),
+                  ),
+                ),
+                // 气泡主体
+                Container(
+                  width: popoverWidth,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2563EB),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            state.isScanning ? '正在扫描' : '扫描完成',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: onClose,
+                            child: const Icon(Icons.close, color: Colors.white, size: 18),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
                       Text(
-                        widget.state.isScanning ? '正在扫描' : '扫描完成',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                        state.foundFiles == 0 && state.isScanning
+                            ? '正在扫描目录...'
+                            : '已找到 ${state.foundFiles}，待更新 ${state.pendingFiles}，已更新 ${state.updatedFiles}',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontSize: 13,
                         ),
                       ),
-                      GestureDetector(
-                        onTap: widget.onClose,
-                        child: const Icon(Icons.close, color: Colors.white, size: 18),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.state.foundFiles == 0 && widget.state.isScanning
-                        ? '正在扫描目录...'
-                        : '已找到 ${widget.state.foundFiles}，待更新 ${widget.state.pendingFiles}，已更新 ${widget.state.updatedFiles}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.9),
-                      fontSize: 13,
-                    ),
-                  ),
-                  if (widget.state.isScanning) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton(
-                        onPressed: widget.onCancel,
-                        style: TextButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.2),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                      if (state.isScanning) ...[
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: onCancel,
+                            style: TextButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(alpha: 0.2),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                            child: const Text('取消扫描'),
                           ),
                         ),
-                        child: const Text('取消扫描'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
