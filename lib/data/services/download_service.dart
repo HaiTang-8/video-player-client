@@ -171,7 +171,7 @@ class DownloadService {
         final downloadUrl = data?['url'] as String?;
         debugPrint('[DownloadService] downloadUrl=$downloadUrl');
         if (downloadUrl != null && downloadUrl.isNotEmpty) {
-          return downloadUrl;
+          return downloadUrl.startsWith('http') ? downloadUrl : '$_serverUrl$downloadUrl';
         }
       }
     } catch (e) {
