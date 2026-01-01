@@ -112,57 +112,58 @@ class DownloadService {
     }
   }
 
-  String? _cachedPublicIP;
-  DateTime? _publicIPCacheTime;
+  // TODO: 暂不使用公网 IP 功能，115 只需要 User-Agent
+  // String? _cachedPublicIP;
+  // DateTime? _publicIPCacheTime;
 
-  Future<String?> _getPublicIP() async {
-    // 缓存 5 分钟
-    if (_cachedPublicIP != null && _publicIPCacheTime != null) {
-      if (DateTime.now().difference(_publicIPCacheTime!).inMinutes < 5) {
-        return _cachedPublicIP;
-      }
-    }
+  // Future<String?> _getPublicIP() async {
+  //   // 缓存 5 分钟
+  //   if (_cachedPublicIP != null && _publicIPCacheTime != null) {
+  //     if (DateTime.now().difference(_publicIPCacheTime!).inMinutes < 5) {
+  //       return _cachedPublicIP;
+  //     }
+  //   }
 
-    // 多个备用服务
-    final services = [
-      'https://api.ipify.org',
-      'https://ifconfig.me/ip',
-      'https://icanhazip.com',
-      'https://api.ip.sb/ip',
-    ];
+  //   // 多个备用服务
+  //   final services = [
+  //     'https://api.ipify.org',
+  //     'https://ifconfig.me/ip',
+  //     'https://icanhazip.com',
+  //     'https://api.ip.sb/ip',
+  //   ];
 
-    for (final service in services) {
-      try {
-        debugPrint('[DownloadService] trying to get IP from: $service');
-        final response = await _dio.get(
-          service,
-          options: Options(
-            receiveTimeout: const Duration(seconds: 5),
-            sendTimeout: const Duration(seconds: 5),
-          ),
-        );
-        if (response.statusCode == 200 && response.data != null) {
-          final ip = response.data.toString().trim();
-          if (ip.isNotEmpty && RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(ip)) {
-            _cachedPublicIP = ip;
-            _publicIPCacheTime = DateTime.now();
-            debugPrint('[DownloadService] got public IP: $ip from $service');
-            return _cachedPublicIP;
-          }
-        }
-      } catch (e) {
-        debugPrint('[DownloadService] failed to get IP from $service: $e');
-      }
-    }
-    return null;
-  }
+  //   for (final service in services) {
+  //     try {
+  //       debugPrint('[DownloadService] trying to get IP from: $service');
+  //       final response = await _dio.get(
+  //         service,
+  //         options: Options(
+  //           receiveTimeout: const Duration(seconds: 5),
+  //           sendTimeout: const Duration(seconds: 5),
+  //         ),
+  //       );
+  //       if (response.statusCode == 200 && response.data != null) {
+  //         final ip = response.data.toString().trim();
+  //         if (ip.isNotEmpty && RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(ip)) {
+  //           _cachedPublicIP = ip;
+  //           _publicIPCacheTime = DateTime.now();
+  //           debugPrint('[DownloadService] got public IP: $ip from $service');
+  //           return _cachedPublicIP;
+  //         }
+  //       }
+  //     } catch (e) {
+  //       debugPrint('[DownloadService] failed to get IP from $service: $e');
+  //     }
+  //   }
+  //   return null;
+  // }
 
   Future<String?> _fetchDownloadUrl(String apiPath) async {
     try {
-      final publicIP = await _getPublicIP();
-      debugPrint('[DownloadService] publicIP=$publicIP');
-      final queryParams = publicIP != null ? '?client_ip=$publicIP' : '';
-      final url = '$_serverUrl$apiPath$queryParams';
+      // TODO: 暂不使用公网 IP，115 只需要 User-Agent
+      // final publicIP = await _getPublicIP();
+      // final queryParams = publicIP != null ? '?client_ip=$publicIP' : '';
+      final url = '$_serverUrl$apiPath';
       debugPrint('[DownloadService] requesting: $url');
       final response = await _dio.get(url);
       if (response.statusCode == 200 && response.data != null) {
@@ -325,14 +326,6 @@ class DownloadService {
     }
 
     debugPrint('[DownloadService] startDownload streamUrl=$streamUrl');
-
-    // 验证实际出口 IP
-    try {
-      final ipCheckResponse = await _dio.get('https://icanhazip.com');
-      debugPrint('[DownloadService] actual outgoing IP when downloading: ${ipCheckResponse.data.toString().trim()}');
-    } catch (e) {
-      debugPrint('[DownloadService] failed to verify outgoing IP: $e');
-    }
 
     // Update task with the actual download URL
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
