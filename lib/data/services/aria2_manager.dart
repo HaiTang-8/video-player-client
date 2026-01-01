@@ -37,13 +37,16 @@ class Aria2Manager {
     return '$binDir/aria2c';
   }
 
-  /// 获取 bundle 中的 aria2c 路径 (macOS)
   String? get _bundledBinaryPath {
-    if (!Platform.isMacOS) return null;
     final executable = Platform.resolvedExecutable;
-    final appBundle = File(executable).parent.parent.path;
-    final bundledPath = '$appBundle/Resources/aria2c';
-    if (File(bundledPath).existsSync()) return bundledPath;
+    if (Platform.isMacOS) {
+      final appBundle = File(executable).parent.parent.path;
+      final bundledPath = '$appBundle/Resources/aria2c';
+      if (File(bundledPath).existsSync()) return bundledPath;
+    } else if (Platform.isWindows) {
+      final bundledPath = '${File(executable).parent.path}/aria2c.exe';
+      if (File(bundledPath).existsSync()) return bundledPath;
+    }
     return null;
   }
 
