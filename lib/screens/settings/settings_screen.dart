@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
+import '../../providers/aria2_provider.dart';
 import '../../providers/providers.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -17,6 +18,7 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final serverState = ref.watch(serverListProvider);
     final currentServer = serverState.currentServer;
+    final aria2Config = ref.watch(aria2ConfigProvider);
     final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
@@ -58,6 +60,21 @@ class SettingsScreen extends ConsumerWidget {
                 title: '主题',
                 subtitle: _getThemeModeText(themeMode),
                 onTap: () => _showThemeDialog(context, ref, themeMode),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          _buildSectionHeader('下载', theme),
+          _buildSettingsCard(
+            isDark,
+            children: [
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.arrow_down_circle,
+                iconColor: Colors.green,
+                title: 'aria2 下载',
+                subtitle: aria2Config.enabled ? '已启用' : '未启用',
+                onTap: () => context.push('/aria2-settings'),
               ),
             ],
           ),

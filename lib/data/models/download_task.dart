@@ -39,6 +39,7 @@ class DownloadTask {
   final String? errorMessage;
   final DateTime createdAt;
   final DateTime? completedAt;
+  final String? aria2Gid;
 
   DownloadTask({
     required this.id,
@@ -65,6 +66,7 @@ class DownloadTask {
     this.errorMessage,
     required this.createdAt,
     this.completedAt,
+    this.aria2Gid,
   });
 
   DownloadTask copyWith({
@@ -92,6 +94,7 @@ class DownloadTask {
     String? errorMessage,
     DateTime? createdAt,
     DateTime? completedAt,
+    String? aria2Gid,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -118,6 +121,7 @@ class DownloadTask {
       errorMessage: errorMessage ?? this.errorMessage,
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
+      aria2Gid: aria2Gid ?? this.aria2Gid,
     );
   }
 
@@ -145,6 +149,7 @@ class DownloadTask {
         'error_message': errorMessage,
         'created_at': createdAt.toIso8601String(),
         'completed_at': completedAt?.toIso8601String(),
+        'aria2_gid': aria2Gid,
       };
 
   factory DownloadTask.fromJson(Map<String, dynamic> json) {
@@ -177,6 +182,7 @@ class DownloadTask {
       completedAt: json['completed_at'] != null
           ? DateTime.parse(json['completed_at'] as String)
           : null,
+      aria2Gid: json['aria2_gid'] as String?,
     );
   }
 

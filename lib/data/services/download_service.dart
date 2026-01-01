@@ -37,8 +37,9 @@ class DownloadService {
   Future<(String?, int?, String?, String?)> _fetchStreamUrl(
     int tvShowId,
     int seasonId,
-    int episodeId,
-  ) async {
+    int episodeId, {
+    String? userAgent,
+  }) async {
     try {
       final response = await _dio.get(
         '$_serverUrl${ApiConstants.episodeStream(tvShowId, seasonId, episodeId)}',
@@ -54,6 +55,7 @@ class DownloadService {
           if (sourceId != null) {
             final downloadUrl = await _fetchDownloadUrl(
               ApiConstants.downloadSourceUrl(sourceId),
+              userAgent: userAgent,
             );
             if (downloadUrl != null) {
               return (downloadUrl, storageId, filePath, null);
@@ -76,11 +78,15 @@ class DownloadService {
     }
   }
 
-  Future<(String?, int?, String?, String?)> _fetchMovieStreamUrl(int movieId) async {
+  Future<(String?, int?, String?, String?)> _fetchMovieStreamUrl(
+    int movieId, {
+    String? userAgent,
+  }) async {
     try {
       // 优先使用下载直链接口获取带客户端 IP 签名的 URL
       final downloadUrl = await _fetchDownloadUrl(
         ApiConstants.downloadMovieUrl(movieId),
+        userAgent: userAgent,
       );
 
       final response = await _dio.get(
@@ -158,14 +164,16 @@ class DownloadService {
   //   return null;
   // }
 
-  Future<String?> _fetchDownloadUrl(String apiPath) async {
+  // aria2 使用的 User-Agent，必须与获取下载链接时一致
+  static const String aria2UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+  Future<String?> _fetchDownloadUrl(String apiPath, {String? userAgent}) async {
     try {
-      // TODO: 暂不使用公网 IP，115 只需要 User-Agent
-      // final publicIP = await _getPublicIP();
-      // final queryParams = publicIP != null ? '?client_ip=$publicIP' : '';
       final url = '$_serverUrl$apiPath';
-      debugPrint('[DownloadService] requesting: $url');
-      final response = await _dio.get(url);
+      final queryParams = userAgent != null ? '?user_agent=${Uri.encodeComponent(userAgent)}' : '';
+      final fullUrl = '$url$queryParams';
+      debugPrint('[DownloadService] requesting: $fullUrl');
+      final response = await _dio.get(fullUrl);
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data['data'] as Map<String, dynamic>?;
         final downloadUrl = data?['url'] as String?;
@@ -325,7 +333,12 @@ class DownloadService {
       return;
     }
 
-    debugPrint('[DownloadService] startDownload streamUrl=$streamUrl');
+    debugPrint('[DownloadService] ========== DOWNLOAD DEBUG ==========');
+    debugPrint('[DownloadService] Download URL: $streamUrl');
+    debugPrint('[DownloadService] File: ${task.fileName}');
+    debugPrint('[DownloadService] aria2 test command (115 needs User-Agent):');
+    debugPrint('aria2c "$streamUrl" -U "Mozilla/5.0" -o test_download.tmp');
+    debugPrint('[DownloadService] =====================================');
 
     // Update task with the actual download URL
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
@@ -371,6 +384,12 @@ class DownloadService {
             }
           }
         }
+      }
+
+      // 打印完整的 aria2 测试命令（包含认证）
+      if (headers.containsKey('Authorization')) {
+        debugPrint('[DownloadService] With auth header, aria2 command:');
+        debugPrint('aria2c "$targetUrl" --header="Authorization: ${headers['Authorization']}" -o test_download.tmp');
       }
 
       final options = Options(
@@ -563,4 +582,63 @@ class DownloadService {
       return 0;
     }
   }
+
+  Future<({String? url, Map<String, String> headers, String? error})> getDownloadInfo(
+    DownloadTask task, {
+    String? userAgent,
+  }) async {
+    String? streamUrl;
+    int? storageId;
+    String? fetchError;
+
+    if (task.isMovie) {
+      final result = await _fetchMovieStreamUrl(task.movieId!, userAgent: userAgent);
+      streamUrl = result.$1;
+      storageId = result.$2;
+      fetchError = result.$4;
+    } else {
+      final result = await _fetchStreamUrl(
+        task.tvShowId!,
+        task.seasonId!,
+        task.episodeId!,
+        userAgent: userAgent,
+      );
+      streamUrl = result.$1;
+      storageId = result.$2;
+      fetchError = result.$4;
+    }
+
+    if (streamUrl == null) {
+      return (url: null, headers: <String, String>{}, error: fetchError ?? '无法获取下载地址');
+    }
+
+    final headers = <String, String>{};
+    // 如果指定了 userAgent，添加到 headers 中
+    if (userAgent != null) {
+      headers['User-Agent'] = userAgent;
+    }
+    if (storageId != null) {
+      final storage = await _getStorageById(storageId);
+      if (storage?.type.toLowerCase() == 'webdav') {
+        final settings = storage?.settings;
+        final webdavUrl = settings?['url'];
+        final username = settings?['username'];
+        final password = settings?['password'];
+        if (webdavUrl != null &&
+            username != null &&
+            password != null &&
+            username.isNotEmpty) {
+          final webdavUri = Uri.tryParse(webdavUrl);
+          final targetUri = Uri.tryParse(streamUrl);
+          if (_sameOrigin(webdavUri, targetUri)) {
+            headers['Authorization'] = _basicAuthHeader(username, password);
+          }
+        }
+      }
+    }
+
+    return (url: streamUrl, headers: headers, error: null);
+  }
+
+  Future<String> getDownloadDir() => _downloadDir;
 }

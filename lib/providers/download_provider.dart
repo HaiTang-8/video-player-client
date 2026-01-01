@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/download_task.dart';
 import '../data/models/episode.dart';
 import '../data/models/movie.dart';
+import '../data/services/aria2_service.dart';
 import '../data/services/download_service.dart';
+import 'aria2_provider.dart';
 import 'server_provider.dart';
 
 class DownloadManagerState {
@@ -73,10 +75,11 @@ class DownloadManagerState {
 
 class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   final DownloadService _service;
+  final Aria2Service? _aria2;
   DateTime? _lastSaveTime;
   static const _saveThrottleMs = 2000;
 
-  DownloadManagerNotifier(this._service) : super(const DownloadManagerState()) {
+  DownloadManagerNotifier(this._service, this._aria2) : super(const DownloadManagerState()) {
     _loadTasks();
   }
 
@@ -174,6 +177,129 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   void _startDownload(DownloadTask task) {
+    if (_aria2 != null) {
+      _startAria2Download(task);
+    } else {
+      _startDioDownload(task);
+    }
+  }
+
+  Future<void> _startAria2Download(DownloadTask task) async {
+    try {
+      // 使用 aria2 的 User-Agent 获取下载链接，这样 aria2 下载时用同样的 UA 就不会 403
+      final info = await _service.getDownloadInfo(
+        task,
+        userAgent: DownloadService.aria2UserAgent,
+      );
+      if (info.url == null) {
+        final updatedTask = task.copyWith(
+          status: DownloadStatus.failed,
+          errorMessage: info.error ?? '无法获取下载地址',
+        );
+        _updateTask(updatedTask, forceSave: true);
+        _processNextInQueue();
+        return;
+      }
+
+      final file = task.localPath;
+      final dir = file.substring(0, file.lastIndexOf('/'));
+      final filename = file.substring(file.lastIndexOf('/') + 1);
+
+      debugPrint('[Aria2] Adding download: ${info.url}');
+      debugPrint('[Aria2] Dir: $dir, Filename: $filename');
+      debugPrint('[Aria2] Headers: ${info.headers}');
+
+      final gid = await _aria2!.addUri(
+        info.url!,
+        dir: dir,
+        filename: filename,
+        headers: info.headers,
+      );
+
+      var updatedTask = task.copyWith(
+        status: DownloadStatus.downloading,
+        downloadUrl: info.url,
+        aria2Gid: gid,
+      );
+      _updateTask(updatedTask, forceSave: true);
+
+      _pollAria2Status(gid, updatedTask);
+    } catch (e) {
+      debugPrint('[Aria2] Error: $e');
+      final updatedTask = task.copyWith(
+        status: DownloadStatus.failed,
+        errorMessage: 'aria2 错误: $e',
+      );
+      _updateTask(updatedTask, forceSave: true);
+      _processNextInQueue();
+    }
+  }
+
+  Future<void> _pollAria2Status(String gid, DownloadTask task) async {
+    if (_aria2 == null) return;
+
+    try {
+      while (true) {
+        await Future.delayed(const Duration(seconds: 1));
+
+        final currentTask = state.tasks.firstWhere(
+          (t) => t.id == task.id,
+          orElse: () => task,
+        );
+        if (currentTask.status == DownloadStatus.paused ||
+            currentTask.status == DownloadStatus.completed ||
+            currentTask.status == DownloadStatus.failed) {
+          break;
+        }
+
+        final status = await _aria2.tellStatus(gid);
+        final downloadedBytes = int.tryParse(status['completedLength']?.toString() ?? '0') ?? 0;
+        final totalBytes = int.tryParse(status['totalLength']?.toString() ?? '0') ?? 0;
+        final downloadSpeed = double.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
+        final aria2Status = status['status'] as String?;
+
+        debugPrint('[Aria2] Status: $aria2Status, Progress: $downloadedBytes/$totalBytes, Speed: ${(downloadSpeed / 1024 / 1024).toStringAsFixed(2)} MB/s');
+
+        if (aria2Status == 'complete') {
+          final updatedTask = currentTask.copyWith(
+            status: DownloadStatus.completed,
+            progress: 1.0,
+            downloadedBytes: totalBytes,
+            fileSize: totalBytes,
+            completedAt: DateTime.now(),
+          );
+          _updateTask(updatedTask, forceSave: true);
+          _processNextInQueue();
+          break;
+        } else if (aria2Status == 'error' || aria2Status == 'removed') {
+          final errorMessage = status['errorMessage'] as String? ?? 'aria2 下载失败';
+          final updatedTask = currentTask.copyWith(
+            status: DownloadStatus.failed,
+            errorMessage: errorMessage,
+          );
+          _updateTask(updatedTask, forceSave: true);
+          _processNextInQueue();
+          break;
+        } else if (aria2Status == 'active' || aria2Status == 'waiting') {
+          final progress = totalBytes > 0 ? downloadedBytes / totalBytes : 0.0;
+          final updatedTask = currentTask.copyWith(
+            status: DownloadStatus.downloading,
+            progress: progress,
+            downloadedBytes: downloadedBytes,
+            fileSize: totalBytes > 0 ? totalBytes : currentTask.fileSize,
+            downloadSpeed: downloadSpeed,
+          );
+          _updateTask(updatedTask);
+        } else if (aria2Status == 'paused') {
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('[Aria2] Poll error: $e');
+    }
+  }
+
+  void _startDioDownload(DownloadTask task) {
     _service.startDownload(
       task,
       (updated) => _updateTask(updated),
@@ -260,8 +386,9 @@ final downloadServiceProvider = Provider<DownloadService?>((ref) {
 final downloadManagerProvider =
     StateNotifierProvider<DownloadManagerNotifier, DownloadManagerState>((ref) {
   final service = ref.watch(downloadServiceProvider);
+  final aria2 = ref.watch(aria2ServiceProvider);
   if (service == null) {
-    return DownloadManagerNotifier(DownloadService(Dio(), ''));
+    return DownloadManagerNotifier(DownloadService(Dio(), ''), null);
   }
-  return DownloadManagerNotifier(service);
+  return DownloadManagerNotifier(service, aria2);
 });

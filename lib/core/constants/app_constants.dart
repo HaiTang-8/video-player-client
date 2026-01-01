@@ -14,6 +14,11 @@ class AppConstants {
   static const String seekDurationKey = 'playback_seek_duration';
   static const String playbackSpeedKey = 'playback_speed';
 
+  // aria2 配置
+  static const String aria2EnabledKey = 'aria2_enabled';
+  static const String aria2RpcUrlKey = 'aria2_rpc_url';
+  static const String aria2RpcSecretKey = 'aria2_rpc_secret';
+
   // 分页
   static const int defaultPageSize = 20;
 

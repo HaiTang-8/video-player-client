@@ -19,6 +19,7 @@ import '../../screens/library/category_detail_screen.dart';
 import '../../screens/library/watch_history_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
 import '../../screens/settings/database_backup_screen.dart';
+import '../../screens/settings/aria2_settings_screen.dart';
 import '../../screens/tvshow_detail/overview_screen.dart';
 import '../../screens/download/download_episodes_screen.dart';
 import '../../screens/download/download_manager_screen.dart';
@@ -216,6 +217,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/database-backup',
         builder: (context, state) => const DatabaseBackupScreen(),
+      ),
+
+      // aria2 设置页面
+      GoRoute(
+        path: '/aria2-settings',
+        builder: (context, state) => const Aria2SettingsScreen(),
       ),
 
       // 服务器管理页面（从设置进入）
