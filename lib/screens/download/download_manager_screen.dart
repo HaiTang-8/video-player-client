@@ -550,6 +550,28 @@ class _FailedItem extends StatelessWidget {
     required this.onDelete,
   });
 
+  void _showErrorDetail(BuildContext context) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: const Text('错误详情'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: SelectableText(
+            task.errorMessage ?? '下载失败',
+            style: const TextStyle(fontSize: 14),
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('关闭'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -573,26 +595,30 @@ class _FailedItem extends StatelessWidget {
           const SizedBox(width: 12),
           // 内容
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.fileName ?? task.displayTitle,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black,
+            child: GestureDetector(
+              onTap: () => _showErrorDetail(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.fileName ?? task.displayTitle,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: Colors.black,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  task.errorMessage ?? '下载失败',
-                  style: const TextStyle(fontSize: 13, color: CupertinoColors.systemRed),
-                  maxLines: 3,
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    task.errorMessage ?? '下载失败',
+                    style: const TextStyle(fontSize: 13, color: CupertinoColors.systemRed),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 12),
