@@ -12,6 +12,7 @@ import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
 import '../models/storage.dart';
+import 'aria2_manager.dart';
 import 'multi_thread_downloader.dart';
 import 'native_downloader.dart';
 
@@ -30,6 +31,11 @@ class DownloadService {
   int threadCount = 8;
   bool useMultiThread = true;
   bool useNativeDownloader = true; // 优先使用原生下载器
+  bool useAria2 = true; // PC端优先使用aria2
+
+  // aria2 任务映射: taskId -> gid
+  final Map<String, String> _aria2Tasks = {};
+  Timer? _aria2ProgressTimer;
 
   DownloadService(this._dio, this._serverUrl);
 
@@ -395,6 +401,23 @@ class DownloadService {
       }
     }
 
+    // PC端优先使用aria2
+    if (useAria2 && (Platform.isWindows || Platform.isMacOS)) {
+      final aria2 = Aria2Manager.instance;
+      if (aria2.isRunning && aria2.service != null) {
+        debugPrint('[DownloadService] Using aria2 downloader');
+        await _startAria2Download(
+          task: updatedTask,
+          url: streamUrl,
+          headers: headers,
+          onProgress: onProgress,
+          onComplete: onComplete,
+          onError: onError,
+        );
+        return;
+      }
+    }
+
     if (useMultiThread) {
       await _startMultiThreadDownload(
         task: updatedTask,
@@ -461,6 +484,97 @@ class DownloadService {
         onError(updatedTask, error);
       },
     );
+  }
+
+  Future<void> _startAria2Download({
+    required DownloadTask task,
+    required String url,
+    required Map<String, String> headers,
+    required void Function(DownloadTask) onProgress,
+    required void Function(DownloadTask) onComplete,
+    required void Function(DownloadTask, String) onError,
+  }) async {
+    final aria2 = Aria2Manager.instance.service!;
+    var updatedTask = task.copyWith(status: DownloadStatus.downloading);
+    onProgress(updatedTask);
+
+    final file = File(task.localPath);
+    final dir = file.parent.path;
+    final filename = file.uri.pathSegments.last;
+
+    try {
+      final gid = await aria2.addUri(url, dir: dir, filename: filename, headers: headers);
+      _aria2Tasks[task.id] = gid;
+
+      _aria2ProgressTimer?.cancel();
+      _aria2ProgressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+        await _pollAria2Progress(onProgress, onComplete, onError);
+      });
+    } catch (e) {
+      onError(updatedTask, e.toString());
+    }
+  }
+
+  Future<void> _pollAria2Progress(
+    void Function(DownloadTask) onProgress,
+    void Function(DownloadTask) onComplete,
+    void Function(DownloadTask, String) onError,
+  ) async {
+    final aria2 = Aria2Manager.instance.service;
+    if (aria2 == null) return;
+
+    final tasks = await loadTasks();
+    final toRemove = <String>[];
+
+    for (final entry in _aria2Tasks.entries) {
+      final taskId = entry.key;
+      final gid = entry.value;
+
+      try {
+        final status = await aria2.tellStatus(gid);
+        final task = tasks.firstWhere((t) => t.id == taskId, orElse: () => throw StateError('Task not found'));
+
+        final completedLength = int.tryParse(status['completedLength']?.toString() ?? '0') ?? 0;
+        final totalLength = int.tryParse(status['totalLength']?.toString() ?? '0') ?? 0;
+        final downloadSpeed = int.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
+        final aria2Status = status['status'] as String?;
+
+        final progress = totalLength > 0 ? completedLength / totalLength : 0.0;
+        var updatedTask = task.copyWith(
+          progress: progress,
+          downloadedBytes: completedLength,
+          fileSize: totalLength > 0 ? totalLength : task.fileSize,
+          downloadSpeed: downloadSpeed.toDouble(),
+        );
+
+        if (aria2Status == 'complete') {
+          updatedTask = updatedTask.copyWith(
+            status: DownloadStatus.completed,
+            progress: 1.0,
+            completedAt: DateTime.now(),
+          );
+          onComplete(updatedTask);
+          toRemove.add(taskId);
+        } else if (aria2Status == 'error') {
+          final errorMsg = status['errorMessage'] as String? ?? 'Download failed';
+          onError(updatedTask, errorMsg);
+          toRemove.add(taskId);
+        } else {
+          onProgress(updatedTask);
+        }
+      } catch (_) {
+        toRemove.add(taskId);
+      }
+    }
+
+    for (final id in toRemove) {
+      _aria2Tasks.remove(id);
+    }
+
+    if (_aria2Tasks.isEmpty) {
+      _aria2ProgressTimer?.cancel();
+      _aria2ProgressTimer = null;
+    }
   }
 
   Future<void> _startMultiThreadDownload({
@@ -639,6 +753,12 @@ class DownloadService {
   }
 
   void pauseDownload(String taskId) {
+    // aria2 下载
+    final gid = _aria2Tasks[taskId];
+    if (gid != null) {
+      Aria2Manager.instance.service?.pause(gid);
+      return;
+    }
     // 原生下载器
     if (Platform.isIOS || Platform.isAndroid) {
       NativeDownloader.instance.pauseDownload(taskId);
@@ -655,6 +775,12 @@ class DownloadService {
   }
 
   void resumeDownload(String taskId) {
+    // aria2 下载
+    final gid = _aria2Tasks[taskId];
+    if (gid != null) {
+      Aria2Manager.instance.service?.unpause(gid);
+      return;
+    }
     // 原生下载器
     if (Platform.isIOS || Platform.isAndroid) {
       NativeDownloader.instance.resumeDownload(taskId);
@@ -666,6 +792,13 @@ class DownloadService {
   }
 
   void cancelDownload(String taskId) {
+    // aria2 下载
+    final gid = _aria2Tasks[taskId];
+    if (gid != null) {
+      Aria2Manager.instance.service?.remove(gid);
+      _aria2Tasks.remove(taskId);
+      return;
+    }
     // 原生下载器
     if (Platform.isIOS || Platform.isAndroid) {
       NativeDownloader.instance.cancelDownload(taskId);
