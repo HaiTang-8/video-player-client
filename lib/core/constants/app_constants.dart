@@ -19,6 +19,10 @@ class AppConstants {
   static const String aria2RpcUrlKey = 'aria2_rpc_url';
   static const String aria2RpcSecretKey = 'aria2_rpc_secret';
 
+  // 多线程下载配置
+  static const String downloadThreadCountKey = 'download_thread_count';
+  static const String downloadMultiThreadEnabledKey = 'download_multi_thread_enabled';
+
   // 分页
   static const int defaultPageSize = 20;
 

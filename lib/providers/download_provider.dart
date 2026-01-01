@@ -8,6 +8,7 @@ import '../data/models/movie.dart';
 import '../data/services/aria2_service.dart';
 import '../data/services/download_service.dart';
 import 'aria2_provider.dart';
+import 'download_settings_provider.dart';
 import 'server_provider.dart';
 
 class DownloadManagerState {
@@ -375,12 +376,17 @@ final downloadServiceProvider = Provider<DownloadService?>((ref) {
   final serverUrl = ref.watch(serverUrlProvider);
   if (serverUrl == null || serverUrl.isEmpty) return null;
 
+  final downloadSettings = ref.watch(downloadSettingsProvider);
+
   final dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(hours: 2),
   ));
 
-  return DownloadService(dio, serverUrl);
+  final service = DownloadService(dio, serverUrl);
+  service.useMultiThread = downloadSettings.multiThreadEnabled;
+  service.threadCount = downloadSettings.threadCount;
+  return service;
 });
 
 final downloadManagerProvider =

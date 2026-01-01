@@ -12,6 +12,8 @@ import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
 import '../models/storage.dart';
+import 'multi_thread_downloader.dart';
+import 'native_downloader.dart';
 
 typedef ProgressCallback = void Function(int received, int total);
 
@@ -19,9 +21,15 @@ class DownloadService {
   final Dio _dio;
   final String _serverUrl;
   final Map<String, CancelToken> _cancelTokens = {};
+  final Map<String, MultiThreadDownloader> _multiThreadDownloaders = {};
   final Map<int, Storage> _storageCache = {};
 
   static const String _tasksKey = 'download_tasks';
+
+  // 多线程下载配置
+  int threadCount = 8;
+  bool useMultiThread = true;
+  bool useNativeDownloader = true; // 优先使用原生下载器
 
   DownloadService(this._dio, this._serverUrl);
 
@@ -165,7 +173,7 @@ class DownloadService {
   // }
 
   // aria2 使用的 User-Agent，必须与获取下载链接时一致
-  static const String aria2UserAgent = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+  static const String aria2UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57';
 
   Future<String?> _fetchDownloadUrl(String apiPath, {String? userAgent}) async {
     try {
@@ -312,8 +320,11 @@ class DownloadService {
     int? storageId;
     String? fetchError;
 
+    // 使用固定的 User-Agent，确保获取链接和下载时一致（与 aria2 相同）
+    const downloadUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57';
+
     if (task.isMovie) {
-      final result = await _fetchMovieStreamUrl(task.movieId!);
+      final result = await _fetchMovieStreamUrl(task.movieId!, userAgent: downloadUserAgent);
       streamUrl = result.$1;
       storageId = result.$2;
       fetchError = result.$4;
@@ -322,6 +333,7 @@ class DownloadService {
         task.tvShowId!,
         task.seasonId!,
         task.episodeId!,
+        userAgent: downloadUserAgent,
       );
       streamUrl = result.$1;
       storageId = result.$2;
@@ -336,19 +348,182 @@ class DownloadService {
     debugPrint('[DownloadService] ========== DOWNLOAD DEBUG ==========');
     debugPrint('[DownloadService] Download URL: $streamUrl');
     debugPrint('[DownloadService] File: ${task.fileName}');
-    debugPrint('[DownloadService] aria2 test command (115 needs User-Agent):');
-    debugPrint('aria2c "$streamUrl" -U "Mozilla/5.0" -o test_download.tmp');
+    debugPrint('[DownloadService] Multi-thread: $useMultiThread, Threads: $threadCount');
+    debugPrint('[DownloadService] Native downloader: $useNativeDownloader');
     debugPrint('[DownloadService] =====================================');
 
-    // Update task with the actual download URL
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
 
+    // 构建 headers，包含 User-Agent
+    final headers = <String, String>{
+      'User-Agent': downloadUserAgent,
+    };
+    if (storageId != null) {
+      final storage = await _getStorageById(storageId);
+      if (storage?.type.toLowerCase() == 'webdav') {
+        final settings = storage?.settings;
+        final webdavUrl = settings?['url'];
+        final username = settings?['username'];
+        final password = settings?['password'];
+        if (webdavUrl != null &&
+            username != null &&
+            password != null &&
+            username.isNotEmpty) {
+          final webdavUri = Uri.tryParse(webdavUrl);
+          final targetUri = Uri.tryParse(streamUrl);
+          if (_sameOrigin(webdavUri, targetUri)) {
+            headers['Authorization'] = _basicAuthHeader(username, password);
+          }
+        }
+      }
+    }
+
+    // 优先使用原生下载器（iOS/Android）
+    if (useNativeDownloader && (Platform.isIOS || Platform.isAndroid)) {
+      final nativeAvailable = await NativeDownloader.instance.isAvailable();
+      if (nativeAvailable) {
+        debugPrint('[DownloadService] Using native downloader');
+        await _startNativeDownload(
+          task: updatedTask,
+          url: streamUrl,
+          headers: headers,
+          onProgress: onProgress,
+          onComplete: onComplete,
+          onError: onError,
+        );
+        return;
+      }
+    }
+
+    if (useMultiThread) {
+      await _startMultiThreadDownload(
+        task: updatedTask,
+        url: streamUrl,
+        headers: headers,
+        onProgress: onProgress,
+        onComplete: onComplete,
+        onError: onError,
+      );
+    } else {
+      await _startSingleThreadDownload(
+        task: updatedTask,
+        url: streamUrl,
+        headers: headers,
+        onProgress: onProgress,
+        onComplete: onComplete,
+        onError: onError,
+      );
+    }
+  }
+
+  Future<void> _startNativeDownload({
+    required DownloadTask task,
+    required String url,
+    required Map<String, String> headers,
+    required void Function(DownloadTask) onProgress,
+    required void Function(DownloadTask) onComplete,
+    required void Function(DownloadTask, String) onError,
+  }) async {
+    var updatedTask = task.copyWith(status: DownloadStatus.downloading);
+    onProgress(updatedTask);
+
+    // 确保目录存在
+    final file = File(task.localPath);
+    final parentDir = file.parent;
+    if (!await parentDir.exists()) {
+      await parentDir.create(recursive: true);
+    }
+
+    await NativeDownloader.instance.startDownload(
+      taskId: task.id,
+      url: url,
+      savePath: task.localPath,
+      headers: headers,
+      threadCount: threadCount,
+      onProgress: (progress) {
+        updatedTask = updatedTask.copyWith(
+          progress: progress.progress,
+          downloadedBytes: progress.downloadedBytes,
+          fileSize: progress.totalBytes > 0 ? progress.totalBytes : updatedTask.fileSize,
+          downloadSpeed: progress.speed,
+        );
+        onProgress(updatedTask);
+      },
+      onComplete: () {
+        updatedTask = updatedTask.copyWith(
+          status: DownloadStatus.completed,
+          progress: 1.0,
+          completedAt: DateTime.now(),
+        );
+        onComplete(updatedTask);
+      },
+      onError: (error) {
+        onError(updatedTask, error);
+      },
+    );
+  }
+
+  Future<void> _startMultiThreadDownload({
+    required DownloadTask task,
+    required String url,
+    required Map<String, String> headers,
+    required void Function(DownloadTask) onProgress,
+    required void Function(DownloadTask) onComplete,
+    required void Function(DownloadTask, String) onError,
+  }) async {
+    final downloader = MultiThreadDownloader(
+      dio: _dio,
+      threadCount: threadCount,
+    );
+    _multiThreadDownloaders[task.id] = downloader;
+
+    var updatedTask = task.copyWith(status: DownloadStatus.downloading);
+    onProgress(updatedTask);
+
+    await downloader.download(
+      url: url,
+      savePath: task.localPath,
+      headers: headers.isNotEmpty ? headers : null,
+      onProgress: (progress) {
+        updatedTask = updatedTask.copyWith(
+          progress: progress.progress,
+          downloadedBytes: progress.downloadedBytes,
+          fileSize: progress.totalBytes > 0 ? progress.totalBytes : updatedTask.fileSize,
+          downloadSpeed: progress.speed,
+        );
+        onProgress(updatedTask);
+      },
+      onComplete: () {
+        _multiThreadDownloaders.remove(task.id);
+        updatedTask = updatedTask.copyWith(
+          status: DownloadStatus.completed,
+          progress: 1.0,
+          completedAt: DateTime.now(),
+        );
+        onComplete(updatedTask);
+      },
+      onError: (error) {
+        _multiThreadDownloaders.remove(task.id);
+        onError(updatedTask, error);
+      },
+    );
+  }
+
+  Future<void> _startSingleThreadDownload({
+    required DownloadTask task,
+    required String url,
+    required Map<String, String> headers,
+    required void Function(DownloadTask) onProgress,
+    required void Function(DownloadTask) onComplete,
+    required void Function(DownloadTask, String) onError,
+  }) async {
+    var updatedTask = task;
     final cancelToken = CancelToken();
     _cancelTokens[task.id] = cancelToken;
 
     IOSink? sink;
     try {
-      final file = File(updatedTask.localPath);
+      final file = File(task.localPath);
       final parentDir = file.parent;
       if (!await parentDir.exists()) {
         await parentDir.create(recursive: true);
@@ -359,46 +534,18 @@ class DownloadService {
         downloadedBytes = await file.length();
       }
 
-      final targetUrl = updatedTask.downloadUrl;
-
-      // 仅在"目标 host 与 WebDAV host 一致"时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
-      final headers = <String, dynamic>{};
+      final requestHeaders = <String, dynamic>{...headers};
       if (downloadedBytes > 0) {
-        headers['Range'] = 'bytes=$downloadedBytes-';
-      }
-      if (storageId != null) {
-        final storage = await _getStorageById(storageId);
-        if (storage?.type.toLowerCase() == 'webdav') {
-          final settings = storage?.settings;
-          final webdavUrl = settings?['url'];
-          final username = settings?['username'];
-          final password = settings?['password'];
-          if (webdavUrl != null &&
-              username != null &&
-              password != null &&
-              username.isNotEmpty) {
-            final webdavUri = Uri.tryParse(webdavUrl);
-            final targetUri = Uri.tryParse(targetUrl);
-            if (_sameOrigin(webdavUri, targetUri)) {
-              headers['Authorization'] = _basicAuthHeader(username, password);
-            }
-          }
-        }
-      }
-
-      // 打印完整的 aria2 测试命令（包含认证）
-      if (headers.containsKey('Authorization')) {
-        debugPrint('[DownloadService] With auth header, aria2 command:');
-        debugPrint('aria2c "$targetUrl" --header="Authorization: ${headers['Authorization']}" -o test_download.tmp');
+        requestHeaders['Range'] = 'bytes=$downloadedBytes-';
       }
 
       final options = Options(
-        headers: headers.isEmpty ? null : headers,
+        headers: requestHeaders.isEmpty ? null : requestHeaders,
         responseType: ResponseType.stream,
       );
 
       final response = await _dio.get<ResponseBody>(
-        targetUrl,
+        url,
         options: options,
         cancelToken: cancelToken,
       );
@@ -414,7 +561,6 @@ class DownloadService {
       );
       onProgress(updatedTask);
 
-      // Speed calculation variables (Exponential Moving Average)
       var lastUpdateTime = DateTime.now();
       var lastBytes = downloadedBytes;
       double smoothedSpeed = 0;
@@ -427,7 +573,6 @@ class DownloadService {
         sink.add(chunk);
         downloadedBytes += chunk.length;
 
-        // Calculate speed every 500ms using EMA
         final now = DateTime.now();
         final elapsed = now.difference(lastUpdateTime).inMilliseconds;
         if (elapsed >= 500) {
@@ -464,14 +609,12 @@ class DownloadService {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
-      debugPrint('[DownloadService] DioException: ${e.type}, message=${e.message}, statusCode=${e.response?.statusCode}');
-      debugPrint('[DownloadService] Response data: ${e.response?.data}');
+      debugPrint('[DownloadService] DioException: ${e.type}, message=${e.message}');
       onError(updatedTask, e.message ?? '下载失败');
     } catch (e) {
       debugPrint('[DownloadService] Exception: $e');
       onError(updatedTask, e.toString());
     } finally {
-      // 确保文件流被正确关闭
       try {
         await sink?.flush();
         await sink?.close();
@@ -496,11 +639,45 @@ class DownloadService {
   }
 
   void pauseDownload(String taskId) {
+    // 原生下载器
+    if (Platform.isIOS || Platform.isAndroid) {
+      NativeDownloader.instance.pauseDownload(taskId);
+    }
+    // 多线程下载器
+    final multiDownloader = _multiThreadDownloaders[taskId];
+    if (multiDownloader != null) {
+      multiDownloader.pause();
+      return;
+    }
+    // 单线程下载
     _cancelTokens[taskId]?.cancel('paused');
     _cancelTokens.remove(taskId);
   }
 
+  void resumeDownload(String taskId) {
+    // 原生下载器
+    if (Platform.isIOS || Platform.isAndroid) {
+      NativeDownloader.instance.resumeDownload(taskId);
+    }
+    final multiDownloader = _multiThreadDownloaders[taskId];
+    if (multiDownloader != null) {
+      multiDownloader.resume();
+    }
+  }
+
   void cancelDownload(String taskId) {
+    // 原生下载器
+    if (Platform.isIOS || Platform.isAndroid) {
+      NativeDownloader.instance.cancelDownload(taskId);
+    }
+    // 多线程下载器
+    final multiDownloader = _multiThreadDownloaders[taskId];
+    if (multiDownloader != null) {
+      multiDownloader.cancel();
+      _multiThreadDownloaders.remove(taskId);
+      return;
+    }
+    // 单线程下载
     _cancelTokens[taskId]?.cancel('cancelled');
     _cancelTokens.remove(taskId);
   }
@@ -521,6 +698,14 @@ class DownloadService {
           await file.delete();
         } catch (_) {}
       }
+    }
+
+    // 删除多线程下载的临时分片目录
+    final partsDir = Directory('${task.localPath}.parts');
+    if (await partsDir.exists()) {
+      try {
+        await partsDir.delete(recursive: true);
+      } catch (_) {}
     }
 
     final parentDir = file.parent;
