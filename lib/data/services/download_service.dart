@@ -46,9 +46,22 @@ class DownloadService {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data['data'] as Map<String, dynamic>?;
         if (data != null) {
-          final url = data['safe_url'] as String? ?? data['url'] as String?;
           final storageId = data['storage_id'] as int?;
           final filePath = data['file_path'] as String?;
+          final sourceId = data['source_id'] as int?;
+
+          // 优先使用下载直链接口获取带客户端 IP 签名的 URL
+          if (sourceId != null) {
+            final downloadUrl = await _fetchDownloadUrl(
+              ApiConstants.downloadSourceUrl(sourceId),
+            );
+            if (downloadUrl != null) {
+              return (downloadUrl, storageId, filePath, null);
+            }
+          }
+
+          // 兜底：使用 safe_url
+          final url = data['safe_url'] as String? ?? data['url'] as String?;
           if (url != null && url.isNotEmpty) {
             final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
             return (fullUrl, storageId, filePath, null);
@@ -65,15 +78,26 @@ class DownloadService {
 
   Future<(String?, int?, String?, String?)> _fetchMovieStreamUrl(int movieId) async {
     try {
+      // 优先使用下载直链接口获取带客户端 IP 签名的 URL
+      final downloadUrl = await _fetchDownloadUrl(
+        ApiConstants.downloadMovieUrl(movieId),
+      );
+
       final response = await _dio.get(
         '$_serverUrl${ApiConstants.movieStream(movieId)}',
       );
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data['data'] as Map<String, dynamic>?;
         if (data != null) {
-          final url = data['safe_url'] as String? ?? data['url'] as String?;
           final storageId = data['storage_id'] as int?;
           final filePath = data['file_path'] as String?;
+
+          if (downloadUrl != null) {
+            return (downloadUrl, storageId, filePath, null);
+          }
+
+          // 兜底：使用 safe_url
+          final url = data['safe_url'] as String? ?? data['url'] as String?;
           if (url != null && url.isNotEmpty) {
             final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
             return (fullUrl, storageId, filePath, null);
@@ -86,6 +110,73 @@ class DownloadService {
     } catch (e) {
       return (null, null, null, '获取下载地址失败: $e');
     }
+  }
+
+  String? _cachedPublicIP;
+  DateTime? _publicIPCacheTime;
+
+  Future<String?> _getPublicIP() async {
+    // 缓存 5 分钟
+    if (_cachedPublicIP != null && _publicIPCacheTime != null) {
+      if (DateTime.now().difference(_publicIPCacheTime!).inMinutes < 5) {
+        return _cachedPublicIP;
+      }
+    }
+
+    // 多个备用服务
+    final services = [
+      'https://api.ipify.org',
+      'https://ifconfig.me/ip',
+      'https://icanhazip.com',
+      'https://api.ip.sb/ip',
+    ];
+
+    for (final service in services) {
+      try {
+        debugPrint('[DownloadService] trying to get IP from: $service');
+        final response = await _dio.get(
+          service,
+          options: Options(
+            receiveTimeout: const Duration(seconds: 5),
+            sendTimeout: const Duration(seconds: 5),
+          ),
+        );
+        if (response.statusCode == 200 && response.data != null) {
+          final ip = response.data.toString().trim();
+          if (ip.isNotEmpty && RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(ip)) {
+            _cachedPublicIP = ip;
+            _publicIPCacheTime = DateTime.now();
+            debugPrint('[DownloadService] got public IP: $ip from $service');
+            return _cachedPublicIP;
+          }
+        }
+      } catch (e) {
+        debugPrint('[DownloadService] failed to get IP from $service: $e');
+      }
+    }
+    return null;
+  }
+
+  Future<String?> _fetchDownloadUrl(String apiPath) async {
+    try {
+      final publicIP = await _getPublicIP();
+      debugPrint('[DownloadService] publicIP=$publicIP');
+      final queryParams = publicIP != null ? '?client_ip=$publicIP' : '';
+      final url = '$_serverUrl$apiPath$queryParams';
+      debugPrint('[DownloadService] requesting: $url');
+      final response = await _dio.get(url);
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data['data'] as Map<String, dynamic>?;
+        final downloadUrl = data?['url'] as String?;
+        debugPrint('[DownloadService] downloadUrl=$downloadUrl');
+        if (downloadUrl != null && downloadUrl.isNotEmpty) {
+          return downloadUrl;
+        }
+      }
+    } catch (e) {
+      debugPrint('[DownloadService] _fetchDownloadUrl error: $e');
+    }
+    return null;
   }
 
   Future<Storage?> _getStorageById(int storageId) async {
@@ -133,38 +224,6 @@ class DownloadService {
     if (a.scheme.toLowerCase() != b.scheme.toLowerCase()) return false;
     if (a.host.toLowerCase() != b.host.toLowerCase()) return false;
     return _effectivePort(a) == _effectivePort(b);
-  }
-
-  Future<String?> _resolveRedirectTarget(
-    String url, {
-    required CancelToken cancelToken,
-  }) async {
-    try {
-      final response = await _dio.get<List<int>>(
-        url,
-        cancelToken: cancelToken,
-        options: Options(
-          followRedirects: false,
-          // 需要拿到 3xx 的 Location，所以把 3xx 视为“可接受状态”
-          validateStatus:
-              (status) => status != null && status >= 200 && status < 400,
-          responseType: ResponseType.bytes,
-          // 保险起见：即便服务端没重定向（走代理），也只拉取 1 字节避免误触发大流量。
-          headers: const {'Range': 'bytes=0-0'},
-        ),
-      );
-
-      final code = response.statusCode ?? 0;
-      if (code >= 300 && code < 400) {
-        final loc = response.headers.value('location');
-        if (loc != null && loc.trim().isNotEmpty) {
-          return Uri.parse(url).resolve(loc.trim()).toString();
-        }
-      }
-    } on DioException catch (e) {
-      if (e.type == DioExceptionType.cancel) return null;
-    } catch (_) {}
-    return null;
   }
 
   String _sanitizeFileName(String fileName) {
@@ -265,6 +324,16 @@ class DownloadService {
       return;
     }
 
+    debugPrint('[DownloadService] startDownload streamUrl=$streamUrl');
+
+    // 验证实际出口 IP
+    try {
+      final ipCheckResponse = await _dio.get('https://icanhazip.com');
+      debugPrint('[DownloadService] actual outgoing IP when downloading: ${ipCheckResponse.data.toString().trim()}');
+    } catch (e) {
+      debugPrint('[DownloadService] failed to verify outgoing IP: $e');
+    }
+
     // Update task with the actual download URL
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
 
@@ -284,14 +353,9 @@ class DownloadService {
         downloadedBytes = await file.length();
       }
 
-      // 尝试解析后端 /stream 的 302 直链；若后端当前为 proxy 模式，则 directUrl 为 null，仍走原 URL。
-      final directUrl = await _resolveRedirectTarget(
-        updatedTask.downloadUrl,
-        cancelToken: cancelToken,
-      );
-      final targetUrl = directUrl ?? updatedTask.downloadUrl;
+      final targetUrl = updatedTask.downloadUrl;
 
-      // 仅在“目标 host 与 WebDAV host 一致”时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
+      // 仅在"目标 host 与 WebDAV host 一致"时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
       final headers = <String, dynamic>{};
       if (downloadedBytes > 0) {
         headers['Range'] = 'bytes=$downloadedBytes-';
@@ -388,8 +452,11 @@ class DownloadService {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
+      debugPrint('[DownloadService] DioException: ${e.type}, message=${e.message}, statusCode=${e.response?.statusCode}');
+      debugPrint('[DownloadService] Response data: ${e.response?.data}');
       onError(updatedTask, e.message ?? '下载失败');
     } catch (e) {
+      debugPrint('[DownloadService] Exception: $e');
       onError(updatedTask, e.toString());
     } finally {
       // 确保文件流被正确关闭

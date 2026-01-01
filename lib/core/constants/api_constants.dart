@@ -67,6 +67,10 @@ class ApiConstants {
   // 字幕
   static const String subtitles = '$apiPrefix/subtitles';
 
+  // 下载直链
+  static String downloadMovieUrl(int id) => '$apiPrefix/download/movie/$id/url';
+  static String downloadSourceUrl(int id) => '$apiPrefix/download/source/$id/url';
+
   // 健康检查
   static const String health = '/health';
 
