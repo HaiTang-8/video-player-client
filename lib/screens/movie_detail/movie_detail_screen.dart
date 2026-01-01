@@ -64,21 +64,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                     (movie) => DesktopAppBar(
                       title: Text(movie?.title ?? '电影详情'),
                       onBack: () => context.pop(),
-                      actions: [
-                        if (movie != null)
-                          IconButton(
-                            tooltip: '重新刮削',
-                            icon: const Icon(Icons.auto_fix_high),
-                            onPressed: () => _scrapeMovie(context, movie.id),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed:
-                              () => ref.invalidate(
-                                movieDetailProvider(widget.movieId),
-                              ),
-                        ),
-                      ],
+                      actions: _buildDesktopActions(movie),
                     ),
               )
               : null,
@@ -543,6 +529,38 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final downloadManager = ref.read(downloadManagerProvider.notifier);
     downloadManager.addMovieDownload(movie: movie);
     IosUiUtils.showToast(context: context, message: '已添加到下载队列');
+  }
+
+  List<Widget> _buildDesktopActions(Movie? movie) {
+    if (movie == null) return [];
+    final hasFile = movie.filePath != null && movie.filePath!.isNotEmpty;
+    return [
+      if (hasFile)
+        IconButton(
+          tooltip: '下载',
+          icon: const Icon(CupertinoIcons.cloud_download),
+          onPressed: () => _downloadMovie(context, movie),
+        ),
+      PullDownButton(
+        itemBuilder: (context) => [
+          PullDownMenuItem(
+            title: '重新刮削',
+            icon: CupertinoIcons.wand_stars,
+            onTap: () => _scrapeMovie(context, movie.id),
+          ),
+          PullDownMenuItem(
+            title: '刷新',
+            icon: CupertinoIcons.refresh,
+            onTap: () => ref.invalidate(movieDetailProvider(widget.movieId)),
+          ),
+        ],
+        buttonBuilder: (context, showMenu) => IconButton(
+          tooltip: '更多',
+          icon: const Icon(CupertinoIcons.ellipsis),
+          onPressed: showMenu,
+        ),
+      ),
+    ];
   }
 
   /// 构建播放按钮

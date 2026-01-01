@@ -65,22 +65,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     (tvShow) => DesktopAppBar(
                       title: Text(tvShow?.name ?? '剧集详情'),
                       onBack: () => context.pop(),
-                      actions: [
-                        if (tvShow != null)
-                          IconButton(
-                            tooltip: '重新刮削',
-                            icon: const Icon(Icons.auto_fix_high),
-                            onPressed:
-                                () => _scrapeTvShow(context, widget.tvShowId),
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed:
-                              () => ref.invalidate(
-                                tvShowDetailProvider(widget.tvShowId),
-                              ),
-                        ),
-                      ],
+                      actions: _buildDesktopActions(tvShow),
                     ),
               )
               : null,
@@ -556,6 +541,46 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       'season': season,
       'storageName': tvShow.storageName,
     });
+  }
+
+  List<Widget> _buildDesktopActions(TvShow? tvShow) {
+    if (tvShow == null) return [];
+
+    final selectedSeason =
+        tvShow.seasons != null && _selectedSeasonIndex < tvShow.seasons!.length
+            ? tvShow.seasons![_selectedSeasonIndex]
+            : null;
+    final hasDownloadableEpisodes = selectedSeason != null &&
+        selectedSeason.episodes != null &&
+        selectedSeason.episodes!.any((e) => e.hasFile);
+
+    return [
+      if (hasDownloadableEpisodes)
+        IconButton(
+          tooltip: '下载',
+          icon: const Icon(CupertinoIcons.cloud_download),
+          onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
+        ),
+      PullDownButton(
+        itemBuilder: (context) => [
+          PullDownMenuItem(
+            title: '重新刮削',
+            icon: CupertinoIcons.wand_stars,
+            onTap: () => _scrapeTvShow(context, widget.tvShowId),
+          ),
+          PullDownMenuItem(
+            title: '刷新',
+            icon: CupertinoIcons.refresh,
+            onTap: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
+          ),
+        ],
+        buttonBuilder: (context, showMenu) => IconButton(
+          tooltip: '更多',
+          icon: const Icon(CupertinoIcons.ellipsis),
+          onPressed: showMenu,
+        ),
+      ),
+    ];
   }
 
   /// 构建播放按钮

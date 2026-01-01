@@ -8,7 +8,10 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/download_indicators.dart';
+import '../../core/widgets/mobile_app_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/season.dart';
 import '../../providers/download_provider.dart';
@@ -85,24 +88,20 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
     final episodes = widget.season.episodes ?? [];
     final downloadState = ref.watch(downloadManagerProvider);
     final downloadableEpisodes = episodes.where((e) => e.hasFile).toList();
+    final isDesktop = WindowControls.isDesktop;
+    final title = '${widget.tvShowName} 第 ${widget.seasonNumber} 季';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        leadingWidth: kAppBackButtonWidth,
-        leading: AppBackButton(
-          onPressed: () => context.pop(),
-          color: Colors.black,
-        ),
-        title: Text(
-          '${widget.tvShowName} 第 ${widget.seasonNumber} 季',
-          style: const TextStyle(color: Colors.black, fontSize: 17),
-        ),
-      ),
+      appBar: isDesktop
+          ? DesktopAppBar(
+              title: Text(title),
+              onBack: () => context.pop(),
+            )
+          : MobileAppBar(
+              title: Text(title, style: const TextStyle(fontSize: 17)),
+              onBack: () => context.pop(),
+            ),
       body: Column(
         children: [
           Expanded(

@@ -1,8 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/server_config.dart';
 import '../../providers/providers.dart';
@@ -151,9 +154,258 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     final servers = serverState.servers;
     final currentId = serverState.currentServerId;
     final isDesktop = WindowControls.isDesktop;
-    final isDark = CupertinoTheme.brightnessOf(context) == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final canPop = Navigator.of(context).canPop();
+
+    if (isDesktop) {
+      return Scaffold(
+        appBar: canPop
+            ? DesktopAppBar(
+                title: const Text('服务器管理'),
+                onBack: () => context.pop(),
+              )
+            : const DesktopTitleBar(
+                title: Text('服务器管理'),
+                centerTitle: true,
+              ),
+        body: _buildDesktopBody(servers, currentId, theme, isDark),
+      );
+    }
+
+    return _buildMobileLayout(servers, currentId, isDark, canPop);
+  }
+
+  Widget _buildDesktopBody(
+    List<ServerConfig> servers,
+    String? currentId,
+    ThemeData theme,
+    bool isDark,
+  ) {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      children: [
+        _buildSectionHeader('操作', theme),
+        _buildSettingsCard(
+          isDark,
+          children: [
+            _buildActionTile(
+              theme,
+              isDark,
+              icon: CupertinoIcons.add_circled,
+              iconColor: Colors.green,
+              title: '添加服务器',
+              onTap: _showAddServerDialog,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        _buildSectionHeader('服务器列表 (${servers.length})', theme),
+        if (servers.isEmpty)
+          _buildSettingsCard(
+            isDark,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(32),
+                child: Center(
+                  child: Text(
+                    '暂无服务器',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          _buildSettingsCard(
+            isDark,
+            children: [
+              for (int i = 0; i < servers.length; i++) ...[
+                if (i > 0) _buildDivider(isDark),
+                _buildDesktopServerTile(
+                  servers[i],
+                  servers[i].id == currentId,
+                  theme,
+                  isDark,
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSectionHeader(String title, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Text(
+        title,
+        style: theme.textTheme.titleSmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingsCard(bool isDark, {required List<Widget> children}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildDivider(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 60),
+      child: Divider(
+        height: 1,
+        color: isDark ? Colors.grey[800] : Colors.grey[200],
+      ),
+    );
+  }
+
+  Widget _buildActionTile(
+    ThemeData theme,
+    bool isDark, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Icon(
+                CupertinoIcons.chevron_right,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopServerTile(
+    ServerConfig server,
+    bool isCurrent,
+    ThemeData theme,
+    bool isDark,
+  ) {
+    final isConnecting = _isConnecting && _connectingServerId == server.id;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _isConnecting ? null : () => _connectToServer(server),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: isCurrent
+                      ? Colors.green.withValues(alpha: 0.15)
+                      : Colors.grey.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isCurrent
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.desktopcomputer,
+                  size: 18,
+                  color: isCurrent ? Colors.green : Colors.grey,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      server.name,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      server.url,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isConnecting)
+                const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else if (isCurrent)
+                Text(
+                  '当前',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: Colors.green,
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(CupertinoIcons.delete, size: 18),
+                  color: Colors.red,
+                  onPressed: () => _showDeleteConfirm(server),
+                  tooltip: '删除',
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(
+    List<ServerConfig> servers,
+    String? currentId,
+    bool isDark,
+    bool canPop,
+  ) {
+    final bgColor = isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7);
 
     final content = Center(
       child: ConstrainedBox(
@@ -186,8 +438,8 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
             const SizedBox(height: 32),
             Expanded(
               child: servers.isEmpty
-                  ? _buildEmptyState(context, isDark)
-                  : _buildServerList(servers, currentId, isDark),
+                  ? _buildMobileEmptyState(isDark)
+                  : _buildMobileServerList(servers, currentId, isDark),
             ),
             Padding(
               padding: const EdgeInsets.all(24),
@@ -210,24 +462,6 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
         ),
       ),
     );
-
-    if (isDesktop) {
-      return CupertinoPageScaffold(
-        backgroundColor: bgColor,
-        child: DefaultTextStyle(
-          style: TextStyle(
-            decoration: TextDecoration.none,
-            color: isDark ? CupertinoColors.white : CupertinoColors.black,
-          ),
-          child: Column(
-            children: [
-              const DesktopTitleBar(title: Text('服务器管理'), centerTitle: true),
-              Expanded(child: SafeArea(top: false, child: content)),
-            ],
-          ),
-        ),
-      );
-    }
 
     return CupertinoPageScaffold(
       backgroundColor: bgColor,
@@ -257,7 +491,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context, bool isDark) {
+  Widget _buildMobileEmptyState(bool isDark) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -289,7 +523,11 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
   }
 
-  Widget _buildServerList(List<ServerConfig> servers, String? currentId, bool isDark) {
+  Widget _buildMobileServerList(
+    List<ServerConfig> servers,
+    String? currentId,
+    bool isDark,
+  ) {
     final cardColor = isDark ? const Color(0xFF1C1C1E) : CupertinoColors.white;
 
     return ListView(
@@ -311,7 +549,11 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                       color: isDark ? Colors.grey[800] : Colors.grey[300],
                     ),
                   ),
-                _buildServerTile(servers[i], servers[i].id == currentId, isDark),
+                _buildMobileServerTile(
+                  servers[i],
+                  servers[i].id == currentId,
+                  isDark,
+                ),
               ],
             ],
           ),
@@ -331,7 +573,11 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
   }
 
-  Widget _buildServerTile(ServerConfig server, bool isCurrent, bool isDark) {
+  Widget _buildMobileServerTile(
+    ServerConfig server,
+    bool isCurrent,
+    bool isDark,
+  ) {
     final isConnecting = _isConnecting && _connectingServerId == server.id;
 
     return Dismissible(
@@ -367,9 +613,13 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  isCurrent ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.desktopcomputer,
+                  isCurrent
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.desktopcomputer,
                   size: 18,
-                  color: isCurrent ? CupertinoColors.activeGreen : CupertinoColors.systemGrey,
+                  color: isCurrent
+                      ? CupertinoColors.activeGreen
+                      : CupertinoColors.systemGrey,
                 ),
               ),
               const SizedBox(width: 12),
@@ -382,7 +632,8 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                        color:
+                            isDark ? CupertinoColors.white : CupertinoColors.black,
                       ),
                     ),
                     const SizedBox(height: 2),

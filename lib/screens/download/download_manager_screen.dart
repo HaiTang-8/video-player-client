@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/mobile_app_bar.dart';
+import '../../core/window/window_controls.dart';
 import '../../data/models/download_task.dart';
 import '../../providers/download_provider.dart';
 
@@ -13,24 +15,19 @@ class DownloadManagerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(downloadManagerProvider);
+    final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        centerTitle: true,
-        automaticallyImplyLeading: false,
-        leadingWidth: kAppBackButtonWidth,
-        leading: AppBackButton(
-          onPressed: () => context.pop(),
-          color: Colors.black,
-        ),
-        title: const Text(
-          '下载管理',
-          style: TextStyle(color: Colors.black, fontSize: 17),
-        ),
-      ),
+      appBar: isDesktop
+          ? DesktopAppBar(
+              title: const Text('下载管理'),
+              onBack: () => context.pop(),
+            )
+          : MobileAppBar(
+              title: const Text('下载管理', style: TextStyle(fontSize: 17)),
+              onBack: () => context.pop(),
+            ),
       body: state.tasks.isEmpty
           ? _buildEmptyState()
           : _buildContent(context, ref, state),
