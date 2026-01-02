@@ -14,6 +14,7 @@ import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
+import '../../data/services/api_client.dart';
 import '../../providers/providers.dart';
 
 /// Emby 风格剧集详情页面
@@ -520,7 +521,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             PullDownMenuItem(
               title: '更换海报',
               icon: CupertinoIcons.photo,
-              onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster),
+              onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason),
             ),
             PullDownMenuItem(
               title: '重新刮削',
@@ -1044,10 +1045,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Future<void> _showImageSelector(
     BuildContext context,
     TvShow tvShow,
-    ImageSelectorType type,
-  ) async {
+    ImageSelectorType type, {
+    Season? selectedSeason,
+  }) async {
     final service = ref.read(mediaServiceProvider);
     final serverBaseUrl = ref.read(serverUrlProvider);
+    final isDesktop = WindowControls.isDesktop;
     if (service == null) {
       IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
       return;
@@ -1079,8 +1082,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final images = type == ImageSelectorType.poster
         ? resp.data!.posters
         : resp.data!.backdrops;
+
+    // 移动端海报使用季度海报，PC端使用剧集主海报/背景图
     final currentUrl = type == ImageSelectorType.poster
-        ? tvShow.posterPath
+        ? (isDesktop ? tvShow.posterPath : (selectedSeason?.posterPath ?? tvShow.posterPath))
         : tvShow.backdropPath;
 
     showImageSelector(
@@ -1092,9 +1097,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       onSelect: (url) async {
         IosUiUtils.showLoadingDialog(context: context, message: '更新中...');
 
-        final updateResp = type == ImageSelectorType.poster
-            ? await service.updateTvShowPoster(tvShow.id, posterPath: url)
-            : await service.updateTvShowPoster(tvShow.id, backdropPath: url);
+        ApiResponse<void> updateResp;
+        if (type == ImageSelectorType.poster && !isDesktop && selectedSeason != null) {
+          // 移动端更换海报 -> 更新季度海报
+          updateResp = await service.updateSeasonPoster(
+            tvShow.id,
+            selectedSeason.id,
+            posterPath: url,
+          );
+        } else if (type == ImageSelectorType.poster) {
+          // PC端更换海报 -> 更新剧集主海报
+          updateResp = await service.updateTvShowPoster(tvShow.id, posterPath: url);
+        } else {
+          // 更换背景图 -> 更新剧集主背景图
+          updateResp = await service.updateTvShowPoster(tvShow.id, backdropPath: url);
+        }
 
         if (context.mounted) {
           Navigator.pop(context);
@@ -1103,6 +1120,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
         if (updateResp.isSuccess) {
           ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+          ref.read(postersProvider.notifier).refresh();
           IosUiUtils.showToast(context: context, message: '更新成功');
         } else {
           IosUiUtils.showToast(

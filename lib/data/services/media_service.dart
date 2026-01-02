@@ -316,6 +316,18 @@ class MediaService {
     return _client.put(ApiConstants.tvShowPoster(id), data: data);
   }
 
+  /// 更新季度海报
+  Future<ApiResponse<void>> updateSeasonPoster(
+    int tvShowId,
+    int seasonId, {
+    required String posterPath,
+  }) async {
+    return _client.put(
+      ApiConstants.seasonPoster(tvShowId, seasonId),
+      data: {'poster_path': posterPath},
+    );
+  }
+
   // ==================== 分类相关 ====================
 
   /// 获取分类统计

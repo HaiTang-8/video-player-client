@@ -895,6 +895,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
         if (updateResp.isSuccess) {
           ref.invalidate(movieDetailProvider(widget.movieId));
+          ref.read(postersProvider.notifier).refresh();
           IosUiUtils.showToast(context: context, message: '更新成功');
         } else {
           IosUiUtils.showToast(
