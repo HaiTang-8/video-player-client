@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/constants/app_constants.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/ios_ui_utils.dart';
+import 'data/services/aria2_manager.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
 
@@ -17,6 +21,14 @@ void main() async {
   // 初始化 SharedPreferences
   final prefs = await SharedPreferences.getInstance();
 
+  // PC端自动启动aria2
+  if (Platform.isWindows || Platform.isMacOS) {
+    final engine = prefs.getString(AppConstants.downloadEngineKey) ?? 'aria2Builtin';
+    if (engine == 'aria2Builtin') {
+      _initAria2();
+    }
+  }
+
   runApp(
     ProviderScope(
       overrides: [
@@ -25,6 +37,15 @@ void main() async {
       child: const MediaPlayerApp(),
     ),
   );
+}
+
+Future<void> _initAria2() async {
+  final aria2 = Aria2Manager.instance;
+  if (aria2.isRunning) return;
+  try {
+    await aria2.ensureBinary();
+    await aria2.start();
+  } catch (_) {}
 }
 
 class MediaPlayerApp extends ConsumerStatefulWidget {

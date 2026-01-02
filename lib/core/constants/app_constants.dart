@@ -22,6 +22,7 @@ class AppConstants {
   // 多线程下载配置
   static const String downloadThreadCountKey = 'download_thread_count';
   static const String downloadMultiThreadEnabledKey = 'download_multi_thread_enabled';
+  static const String downloadEngineKey = 'download_engine';
 
   // 分页
   static const int defaultPageSize = 20;

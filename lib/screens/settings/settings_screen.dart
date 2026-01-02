@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
+import '../../data/services/aria2_manager.dart';
 import '../../providers/aria2_provider.dart';
 import '../../providers/providers.dart';
 
@@ -73,7 +74,7 @@ class SettingsScreen extends ConsumerWidget {
                 icon: CupertinoIcons.arrow_down_circle,
                 iconColor: Colors.green,
                 title: '下载设置',
-                subtitle: aria2Config.enabled ? 'aria2 已启用' : '多线程下载',
+                subtitle: Aria2Manager.instance.isRunning ? '内置 aria2' : (aria2Config.enabled ? '外部 aria2' : '多线程下载'),
                 onTap: () => context.push('/aria2-settings'),
               ),
             ],

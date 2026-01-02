@@ -16,9 +16,12 @@ class Aria2Manager {
   Aria2Service? _service;
   String? _rpcSecret;
   int _rpcPort = 6800;
+  DateTime? _startTime;
 
   bool get isRunning => _process != null;
   Aria2Service? get service => _service;
+  int get rpcPort => _rpcPort;
+  DateTime? get startTime => _startTime;
 
   static const _downloadUrls = {
     'windows': 'https://github.com/aria2/aria2/releases/download/release-1.37.0/aria2-1.37.0-win-64bit-build1.zip',
@@ -181,6 +184,7 @@ class Aria2Manager {
       try {
         final version = await _service!.getVersion();
         debugPrint('[Aria2Manager] Started aria2 $version on port $_rpcPort');
+        _startTime = DateTime.now();
         return;
       } catch (_) {
         debugPrint('[Aria2Manager] Waiting for aria2 RPC... ($i)');
@@ -211,6 +215,7 @@ class Aria2Manager {
     _service = null;
     _process?.kill();
     _process = null;
+    _startTime = null;
   }
 
   Future<bool> healthCheck() async {

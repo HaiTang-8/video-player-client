@@ -111,6 +111,16 @@ class Aria2Service {
     return result['result'] as Map<String, dynamic>;
   }
 
+  Future<List<Map<String, dynamic>>> tellWaiting(int offset, int num) async {
+    final result = await _call('aria2.tellWaiting', [offset, num]);
+    return (result['result'] as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<List<Map<String, dynamic>>> tellStopped(int offset, int num) async {
+    final result = await _call('aria2.tellStopped', [offset, num]);
+    return (result['result'] as List).cast<Map<String, dynamic>>();
+  }
+
   void dispose() {
     _dio.close();
   }

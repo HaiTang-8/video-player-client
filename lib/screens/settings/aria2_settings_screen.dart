@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -27,6 +30,11 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
   late TextEditingController _secretController;
   bool _isStarting = false;
   String? _builtinVersion;
+  Timer? _refreshTimer;
+  Map<String, dynamic>? _globalStat;
+  List<Map<String, dynamic>> _activeTasks = [];
+  int _waitingCount = 0;
+  int _stoppedCount = 0;
 
   @override
   void initState() {
@@ -43,33 +51,77 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
     if (aria2.isRunning && aria2.service != null) {
       try {
         final version = await aria2.service!.getVersion();
-        if (mounted) setState(() => _builtinVersion = version);
+        if (mounted) {
+          setState(() => _builtinVersion = version);
+          _startRefreshTimer();
+        }
       } catch (_) {}
     }
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshAria2Status();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 1), (_) => _refreshAria2Status());
+  }
+
+  void _stopRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
+  Future<void> _refreshAria2Status() async {
+    final aria2 = Aria2Manager.instance;
+    if (!aria2.isRunning || aria2.service == null) return;
+    try {
+      final stat = await aria2.service!.getGlobalStat();
+      final active = await aria2.service!.tellActive();
+      final waiting = await aria2.service!.tellWaiting(0, 100);
+      final stopped = await aria2.service!.tellStopped(0, 100);
+      if (mounted) {
+        setState(() {
+          _globalStat = stat;
+          _activeTasks = active;
+          _waitingCount = waiting.length;
+          _stoppedCount = stopped.length;
+        });
+      }
+    } catch (_) {}
   }
 
   bool get _isDesktopPlatform => Platform.isWindows || Platform.isMacOS;
 
   DownloadEngine get _currentEngine {
-    final aria2Config = ref.read(aria2ConfigProvider);
     if (Aria2Manager.instance.isRunning) return DownloadEngine.aria2Builtin;
+    final aria2Config = ref.read(aria2ConfigProvider);
     if (aria2Config.enabled) return DownloadEngine.aria2External;
     return DownloadEngine.builtin;
   }
 
   @override
   void dispose() {
+    _stopRefreshTimer();
     _rpcUrlController.dispose();
     _secretController.dispose();
     super.dispose();
   }
 
   Future<void> _selectEngine(DownloadEngine engine) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(AppConstants.downloadEngineKey, engine.name);
+
     switch (engine) {
       case DownloadEngine.builtin:
+        _stopRefreshTimer();
         await Aria2Manager.instance.stop();
         ref.read(aria2ConfigProvider.notifier).setEnabled(false);
-        setState(() => _builtinVersion = null);
+        setState(() {
+          _builtinVersion = null;
+          _globalStat = null;
+          _activeTasks = [];
+          _waitingCount = 0;
+          _stoppedCount = 0;
+        });
         break;
       case DownloadEngine.aria2Builtin:
         ref.read(aria2ConfigProvider.notifier).setEnabled(false);
@@ -84,8 +136,15 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
           if (mounted) await _showExternalAria2ConfigDialog();
           return;
         }
+        _stopRefreshTimer();
         await Aria2Manager.instance.stop();
-        setState(() => _builtinVersion = null);
+        setState(() {
+          _builtinVersion = null;
+          _globalStat = null;
+          _activeTasks = [];
+          _waitingCount = 0;
+          _stoppedCount = 0;
+        });
         ref.read(aria2ConfigProvider.notifier).setEnabled(true);
         break;
     }
@@ -241,6 +300,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
           _builtinVersion = version;
           _isStarting = false;
         });
+        _startRefreshTimer();
         IosUiUtils.showToast(context: context, message: 'aria2 已启动 (v$version)');
       }
     } catch (e) {
@@ -360,6 +420,9 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
                 onTap: () => _showThreadCountPicker(context, downloadSettings.threadCount),
               ),
             ]),
+          ],
+          if (currentEngine == DownloadEngine.aria2Builtin && _builtinVersion != null) ...[
+            _buildAria2StatusPanel(theme, isDark),
           ],
         ],
       ),
@@ -534,5 +597,172 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
         ),
       ),
     );
+  }
+
+  Widget _buildAria2StatusPanel(ThemeData theme, bool isDark) {
+    final aria2 = Aria2Manager.instance;
+    final downloadSpeed = int.tryParse(_globalStat?['downloadSpeed'] ?? '0') ?? 0;
+    final uploadSpeed = int.tryParse(_globalStat?['uploadSpeed'] ?? '0') ?? 0;
+    final numActive = int.tryParse(_globalStat?['numActive'] ?? '0') ?? 0;
+
+    Widget buildBentoCard(IconData icon, Color color, String label, String value) {
+      return Expanded(
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F5F7),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, fontFeatures: [FontFeature.tabularFigures()]),
+              ),
+              const SizedBox(height: 2),
+              Text(label, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader('运行状态', theme),
+        Row(
+          children: [
+            buildBentoCard(CupertinoIcons.info, Colors.blue, '版本', 'v$_builtinVersion'),
+            const SizedBox(width: 12),
+            buildBentoCard(CupertinoIcons.antenna_radiowaves_left_right, Colors.purple, '端口', '${aria2.rpcPort}'),
+            const SizedBox(width: 12),
+            buildBentoCard(CupertinoIcons.clock, Colors.orange, '运行时长', _formatUptime(aria2.startTime)),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+        _buildSectionHeader('传输统计', theme),
+        Row(
+          children: [
+            buildBentoCard(CupertinoIcons.arrow_down, Colors.green, '下载', _formatSpeed(downloadSpeed)),
+            const SizedBox(width: 12),
+            buildBentoCard(CupertinoIcons.arrow_up, Colors.blue, '上传', _formatSpeed(uploadSpeed)),
+          ],
+        ),
+
+        const SizedBox(height: 24),
+        _buildSectionHeader('任务概览', theme),
+        Row(
+          children: [
+            buildBentoCard(CupertinoIcons.play_fill, Colors.green, '活动', '$numActive'),
+            const SizedBox(width: 12),
+            buildBentoCard(CupertinoIcons.clock_fill, Colors.orange, '等待', '$_waitingCount'),
+            const SizedBox(width: 12),
+            buildBentoCard(CupertinoIcons.stop_fill, Colors.grey, '已停止', '$_stoppedCount'),
+          ],
+        ),
+
+        if (_activeTasks.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          _buildSectionHeader('活动任务', theme),
+          _buildSettingsCard(isDark, children: [
+            for (var i = 0; i < _activeTasks.length; i++) ...[
+              if (i > 0) Divider(height: 1, indent: 16, endIndent: 16, color: theme.dividerColor),
+              _buildActiveTaskItem(theme, _activeTasks[i]),
+            ],
+          ]),
+        ],
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildActiveTaskItem(ThemeData theme, Map<String, dynamic> task) {
+    final files = task['files'] as List?;
+    String filename = '未知文件';
+    if (files != null && files.isNotEmpty) {
+      final path = files[0]['path'] as String? ?? '';
+      filename = path.split('/').last.split('\\').last;
+      if (filename.isEmpty) filename = '未知文件';
+    }
+    final totalLength = int.tryParse(task['totalLength'] ?? '0') ?? 0;
+    final completedLength = int.tryParse(task['completedLength'] ?? '0') ?? 0;
+    final downloadSpeed = int.tryParse(task['downloadSpeed'] ?? '0') ?? 0;
+    final progress = totalLength > 0 ? completedLength / totalLength : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            filename,
+            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 4,
+              backgroundColor: theme.dividerColor,
+              valueColor: const AlwaysStoppedAnimation(Colors.green),
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${_formatSize(completedLength)} / ${_formatSize(totalLength)}',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              Text(
+                _formatSpeed(downloadSpeed),
+                style: theme.textTheme.bodySmall?.copyWith(color: Colors.green),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatUptime(DateTime? startTime) {
+    if (startTime == null) return '-';
+    final duration = DateTime.now().difference(startTime);
+    if (duration.inHours > 0) {
+      return '${duration.inHours}小时${duration.inMinutes % 60}分钟';
+    } else if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}分钟';
+    }
+    return '${duration.inSeconds}秒';
+  }
+
+  String _formatSpeed(int bytesPerSecond) {
+    if (bytesPerSecond < 1024) return '$bytesPerSecond B/s';
+    if (bytesPerSecond < 1024 * 1024) return '${(bytesPerSecond / 1024).toStringAsFixed(1)} KB/s';
+    return '${(bytesPerSecond / 1024 / 1024).toStringAsFixed(1)} MB/s';
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+    return '${(bytes / 1024 / 1024 / 1024).toStringAsFixed(2)} GB';
   }
 }
