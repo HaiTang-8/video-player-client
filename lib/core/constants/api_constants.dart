@@ -24,6 +24,8 @@ class ApiConstants {
   static String movieDetail(int id) => '$apiPrefix/movies/$id';
   static String movieStream(int id) => '$apiPrefix/movies/$id/stream';
   static String movieScrape(int id) => '$apiPrefix/movies/$id/scrape';
+  static String movieImages(int id) => '$apiPrefix/movies/$id/images';
+  static String moviePoster(int id) => '$apiPrefix/movies/$id/poster';
   static const String movieSearch = '$apiPrefix/movies/search';
   static const String movieTmdbSearch = '$apiPrefix/movies/tmdb/search';
 
@@ -41,6 +43,8 @@ class ApiConstants {
       '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/primary-source';
   static String tvShowScrape(int id) => '$apiPrefix/tvshows/$id/scrape';
   static String tvShowAiMatch(int id) => '$apiPrefix/tvshows/$id/ai-match';
+  static String tvShowImages(int id) => '$apiPrefix/tvshows/$id/images';
+  static String tvShowPoster(int id) => '$apiPrefix/tvshows/$id/poster';
   static const String tvShowSearch = '$apiPrefix/tvshows/search';
   static const String tvShowTmdbSearch = '$apiPrefix/tvshows/tmdb/search';
 

@@ -7,6 +7,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -505,6 +506,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         PullDownButton(
           itemBuilder: (context) => [
             PullDownMenuItem(
+              title: '更换海报',
+              icon: CupertinoIcons.photo,
+              onTap: () => _showImageSelector(context, movie, ImageSelectorType.poster),
+            ),
+            PullDownMenuItem(
+              title: '更换背景图',
+              icon: CupertinoIcons.photo_on_rectangle,
+              onTap: () => _showImageSelector(context, movie, ImageSelectorType.backdrop),
+            ),
+            const PullDownMenuDivider(),
+            PullDownMenuItem(
               title: '重新刮削',
               icon: CupertinoIcons.wand_stars,
               onTap: () => _scrapeMovie(context, movie.id),
@@ -543,6 +555,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         ),
       PullDownButton(
         itemBuilder: (context) => [
+          PullDownMenuItem(
+            title: '更换海报',
+            icon: CupertinoIcons.photo,
+            onTap: () => _showImageSelector(context, movie, ImageSelectorType.poster),
+          ),
+          PullDownMenuItem(
+            title: '更换背景图',
+            icon: CupertinoIcons.photo_on_rectangle,
+            onTap: () => _showImageSelector(context, movie, ImageSelectorType.backdrop),
+          ),
+          const PullDownMenuDivider(),
           PullDownMenuItem(
             title: '重新刮削',
             icon: CupertinoIcons.wand_stars,
@@ -813,6 +836,80 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showImageSelector(
+    BuildContext context,
+    Movie movie,
+    ImageSelectorType type,
+  ) async {
+    final service = ref.read(mediaServiceProvider);
+    final serverBaseUrl = ref.read(serverUrlProvider);
+    if (service == null) {
+      IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      return;
+    }
+
+    if (movie.tmdbId == null) {
+      IosUiUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
+      return;
+    }
+
+    IosUiUtils.showLoadingDialog(context: context, message: '加载图片中...');
+
+    final resp = await service.getMovieImages(movie.id);
+
+    if (context.mounted) {
+      Navigator.pop(context);
+    }
+    if (!context.mounted) return;
+
+    if (!resp.isSuccess || resp.data == null) {
+      IosUiUtils.showToast(
+        context: context,
+        message: resp.error ?? '获取图片失败',
+        isError: true,
+      );
+      return;
+    }
+
+    final images = type == ImageSelectorType.poster
+        ? resp.data!.posters
+        : resp.data!.backdrops;
+    final currentUrl = type == ImageSelectorType.poster
+        ? movie.posterPath
+        : movie.backdropPath;
+
+    showImageSelector(
+      context: context,
+      images: images,
+      type: type,
+      currentUrl: currentUrl,
+      serverBaseUrl: serverBaseUrl,
+      onSelect: (url) async {
+        IosUiUtils.showLoadingDialog(context: context, message: '更新中...');
+
+        final updateResp = type == ImageSelectorType.poster
+            ? await service.updateMoviePoster(movie.id, posterPath: url)
+            : await service.updateMoviePoster(movie.id, backdropPath: url);
+
+        if (context.mounted) {
+          Navigator.pop(context);
+        }
+        if (!context.mounted) return;
+
+        if (updateResp.isSuccess) {
+          ref.invalidate(movieDetailProvider(widget.movieId));
+          IosUiUtils.showToast(context: context, message: '更新成功');
+        } else {
+          IosUiUtils.showToast(
+            context: context,
+            message: updateResp.error ?? '更新失败',
+            isError: true,
+          );
+        }
+      },
     );
   }
 

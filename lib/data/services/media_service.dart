@@ -86,6 +86,26 @@ class MediaService {
     return _client.delete(ApiConstants.movieDetail(id));
   }
 
+  /// 获取电影所有可用图片
+  Future<ApiResponse<MediaImages>> getMovieImages(int id) async {
+    return _client.get<MediaImages>(
+      ApiConstants.movieImages(id),
+      fromJson: (json) => MediaImages.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 更新电影海报/背景图
+  Future<ApiResponse<void>> updateMoviePoster(
+    int id, {
+    String? posterPath,
+    String? backdropPath,
+  }) async {
+    final data = <String, dynamic>{};
+    if (posterPath != null) data['poster_path'] = posterPath;
+    if (backdropPath != null) data['backdrop_path'] = backdropPath;
+    return _client.put(ApiConstants.moviePoster(id), data: data);
+  }
+
   // ==================== 剧集相关 ====================
 
   /// 获取剧集列表
@@ -274,6 +294,26 @@ class MediaService {
   /// 删除剧集
   Future<ApiResponse<void>> deleteTvShow(int id) async {
     return _client.delete(ApiConstants.tvShowDetail(id));
+  }
+
+  /// 获取电视剧所有可用图片
+  Future<ApiResponse<MediaImages>> getTvShowImages(int id) async {
+    return _client.get<MediaImages>(
+      ApiConstants.tvShowImages(id),
+      fromJson: (json) => MediaImages.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 更新电视剧海报/背景图
+  Future<ApiResponse<void>> updateTvShowPoster(
+    int id, {
+    String? posterPath,
+    String? backdropPath,
+  }) async {
+    final data = <String, dynamic>{};
+    if (posterPath != null) data['poster_path'] = posterPath;
+    if (backdropPath != null) data['backdrop_path'] = backdropPath;
+    return _client.put(ApiConstants.tvShowPoster(id), data: data);
   }
 
   // ==================== 分类相关 ====================

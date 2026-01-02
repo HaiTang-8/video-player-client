@@ -2,6 +2,7 @@
 export 'cast_member.dart';
 export 'crew_member.dart';
 export 'media_item.dart';
+export 'media_images.dart';
 export 'movie.dart';
 export 'tvshow.dart';
 export 'season.dart';

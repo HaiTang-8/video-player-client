@@ -7,6 +7,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -214,11 +215,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     String? imagePathRaw;
     bool usePoster = false;
     if (isDesktop) {
-      final backdrops = tvShow.backdrops;
-      if (backdrops != null && backdrops.isNotEmpty) {
-        imagePathRaw = backdrops[_selectedSeasonIndex % backdrops.length];
+      // 优先使用 backdropPath（用户可能手动选择过）
+      imagePathRaw = tvShow.backdropPath;
+      // 如果 backdropPath 为空，再从 backdrops 列表中取
+      if ((imagePathRaw == null || imagePathRaw.isEmpty) &&
+          tvShow.backdrops != null &&
+          tvShow.backdrops!.isNotEmpty) {
+        imagePathRaw = tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length];
       }
-      imagePathRaw ??= tvShow.backdropPath;
       if (imagePathRaw == null || imagePathRaw.isEmpty) {
         imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
         usePoster = true;
@@ -514,6 +518,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         PullDownButton(
           itemBuilder: (context) => [
             PullDownMenuItem(
+              title: '更换海报',
+              icon: CupertinoIcons.photo,
+              onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster),
+            ),
+            PullDownMenuItem(
+              title: '更换背景图',
+              icon: CupertinoIcons.photo_on_rectangle,
+              onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.backdrop),
+            ),
+            const PullDownMenuDivider(),
+            PullDownMenuItem(
               title: '重新刮削',
               icon: CupertinoIcons.wand_stars,
               onTap: () => _scrapeTvShow(context, widget.tvShowId),
@@ -563,6 +578,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       PullDownButton(
         itemBuilder: (context) => [
+          PullDownMenuItem(
+            title: '更换海报',
+            icon: CupertinoIcons.photo,
+            onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster),
+          ),
+          PullDownMenuItem(
+            title: '更换背景图',
+            icon: CupertinoIcons.photo_on_rectangle,
+            onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.backdrop),
+          ),
+          const PullDownMenuDivider(),
           PullDownMenuItem(
             title: '重新刮削',
             icon: CupertinoIcons.wand_stars,
@@ -1018,6 +1044,80 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showImageSelector(
+    BuildContext context,
+    TvShow tvShow,
+    ImageSelectorType type,
+  ) async {
+    final service = ref.read(mediaServiceProvider);
+    final serverBaseUrl = ref.read(serverUrlProvider);
+    if (service == null) {
+      IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      return;
+    }
+
+    if (tvShow.tmdbId == null) {
+      IosUiUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
+      return;
+    }
+
+    IosUiUtils.showLoadingDialog(context: context, message: '加载图片中...');
+
+    final resp = await service.getTvShowImages(tvShow.id);
+
+    if (context.mounted) {
+      Navigator.pop(context);
+    }
+    if (!context.mounted) return;
+
+    if (!resp.isSuccess || resp.data == null) {
+      IosUiUtils.showToast(
+        context: context,
+        message: resp.error ?? '获取图片失败',
+        isError: true,
+      );
+      return;
+    }
+
+    final images = type == ImageSelectorType.poster
+        ? resp.data!.posters
+        : resp.data!.backdrops;
+    final currentUrl = type == ImageSelectorType.poster
+        ? tvShow.posterPath
+        : tvShow.backdropPath;
+
+    showImageSelector(
+      context: context,
+      images: images,
+      type: type,
+      currentUrl: currentUrl,
+      serverBaseUrl: serverBaseUrl,
+      onSelect: (url) async {
+        IosUiUtils.showLoadingDialog(context: context, message: '更新中...');
+
+        final updateResp = type == ImageSelectorType.poster
+            ? await service.updateTvShowPoster(tvShow.id, posterPath: url)
+            : await service.updateTvShowPoster(tvShow.id, backdropPath: url);
+
+        if (context.mounted) {
+          Navigator.pop(context);
+        }
+        if (!context.mounted) return;
+
+        if (updateResp.isSuccess) {
+          ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+          IosUiUtils.showToast(context: context, message: '更新成功');
+        } else {
+          IosUiUtils.showToast(
+            context: context,
+            message: updateResp.error ?? '更新失败',
+            isError: true,
+          );
+        }
+      },
     );
   }
 
