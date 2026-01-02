@@ -15,6 +15,7 @@ import '../../core/widgets/loading_widget.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/subtitle_info.dart';
+import '../../data/services/download_service.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
 import 'widgets/custom_video_controls.dart';
@@ -83,7 +84,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _initEpisodeIndex() {
     if (widget.episodes != null && widget.type == 'episode') {
-      _currentEpisodeIndex = widget.episodes!.indexWhere((e) => e.id == widget.id);
+      _currentEpisodeIndex = widget.episodes!.indexWhere(
+        (e) => e.id == widget.id,
+      );
       if (_currentEpisodeIndex < 0) _currentEpisodeIndex = 0;
     }
   }
@@ -115,13 +118,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // 监听视频时长，准备好后 seek 到初始位置
     _player.stream.duration.listen((duration) {
       if (!mounted || _isDisposing) return;
-      debugPrint('[PlayerScreen] duration=${duration.inSeconds}s, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition');
+      debugPrint(
+        '[PlayerScreen] duration=${duration.inSeconds}s, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition',
+      );
       if (!_hasSeekToInitialPosition &&
           duration.inSeconds > 0 &&
           widget.initialPosition != null &&
           widget.initialPosition! > 0) {
         _hasSeekToInitialPosition = true;
-        debugPrint('[PlayerScreen] Seeking to ${widget.initialPosition} seconds');
+        debugPrint(
+          '[PlayerScreen] Seeking to ${widget.initialPosition} seconds',
+        );
         _player.seek(Duration(seconds: widget.initialPosition!));
       }
     });
@@ -316,10 +323,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
       final resolvedUrl = await _resolveRedirectTarget(fullUrl);
       final playUrl = resolvedUrl ?? fullUrl;
-      final headers = await _buildAuthHeadersForPlayUrl(
+      final authHeaders = await _buildAuthHeadersForPlayUrl(
         playUrl,
         storageId: storageId,
       );
+      final headers = <String, String>{
+        'User-Agent': DownloadService.aria2UserAgent,
+        ...?authHeaders,
+      };
 
       _currentStreamUrl = playUrl;
       await _player.open(Media(playUrl, httpHeaders: headers));
@@ -354,7 +365,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               (status) => status != null && status >= 200 && status < 400,
           responseType: ResponseType.bytes,
           // 保险起见：即便服务端没重定向（走代理），也只拉取 1 字节避免误触发大流量。
-          headers: const {'Range': 'bytes=0-0'},
+          headers: const {
+            'Range': 'bytes=0-0',
+            'User-Agent': DownloadService.aria2UserAgent,
+          },
         ),
       );
 
@@ -458,10 +472,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // 自动加载最佳匹配字幕（score >= 85）
       if (subtitles.isNotEmpty && subtitles.first.score >= 85) {
         final serverUrl = ref.read(serverUrlProvider);
-        final subUrl = subtitles.first.url.startsWith('http')
-            ? subtitles.first.url
-            : '$serverUrl${subtitles.first.url}';
-        await _player.setSubtitleTrack(SubtitleTrack.uri(subUrl, title: subtitles.first.displayName));
+        final subUrl =
+            subtitles.first.url.startsWith('http')
+                ? subtitles.first.url
+                : '$serverUrl${subtitles.first.url}';
+        await _player.setSubtitleTrack(
+          SubtitleTrack.uri(subUrl, title: subtitles.first.displayName),
+        );
 
         // 显示提示
         if (mounted) {
@@ -478,27 +495,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _showToast(String message) {
     _toastOverlay?.remove();
     _toastOverlay = OverlayEntry(
-      builder: (context) => Positioned(
-        top: MediaQuery.of(context).padding.top + 60,
-        left: 16,
-        right: 16,
-        child: Material(
-          color: Colors.transparent,
-          child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                message,
-                style: const TextStyle(color: Colors.white, fontSize: 14),
+      builder:
+          (context) => Positioned(
+            top: MediaQuery.of(context).padding.top + 60,
+            left: 16,
+            right: 16,
+            child: Material(
+              color: Colors.transparent,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    message,
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
     );
     Overlay.of(context).insert(_toastOverlay!);
     Future.delayed(const Duration(seconds: 2), () {
@@ -509,12 +530,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Episode? get _currentEpisode {
     if (widget.episodes == null || widget.episodes!.isEmpty) return null;
-    if (_currentEpisodeIndex < 0 || _currentEpisodeIndex >= widget.episodes!.length) return null;
+    if (_currentEpisodeIndex < 0 ||
+        _currentEpisodeIndex >= widget.episodes!.length)
+      return null;
     return widget.episodes![_currentEpisodeIndex];
   }
 
   bool get _hasPrevious => widget.episodes != null && _currentEpisodeIndex > 0;
-  bool get _hasNext => widget.episodes != null && _currentEpisodeIndex < widget.episodes!.length - 1;
+  bool get _hasNext =>
+      widget.episodes != null &&
+      _currentEpisodeIndex < widget.episodes!.length - 1;
 
   void _playPrevious() {
     if (_hasPrevious) _loadVideo(episodeIndex: _currentEpisodeIndex - 1);
