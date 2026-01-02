@@ -197,6 +197,10 @@ class ApiClient {
         } else {
           errorMessage = '服务器错误 ($statusCode)';
         }
+        // 404 是正常业务场景（如首次播放无观看记录），不触发全局错误提示
+        if (statusCode == 404) {
+          return ApiResponse<T>(success: false, error: errorMessage);
+        }
         break;
       case DioExceptionType.cancel:
         errorMessage = '请求已取消';

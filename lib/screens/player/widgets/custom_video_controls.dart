@@ -1031,6 +1031,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final episodes = widget.episodes;
     if (episodes == null || episodes.isEmpty) return;
 
+    final seasonNumber = episodes.first.seasonNumber;
+    final totalEpisodes = episodes.length;
+
     final panelWidth = WindowControls.isDesktop ? 280.0 : MediaQuery.of(context).size.width * 0.7;
     final result = await showGeneralDialog<int>(
       context: context,
@@ -1046,7 +1049,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
                 .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
             child: Material(
-              color: Colors.black87,
+              color: const Color(0xFF1C1C1E),
               child: SizedBox(
                 width: panelWidth,
                 height: double.infinity,
@@ -1054,33 +1057,63 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-                        child: Text('选集', style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        )),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+                        child: Text(
+                          '第$seasonNumber季 (共$totalEpisodes集)',
+                          style: const TextStyle(
+                            color: Colors.white60,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                      const Divider(color: Colors.white24, height: 1),
                       Expanded(
                         child: ListView.builder(
-                          padding: const EdgeInsets.only(top: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: episodes.length,
                           itemBuilder: (_, index) {
                             final ep = episodes[index];
                             final isCurrent = index == widget.currentEpisodeIndex;
-                            return ListTile(
-                              dense: true,
-                              title: Text(
-                                ep.displayTitle,
-                                style: TextStyle(
-                                  color: isCurrent ? Colors.red : Colors.white,
-                                  fontSize: 14,
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: GestureDetector(
+                                onTap: () => Navigator.pop(ctx, index),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: isCurrent
+                                        ? const Color(0xFF3A3A3C)
+                                        : const Color(0xFF2C2C2E),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: isCurrent
+                                        ? Border.all(color: Colors.white, width: 2)
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      if (isCurrent) ...[
+                                        const Icon(
+                                          Icons.play_circle_outline,
+                                          color: Colors.white,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: 10),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          '${ep.episodeNumber}. ${ep.name ?? '第 ${ep.episodeNumber} 集'}',
+                                          style: TextStyle(
+                                            color: isCurrent ? Colors.white : Colors.white70,
+                                            fontSize: 14,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              trailing: isCurrent ? _buildCheckMark() : null,
-                              onTap: () => Navigator.pop(ctx, index),
                             );
                           },
                         ),
