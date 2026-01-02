@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -234,6 +235,46 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     try {
+      // 检查是否有本地缓存
+      final downloadState = ref.read(downloadManagerProvider);
+      String? localPath;
+
+      if (widget.type == 'movie') {
+        if (downloadState.isMovieDownloaded(widget.id)) {
+          final task = downloadState.getTaskByMovieId(widget.id);
+          if (task != null && await File(task.localPath).exists()) {
+            localPath = task.localPath;
+          }
+        }
+      } else if (widget.type == 'episode') {
+        final episodeId = _currentEpisode?.id ?? widget.id;
+        if (downloadState.isEpisodeDownloaded(episodeId)) {
+          final task = downloadState.getTaskByEpisodeId(episodeId);
+          if (task != null && await File(task.localPath).exists()) {
+            localPath = task.localPath;
+          }
+        }
+      }
+
+      if (!mounted) return;
+
+      // 使用本地缓存播放
+      if (localPath != null) {
+        _currentStreamUrl = localPath;
+        await _player.open(Media(localPath));
+
+        if (!mounted) return;
+
+        _mediaService ??= ref.read(mediaServiceProvider);
+        _startProgressTimer();
+        _showToast('正在使用本地缓存播放');
+
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
       String? streamUrl;
       int? storageId;
       String? filePath;
@@ -424,7 +465,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
         // 显示提示
         if (mounted) {
-          _showSubtitleToast('已自动加载字幕: ${subtitles.first.displayName}');
+          _showToast('已自动加载字幕: ${subtitles.first.displayName}');
         }
       }
     } catch (e) {
@@ -434,7 +475,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   OverlayEntry? _toastOverlay;
 
-  void _showSubtitleToast(String message) {
+  void _showToast(String message) {
     _toastOverlay?.remove();
     _toastOverlay = OverlayEntry(
       builder: (context) => Positioned(
