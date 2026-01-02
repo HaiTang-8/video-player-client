@@ -230,9 +230,9 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       cursor: SystemMouseCursors.click,
-      child: TapFeedback(
+      child: GestureDetector(
         onTap: widget.onTap,
-        borderRadius: BorderRadius.circular(8),
+        behavior: HitTestBehavior.opaque,
         child: AnimatedScale(
           scale: _isHovered ? 1.05 : 1.0,
           duration: const Duration(milliseconds: 150),
@@ -243,7 +243,10 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedContainer(
+                TapFeedback(
+                  onTap: widget.onTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   width: widget.width,
                   height: imageHeight,
@@ -310,6 +313,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                       ],
                     ),
                   ),
+                ),
                 ),
                 const SizedBox(height: 8),
                 Text(

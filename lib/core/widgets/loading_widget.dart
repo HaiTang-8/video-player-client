@@ -13,7 +13,7 @@ class LoadingWidget extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CupertinoActivityIndicator(radius: 14),
+          const CupertinoActivityIndicator(radius: 14, color: Colors.white),
           if (message != null) ...[
             const SizedBox(height: 16),
             Text(
