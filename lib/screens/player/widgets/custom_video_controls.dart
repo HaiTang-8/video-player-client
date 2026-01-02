@@ -678,13 +678,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             _buildPlayControls(),
             const Spacer(),
             // 右侧：音轨 + 字幕 + 列表
-            _buildIconButton(Icons.audiotrack, () => _showAudioTrackSheet()),
+            _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
             _buildIconButton(
-              Icons.closed_caption_outlined,
+              Icons.subtitles_outlined,
               () => _showSubtitleSheet(),
             ),
             if (widget.episodes != null && widget.episodes!.isNotEmpty)
-              _buildIconButton(Icons.playlist_play, _showPlaylistMenu),
+              _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
           ],
         ),
       ),
@@ -780,12 +780,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     VoidCallback? onPressed, {
     GlobalKey? key,
   }) {
+    final isDesktop = WindowControls.isDesktop;
     return IconButton(
       key: key,
-      icon: Icon(icon, color: Colors.white, size: 22),
+      icon: Icon(icon, color: Colors.white, size: 24),
       onPressed: onPressed,
       padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 40),
+      constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
     );
   }
 
@@ -862,7 +863,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
                 .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
             child: Material(
-              color: Colors.black87,
+              color: const Color(0xFF1C1C1E),
               child: SizedBox(
                 width: panelWidth,
                 height: double.infinity,
@@ -974,7 +975,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
                 .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
             child: Material(
-              color: Colors.black87,
+              color: const Color(0xFF1C1C1E),
               child: SizedBox(
                 width: panelWidth,
                 height: double.infinity,
