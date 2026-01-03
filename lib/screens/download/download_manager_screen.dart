@@ -17,16 +17,23 @@ class DownloadManagerScreen extends ConsumerWidget {
     final state = ref.watch(downloadManagerProvider);
     final isDesktop = WindowControls.isDesktop;
 
+    final settingsAction = IconButton(
+      icon: const Icon(CupertinoIcons.gear, size: 22),
+      onPressed: () => context.push('/aria2-settings'),
+    );
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: isDesktop
           ? DesktopAppBar(
               title: const Text('下载管理'),
               onBack: () => context.pop(),
+              actions: [settingsAction],
             )
           : MobileAppBar(
               title: const Text('下载管理', style: TextStyle(fontSize: 17)),
               onBack: () => context.pop(),
+              actions: [settingsAction],
             ),
       body: state.tasks.isEmpty
           ? _buildEmptyState()
