@@ -39,52 +39,57 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
         final hasFiniteHeight = constraints.maxHeight.isFinite;
         final posterHeight = actualWidth * 1.5;
 
-        Widget posterWidget = AnimatedContainer(
+        Widget posterWidget = AnimatedScale(
+          scale: _isHovered ? 1.03 : 1.0,
           duration: const Duration(milliseconds: 150),
-          width: actualWidth,
-          height: hasFiniteHeight ? null : posterHeight,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(
-                  alpha: _isHovered ? 0.3 : 0.15,
+          curve: Curves.easeOut,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: actualWidth,
+            height: hasFiniteHeight ? null : posterHeight,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                    alpha: _isHovered ? 0.3 : 0.15,
+                  ),
+                  blurRadius: _isHovered ? 16 : 8,
+                  offset: Offset(0, _isHovered ? 8 : 4),
                 ),
-                blurRadius: _isHovered ? 16 : 8,
-                offset: Offset(0, _isHovered ? 8 : 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildPosterImage(serverBaseUrl),
-                if (widget.item.rating != null && widget.item.rating! > 0)
-                  Positioned(
-                    bottom: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getRatingColor(widget.item.rating!),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        widget.item.rating!.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildPosterImage(serverBaseUrl),
+                  if (widget.item.rating != null && widget.item.rating! > 0)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getRatingColor(widget.item.rating!),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          widget.item.rating!.toStringAsFixed(1),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -105,37 +110,32 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
           child: TapFeedback(
             onTap: widget.onTap,
             borderRadius: BorderRadius.circular(8),
-            child: AnimatedScale(
-              scale: _isHovered ? 1.05 : 1.0,
-              duration: const Duration(milliseconds: 150),
-              curve: Curves.easeOut,
-              child: SizedBox(
-                width: actualWidth,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: hasFiniteHeight ? MainAxisSize.max : MainAxisSize.min,
-                  children: [
-                    posterWidget,
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.item.title,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            child: SizedBox(
+              width: actualWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: hasFiniteHeight ? MainAxisSize.max : MainAxisSize.min,
+                children: [
+                  posterWidget,
+                  const SizedBox(height: 8),
+                  Text(
+                    widget.item.title,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _getSubtitle(),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.outline,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _getSubtitle(),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
                     ),
-                  ],
-                ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
           ),

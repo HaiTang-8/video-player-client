@@ -102,7 +102,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
     return GridView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.none,
+      padding: const EdgeInsets.all(24),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 160,
         childAspectRatio: 0.48,
