@@ -58,7 +58,25 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "toggleMaximize") {
-          ShowWindow(hwnd, IsZoomed(hwnd) ? SW_RESTORE : SW_MAXIMIZE);
+          if (!is_maximized_) {
+            GetWindowRect(hwnd, &maximized_restore_rect_);
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = {sizeof(mi)};
+            GetMonitorInfo(monitor, &mi);
+            SetWindowPos(hwnd, nullptr,
+                         mi.rcWork.left, mi.rcWork.top,
+                         mi.rcWork.right - mi.rcWork.left,
+                         mi.rcWork.bottom - mi.rcWork.top,
+                         SWP_NOZORDER | SWP_FRAMECHANGED);
+            is_maximized_ = true;
+          } else {
+            SetWindowPos(hwnd, nullptr,
+                         maximized_restore_rect_.left, maximized_restore_rect_.top,
+                         maximized_restore_rect_.right - maximized_restore_rect_.left,
+                         maximized_restore_rect_.bottom - maximized_restore_rect_.top,
+                         SWP_NOZORDER | SWP_FRAMECHANGED);
+            is_maximized_ = false;
+          }
           result->Success();
           return;
         }
@@ -103,7 +121,7 @@ bool FlutterWindow::OnCreate() {
           return;
         }
         if (method == "isMaximized") {
-          result->Success(flutter::EncodableValue(IsZoomed(hwnd) != 0));
+          result->Success(flutter::EncodableValue(is_maximized_));
           return;
         }
 

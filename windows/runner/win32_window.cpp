@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include "resource.h"
@@ -220,16 +221,6 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
 
     case WM_NCCALCSIZE:
-      if (wparam == TRUE && IsZoomed(hwnd)) {
-        NCCALCSIZE_PARAMS* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
-        HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        MONITORINFO mi = {sizeof(mi)};
-        GetMonitorInfo(monitor, &mi);
-        params->rgrc[0].left = mi.rcWork.left;
-        params->rgrc[0].top = mi.rcWork.top;
-        params->rgrc[0].right = mi.rcWork.right;
-        params->rgrc[0].bottom = mi.rcWork.bottom;
-      }
       return 0;
 
     case WM_NCHITTEST: {

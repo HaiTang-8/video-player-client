@@ -686,9 +686,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             if (widget.episodes != null && widget.episodes!.isNotEmpty)
               _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
             if (WindowControls.isDesktop)
-              _buildIconButton(
-                widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                widget.onToggleFullscreen,
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: _buildIconButton(
+                  widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                  widget.onToggleFullscreen,
+                ),
               ),
           ],
         ),

@@ -35,7 +35,9 @@ class FlutterWindow : public Win32Window {
       window_controls_channel_;
 
   bool is_fullscreen_ = false;
+  bool is_maximized_ = false;
   RECT windowed_rect_ = {0};
+  RECT maximized_restore_rect_ = {0};
   LONG windowed_style_ = 0;
   LONG windowed_ex_style_ = 0;
 };
