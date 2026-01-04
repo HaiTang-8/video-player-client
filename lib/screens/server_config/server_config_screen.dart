@@ -123,6 +123,93 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
   }
 
+  void _showEditServerDialog(ServerConfig server) {
+    final uri = Uri.tryParse(server.url);
+    final nameController = TextEditingController(text: server.name);
+    final hostController = TextEditingController(
+      text: uri != null ? '${uri.host}${uri.hasPort ? ':${uri.port}' : ''}' : server.url,
+    );
+    String protocol = uri?.scheme ?? 'http';
+
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => CupertinoAlertDialog(
+          title: const Text('编辑服务器'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoTextField(
+                  controller: nameController,
+                  placeholder: '名称（如：家里、公司）',
+                  padding: const EdgeInsets.all(12),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: CupertinoSlidingSegmentedControl<String>(
+                    groupValue: protocol,
+                    children: const {
+                      'http': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('HTTP'),
+                      ),
+                      'https': Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('HTTPS'),
+                      ),
+                    },
+                    onValueChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => protocol = value);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                CupertinoTextField(
+                  controller: hostController,
+                  placeholder: '192.168.1.100:8080',
+                  keyboardType: TextInputType.url,
+                  padding: const EdgeInsets.all(12),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final host = hostController.text.trim();
+                if (name.isEmpty || host.isEmpty) {
+                  return;
+                }
+                final url = '$protocol://$host';
+                final newUri = Uri.tryParse(url);
+                if (newUri == null || !newUri.hasAuthority) {
+                  return;
+                }
+                await ref.read(serverListProvider.notifier).updateServer(
+                  server.id,
+                  name: name,
+                  url: url,
+                );
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showDeleteConfirm(ServerConfig server) {
     showCupertinoDialog(
       context: context,
@@ -377,20 +464,30 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              else if (isCurrent)
-                Text(
-                  '当前',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: Colors.green,
+              else ...[
+                if (isCurrent)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Text(
+                      '当前',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: Colors.green,
+                      ),
+                    ),
                   ),
-                )
-              else
+                IconButton(
+                  icon: const Icon(CupertinoIcons.gear, size: 18),
+                  color: Colors.grey,
+                  onPressed: () => _showEditServerDialog(server),
+                  tooltip: '编辑',
+                ),
                 IconButton(
                   icon: const Icon(CupertinoIcons.delete, size: 18),
                   color: Colors.red,
                   onPressed: () => _showDeleteConfirm(server),
                   tooltip: '删除',
                 ),
+              ],
             ],
           ),
         ),
@@ -561,7 +658,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Text(
-            '左滑可删除服务器',
+            '左滑删除，长按编辑',
             style: TextStyle(
               fontSize: 13,
               color: CupertinoColors.secondaryLabel.resolveFrom(context),
@@ -595,10 +692,12 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
         ),
         child: const Icon(CupertinoIcons.delete, color: CupertinoColors.white),
       ),
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: _isConnecting ? null : () => _connectToServer(server),
-        child: Padding(
+      child: GestureDetector(
+        onLongPress: () => _showEditServerDialog(server),
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: _isConnecting ? null : () => _connectToServer(server),
+          child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
@@ -664,6 +763,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                 ),
             ],
           ),
+        ),
         ),
       ),
     );
