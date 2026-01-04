@@ -59,10 +59,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   MediaService? _mediaService;
   bool _hasSeekToInitialPosition = false;
   List<SubtitleInfo> _externalSubtitles = [];
+  List<Episode>? _episodes;
 
   @override
   void initState() {
     super.initState();
+    _episodes = widget.episodes;
     _dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 10),
@@ -75,6 +77,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _applyPlaybackSettings();
     _setupPlayerListeners();
     _loadVideo();
+    _loadEpisodesIfNeeded();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
@@ -82,11 +85,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _initEpisodeIndex() {
-    if (widget.episodes != null && widget.type == 'episode') {
-      _currentEpisodeIndex = widget.episodes!.indexWhere(
+    if (_episodes != null && widget.type == 'episode') {
+      _currentEpisodeIndex = _episodes!.indexWhere(
         (e) => e.id == widget.id,
       );
       if (_currentEpisodeIndex < 0) _currentEpisodeIndex = 0;
+    }
+  }
+
+  Future<void> _loadEpisodesIfNeeded() async {
+    if (widget.type != 'episode') return;
+    if (_episodes != null) return;
+    if (widget.tvShowId == null || widget.seasonId == null) return;
+
+    final episodes = await ref.read(
+      seasonEpisodesProvider((tvShowId: widget.tvShowId!, seasonId: widget.seasonId!)).future,
+    );
+    if (!mounted) return;
+    if (episodes != null) {
+      setState(() {
+        _episodes = episodes;
+        _currentEpisodeIndex = episodes.indexWhere((e) => e.id == widget.id);
+        if (_currentEpisodeIndex < 0) _currentEpisodeIndex = 0;
+      });
     }
   }
 
@@ -528,17 +549,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Episode? get _currentEpisode {
-    if (widget.episodes == null || widget.episodes!.isEmpty) return null;
+    if (_episodes == null || _episodes!.isEmpty) return null;
     if (_currentEpisodeIndex < 0 ||
-        _currentEpisodeIndex >= widget.episodes!.length)
+        _currentEpisodeIndex >= _episodes!.length) {
       return null;
-    return widget.episodes![_currentEpisodeIndex];
+    }
+    return _episodes![_currentEpisodeIndex];
   }
 
-  bool get _hasPrevious => widget.episodes != null && _currentEpisodeIndex > 0;
+  bool get _hasPrevious => _episodes != null && _currentEpisodeIndex > 0;
   bool get _hasNext =>
-      widget.episodes != null &&
-      _currentEpisodeIndex < widget.episodes!.length - 1;
+      _episodes != null &&
+      _currentEpisodeIndex < _episodes!.length - 1;
 
   void _playPrevious() {
     if (_hasPrevious) _loadVideo(episodeIndex: _currentEpisodeIndex - 1);
@@ -680,7 +702,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         hasNext: _hasNext,
         onToggleFullscreen: _toggleFullscreen,
         isFullscreen: _isFullscreen,
-        episodes: widget.episodes,
+        episodes: _episodes,
         currentEpisodeIndex: _currentEpisodeIndex,
         onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
         externalSubtitles: _externalSubtitles,

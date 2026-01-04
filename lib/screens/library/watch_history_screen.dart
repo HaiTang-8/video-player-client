@@ -219,13 +219,9 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
       final episodeInfo = item.mediaInfo!.episodeInfo!;
       if (!mounted) return;
-      final episodes = await ref.read(
-        seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
-      );
-      if (!mounted) return;
       await context.push(
         '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-        extra: {'position': item.position, 'title': title, 'episodes': episodes},
+        extra: {'position': item.position, 'title': title},
       );
     } else {
       context.push('/tvshow/${item.mediaId}');

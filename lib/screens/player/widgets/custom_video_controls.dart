@@ -1034,6 +1034,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
     final seasonNumber = episodes.first.seasonNumber;
     final totalEpisodes = episodes.length;
+    final currentIndex = widget.currentEpisodeIndex;
+
+    // 计算初始滚动偏移
+    const itemHeight = 56.0;
+    const itemSpacing = 8.0;
+    final initialOffset = (currentIndex * (itemHeight + itemSpacing)).clamp(0.0, double.infinity);
+    final scrollController = ScrollController(initialScrollOffset: initialOffset);
 
     final panelWidth = WindowControls.isDesktop ? 280.0 : MediaQuery.of(context).size.width * 0.7;
     final result = await showGeneralDialog<int>(
@@ -1042,13 +1049,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       barrierLabel: '',
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (_, __, ___) => const SizedBox(),
-      transitionBuilder: (ctx, anim, _, __) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+      pageBuilder: (ctx, anim, secondaryAnim) {
+        return SlideTransition(
+          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
+              .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+          child: Align(
+            alignment: Alignment.centerRight,
             child: Material(
               color: const Color(0xFF1C1C1E),
               child: SizedBox(
@@ -1070,13 +1076,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                       ),
                       Expanded(
                         child: ListView.builder(
+                          controller: scrollController,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           itemCount: episodes.length,
                           itemBuilder: (_, index) {
                             final ep = episodes[index];
-                            final isCurrent = index == widget.currentEpisodeIndex;
+                            final isCurrent = index == currentIndex;
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.only(bottom: itemSpacing),
                               child: GestureDetector(
                                 onTap: () => Navigator.pop(ctx, index),
                                 child: Container(
@@ -1128,6 +1135,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         );
       },
     );
+    scrollController.dispose();
     if (result != null && result != widget.currentEpisodeIndex) {
       widget.onSelectEpisode?.call(result);
     }
