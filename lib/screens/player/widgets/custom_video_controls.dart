@@ -677,7 +677,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             // 中间：播放控制
             _buildPlayControls(),
             const Spacer(),
-            // 右侧：音轨 + 字幕 + 列表
+            // 右侧：音轨 + 字幕 + 列表 + 全屏
             _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
             _buildIconButton(
               Icons.subtitles_outlined,
@@ -685,6 +685,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             ),
             if (widget.episodes != null && widget.episodes!.isNotEmpty)
               _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
+            if (WindowControls.isDesktop)
+              _buildIconButton(
+                widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                widget.onToggleFullscreen,
+              ),
           ],
         ),
       ),
