@@ -67,6 +67,41 @@ bool FlutterWindow::OnCreate() {
           result->Success();
           return;
         }
+        if (method == "toggleFullscreen") {
+          if (!is_fullscreen_) {
+            windowed_style_ = GetWindowLong(hwnd, GWL_STYLE);
+            windowed_ex_style_ = GetWindowLong(hwnd, GWL_EXSTYLE);
+            GetWindowRect(hwnd, &windowed_rect_);
+
+            HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = {sizeof(mi)};
+            GetMonitorInfo(monitor, &mi);
+
+            SetWindowLong(hwnd, GWL_STYLE, windowed_style_ & ~(WS_CAPTION | WS_THICKFRAME));
+            SetWindowLong(hwnd, GWL_EXSTYLE, windowed_ex_style_ & ~(WS_EX_DLGMODALFRAME | WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_STATICEDGE));
+            SetWindowPos(hwnd, HWND_TOP,
+                         mi.rcMonitor.left, mi.rcMonitor.top,
+                         mi.rcMonitor.right - mi.rcMonitor.left,
+                         mi.rcMonitor.bottom - mi.rcMonitor.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            is_fullscreen_ = true;
+          } else {
+            SetWindowLong(hwnd, GWL_STYLE, windowed_style_);
+            SetWindowLong(hwnd, GWL_EXSTYLE, windowed_ex_style_);
+            SetWindowPos(hwnd, nullptr,
+                         windowed_rect_.left, windowed_rect_.top,
+                         windowed_rect_.right - windowed_rect_.left,
+                         windowed_rect_.bottom - windowed_rect_.top,
+                         SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+            is_fullscreen_ = false;
+          }
+          result->Success();
+          return;
+        }
+        if (method == "isFullscreen") {
+          result->Success(flutter::EncodableValue(is_fullscreen_));
+          return;
+        }
 
         result->NotImplemented();
       });
