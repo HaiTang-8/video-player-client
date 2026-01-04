@@ -221,6 +221,13 @@ Win32Window::MessageHandler(HWND hwnd,
 
     case WM_NCCALCSIZE:
       if (wparam == TRUE) {
+        NCCALCSIZE_PARAMS* params = reinterpret_cast<NCCALCSIZE_PARAMS*>(lparam);
+        if (IsZoomed(hwnd)) {
+          HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+          MONITORINFO mi = {sizeof(mi)};
+          GetMonitorInfo(monitor, &mi);
+          params->rgrc[0] = mi.rcWork;
+        }
         return 0;
       }
       break;

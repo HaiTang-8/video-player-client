@@ -102,6 +102,10 @@ bool FlutterWindow::OnCreate() {
           result->Success(flutter::EncodableValue(is_fullscreen_));
           return;
         }
+        if (method == "isMaximized") {
+          result->Success(flutter::EncodableValue(IsZoomed(hwnd) != 0));
+          return;
+        }
 
         result->NotImplemented();
       });

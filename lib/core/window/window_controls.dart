@@ -84,5 +84,17 @@ class WindowControls {
       return false;
     }
   }
+
+  static Future<bool> isMaximized() async {
+    if (!isDesktop) return false;
+    try {
+      final result = await _channel.invokeMethod<bool>('isMaximized');
+      return result ?? false;
+    } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
 }
 

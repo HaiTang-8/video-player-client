@@ -101,7 +101,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   ...actions,
                   if (WindowControls.isWindows && actions.isNotEmpty)
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 16),
                   if (WindowControls.isWindows)
                     _WindowCaptionButtons(height: height, foregroundColor: fg)
                   else
@@ -116,7 +116,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
-class _WindowCaptionButtons extends StatelessWidget {
+class _WindowCaptionButtons extends StatefulWidget {
   final double height;
   final Color foregroundColor;
 
@@ -126,30 +126,68 @@ class _WindowCaptionButtons extends StatelessWidget {
   });
 
   @override
+  State<_WindowCaptionButtons> createState() => _WindowCaptionButtonsState();
+}
+
+class _WindowCaptionButtonsState extends State<_WindowCaptionButtons>
+    with WidgetsBindingObserver {
+  bool _isMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkMaximized();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _checkMaximized();
+  }
+
+  Future<void> _checkMaximized() async {
+    final maximized = await WindowControls.isMaximized();
+    if (mounted && maximized != _isMaximized) {
+      setState(() => _isMaximized = maximized);
+    }
+  }
+
+  Future<void> _toggleMaximize() async {
+    await WindowControls.toggleMaximize();
+    _checkMaximized();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final hoverBg = foregroundColor.withValues(alpha: 0.08);
+    final hoverBg = widget.foregroundColor.withValues(alpha: 0.08);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         _WindowCaptionButton(
-          height: height,
+          height: widget.height,
           icon: Icons.remove,
-          foregroundColor: foregroundColor,
+          foregroundColor: widget.foregroundColor,
           hoverBackgroundColor: hoverBg,
           onPressed: () => WindowControls.minimize(),
         ),
         _WindowCaptionButton(
-          height: height,
-          icon: Icons.crop_square,
-          foregroundColor: foregroundColor,
+          height: widget.height,
+          icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+          foregroundColor: widget.foregroundColor,
           hoverBackgroundColor: hoverBg,
-          onPressed: () => WindowControls.toggleMaximize(),
+          onPressed: _toggleMaximize,
         ),
         _WindowCaptionButton(
-          height: height,
+          height: widget.height,
           icon: Icons.close,
-          foregroundColor: foregroundColor,
+          foregroundColor: widget.foregroundColor,
           hoverBackgroundColor: const Color(0xFFE81123),
           hoverForegroundColor: Colors.white,
           onPressed: () => WindowControls.close(),
