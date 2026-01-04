@@ -2,6 +2,7 @@
 
 #include <dwmapi.h>
 #include <flutter_windows.h>
+#include <windowsx.h>
 
 #include "resource.h"
 
@@ -216,6 +217,33 @@ Win32Window::MessageHandler(HWND hwnd,
     case WM_DWMCOLORIZATIONCOLORCHANGED:
       UpdateTheme(hwnd);
       return 0;
+
+    case WM_NCCALCSIZE:
+      if (wparam == TRUE) {
+        return 0;
+      }
+      break;
+
+    case WM_NCHITTEST: {
+      POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(hwnd, &pt);
+      RECT rc;
+      GetClientRect(hwnd, &rc);
+      const int borderWidth = 8;
+      if (pt.y < borderWidth) {
+        if (pt.x < borderWidth) return HTTOPLEFT;
+        if (pt.x > rc.right - borderWidth) return HTTOPRIGHT;
+        return HTTOP;
+      }
+      if (pt.y > rc.bottom - borderWidth) {
+        if (pt.x < borderWidth) return HTBOTTOMLEFT;
+        if (pt.x > rc.right - borderWidth) return HTBOTTOMRIGHT;
+        return HTBOTTOM;
+      }
+      if (pt.x < borderWidth) return HTLEFT;
+      if (pt.x > rc.right - borderWidth) return HTRIGHT;
+      return HTCLIENT;
+    }
   }
 
   return DefWindowProc(window_handle_, message, wparam, lparam);
