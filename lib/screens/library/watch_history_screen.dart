@@ -210,39 +210,31 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   }
 
   Future<void> _navigateToDetail(WatchHistoryItem item) async {
-    if (item.completed) {
-      if (item.mediaType == 'movie') {
-        context.push('/movie/${item.mediaId}');
-      } else {
-        context.push('/tvshow/${item.mediaId}');
-      }
+    final title = _buildTitle(item);
+    if (item.mediaType == 'movie') {
+      await context.push(
+        '/player/movie/${item.mediaId}',
+        extra: {'position': item.position, 'title': title},
+      );
+    } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
+      final episodeInfo = item.mediaInfo!.episodeInfo!;
+      if (!mounted) return;
+      final episodes = await ref.read(
+        seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
+      );
+      if (!mounted) return;
+      await context.push(
+        '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
+        extra: {'position': item.position, 'title': title, 'episodes': episodes},
+      );
     } else {
-      final title = _buildTitle(item);
-      if (item.mediaType == 'movie') {
-        await context.push(
-          '/player/movie/${item.mediaId}',
-          extra: {'position': item.position, 'title': title},
-        );
-      } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
-        final episodeInfo = item.mediaInfo!.episodeInfo!;
-        if (!mounted) return;
-        final episodes = await ref.read(
-          seasonEpisodesProvider((tvShowId: item.mediaId, seasonId: episodeInfo.seasonId)).future,
-        );
-        if (!mounted) return;
-        await context.push(
-          '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-          extra: {'position': item.position, 'title': title, 'episodes': episodes},
-        );
-      } else {
-        context.push('/tvshow/${item.mediaId}');
-        return;
-      }
-      if (!mounted) return;
-      await Future.delayed(const Duration(milliseconds: 500));
-      if (!mounted) return;
-      ref.read(watchHistoryProvider.notifier).refresh();
+      context.push('/tvshow/${item.mediaId}');
+      return;
     }
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    ref.read(watchHistoryProvider.notifier).refresh();
   }
 
   String _buildTitle(WatchHistoryItem item) {
@@ -307,21 +299,20 @@ class _WatchHistoryListItem extends ConsumerWidget {
                   fit: StackFit.expand,
                   children: [
                     _buildImage(serverBaseUrl, isEpisode),
-                    if (!item.completed)
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          height: 3,
-                          color: CupertinoColors.black.withValues(alpha: 0.45),
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: item.progress.clamp(0.0, 1.0),
-                            child: Container(color: CupertinoColors.activeBlue),
-                          ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        height: 3,
+                        color: CupertinoColors.black.withValues(alpha: 0.45),
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: item.progress.clamp(0.0, 1.0),
+                          child: Container(color: CupertinoColors.activeBlue),
                         ),
                       ),
+                    ),
                   ],
                 ),
               ),
@@ -345,18 +336,6 @@ class _WatchHistoryListItem extends ConsumerWidget {
                 ],
               ),
             ),
-            if (!isEditMode && item.completed)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: CupertinoColors.activeGreen,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  '已看完',
-                  style: TextStyle(color: CupertinoColors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-              ),
           ],
         ),
       ),
@@ -380,18 +359,7 @@ class _WatchHistoryListItem extends ConsumerWidget {
   }
 
   String get _subtitle {
-    if (item.completed) return _formatWatchedAt(item.watchedAt);
     return '已观看 ${(item.progress * 100).toInt()}%';
-  }
-
-  String _formatWatchedAt(DateTime watchedAt) {
-    final now = DateTime.now();
-    final diff = now.difference(watchedAt);
-    if (diff.inMinutes < 1) return '刚刚';
-    if (diff.inHours < 1) return '${diff.inMinutes}分钟前';
-    if (diff.inDays < 1) return '${diff.inHours}小时前';
-    if (diff.inDays < 7) return '${diff.inDays}天前';
-    return '${watchedAt.month}月${watchedAt.day}日';
   }
 
   String? get _imagePath {

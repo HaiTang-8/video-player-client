@@ -11,7 +11,6 @@ import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
-import '../../core/widgets/loading_widget.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/subtitle_info.dart';
@@ -563,7 +562,41 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: Colors.black,
-        body: const LoadingWidget(message: '加载中...'),
+        appBar: WindowControls.isDesktop
+            ? DesktopTitleBar(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                centerTitle: false,
+                leading: AppBackButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                title: Text(_displayTitle.isNotEmpty ? _displayTitle : '加载中...'),
+              )
+            : AppBar(
+                backgroundColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                toolbarHeight: 44,
+                centerTitle: false,
+                automaticallyImplyLeading: false,
+                leadingWidth: kAppBackButtonWidth,
+                titleSpacing: 1,
+                leading: AppBackButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  color: Colors.white,
+                ),
+                title: Text(
+                  _displayTitle.isNotEmpty ? _displayTitle : '加载中...',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Colors.white),
+        ),
       );
     }
 
