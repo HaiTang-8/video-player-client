@@ -2,7 +2,7 @@ import Cocoa
 import FlutterMacOS
 
 class MainFlutterWindow: NSWindow {
-  private let customTitleBarHeight: CGFloat = 52
+  private let customTitleBarHeight: CGFloat = 40
   private var trafficLightObservers: [NSObjectProtocol] = []
 
   deinit {

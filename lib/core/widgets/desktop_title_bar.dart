@@ -18,7 +18,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
     this.leading,
     this.title,
     this.actions = const [],
-    this.height = 52,
+    this.height = 40,
     this.centerTitle = true,
     this.enableDrag = true,
     this.titleInteractive = false,
