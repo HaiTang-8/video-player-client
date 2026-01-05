@@ -263,8 +263,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
 
     try {
+      // 等待下载任务加载完成后再检查本地缓存
+      var downloadState = ref.read(downloadManagerProvider);
+      if (downloadState.isLoading) {
+        await Future.doWhile(() async {
+          await Future.delayed(const Duration(milliseconds: 50));
+          if (!mounted) return false;
+          downloadState = ref.read(downloadManagerProvider);
+          return downloadState.isLoading;
+        });
+      }
+
       // 检查是否有本地缓存
-      final downloadState = ref.read(downloadManagerProvider);
       String? localPath;
 
       if (widget.type == 'movie') {
