@@ -813,7 +813,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       ),
       child: Text(
         '${_playbackSpeed}x',
-        style: const TextStyle(color: Colors.white, fontSize: 13),
+        style: const TextStyle(color: Colors.white, fontSize: 15),
       ),
     );
   }
@@ -883,7 +883,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.black87,
+      backgroundColor: const Color(0xFF1C1C1E),
       builder:
           (ctx) => SafeArea(
             child: Column(
