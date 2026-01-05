@@ -34,6 +34,25 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   final _castScrollController = ScrollController();
   final _crewScrollController = ScrollController();
   final _episodesScrollController = ScrollController();
+  WatchHistoryItem? _watchHistory;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWatchHistory();
+  }
+
+  Future<void> _loadWatchHistory() async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final resp = await service.getWatchProgress('tv', widget.tvShowId);
+    if (!mounted) return;
+    if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
+      setState(() => _watchHistory = resp.data);
+    } else {
+      setState(() => _watchHistory = null);
+    }
+  }
 
   @override
   void dispose() {
@@ -443,24 +462,33 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   Widget _buildFullWidthPlayButton(BuildContext context) {
+    final history = _watchHistory;
+    String buttonText = '播放';
+    if (history != null && history.mediaInfo?.episodeInfo != null) {
+      final ep = history.mediaInfo!.episodeInfo!;
+      final pos = history.position;
+      final m = (pos ~/ 60).toString().padLeft(2, '0');
+      final s = (pos % 60).toString().padLeft(2, '0');
+      buttonText = '第${ep.seasonNumber}季 第${ep.episodeNumber}集 $m:$s';
+    }
     return SizedBox(
       width: double.infinity,
       child: Material(
         color: Colors.black,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
-          onTap: () {},
+          onTap: () => _playFromHistory(context),
           borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.play_arrow, color: Colors.white, size: 24),
-                SizedBox(width: 8),
+                const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
                 Text(
-                  '播放',
-                  style: TextStyle(
+                  buttonText,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -620,24 +648,34 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
+    final history = _watchHistory;
+    String buttonText = '播放';
+    if (history != null && history.mediaInfo?.episodeInfo != null) {
+      final ep = history.mediaInfo!.episodeInfo!;
+      final pos = history.position;
+      final m = (pos ~/ 60).toString().padLeft(2, '0');
+      final s = (pos % 60).toString().padLeft(2, '0');
+      buttonText = '第${ep.seasonNumber}季 第${ep.episodeNumber}集 $m:$s';
+    }
     return Material(
       color: Colors.black,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
-        onTap: () {
-          // TODO: 播放第一集或继续播放
-        },
+        onTap: () => _playFromHistory(context),
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-          child: const Row(
+          padding: EdgeInsets.symmetric(
+            horizontal: WindowControls.isDesktop ? 48 : 32,
+            vertical: 14,
+          ),
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_arrow, color: Colors.white, size: 24),
-              SizedBox(width: 8),
+              const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+              const SizedBox(width: 8),
               Text(
-                '播放',
-                style: TextStyle(
+                buttonText,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -648,6 +686,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _playFromHistory(BuildContext context) async {
+    final history = _watchHistory;
+    if (history != null && history.episodeId != null && history.mediaInfo?.episodeInfo != null) {
+      final ep = history.mediaInfo!.episodeInfo!;
+      await context.push(
+        '/player/episode/${widget.tvShowId}/${ep.seasonId}/${history.episodeId}',
+        extra: {'position': history.position},
+      );
+      if (!mounted) return;
+      await _loadWatchHistory();
+      ref.read(watchHistoryProvider.notifier).refresh();
+    }
+    // TODO: 无历史时播放第一集
   }
 
   /// 构建元数据行

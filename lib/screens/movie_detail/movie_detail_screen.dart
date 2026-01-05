@@ -30,6 +30,25 @@ class MovieDetailScreen extends ConsumerStatefulWidget {
 class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Movie? _movie;
   final _castScrollController = ScrollController();
+  WatchHistoryItem? _watchHistory;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWatchHistory();
+  }
+
+  Future<void> _loadWatchHistory() async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final resp = await service.getWatchProgress('movie', widget.movieId);
+    if (!mounted) return;
+    if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
+      setState(() => _watchHistory = resp.data);
+    } else {
+      setState(() => _watchHistory = null);
+    }
+  }
 
   @override
   void dispose() {
@@ -426,6 +445,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildFullWidthPlayButton(BuildContext context) {
+    final history = _watchHistory;
+    String buttonText = '播放';
+    if (history != null) {
+      final pos = history.position;
+      final m = (pos ~/ 60).toString().padLeft(2, '0');
+      final s = (pos % 60).toString().padLeft(2, '0');
+      buttonText = '续播 $m:$s';
+    }
     return SizedBox(
       width: double.infinity,
       child: Material(
@@ -436,14 +463,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            child: const Row(
+            child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.play_arrow, color: Colors.white, size: 24),
-                SizedBox(width: 8),
+                const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
                 Text(
-                  '播放',
-                  style: TextStyle(
+                  buttonText,
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
@@ -590,6 +617,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
+    final history = _watchHistory;
+    String buttonText = '播放';
+    if (history != null) {
+      final pos = history.position;
+      final m = (pos ~/ 60).toString().padLeft(2, '0');
+      final s = (pos % 60).toString().padLeft(2, '0');
+      buttonText = '续播 $m:$s';
+    }
     return Material(
       color: Colors.black,
       borderRadius: BorderRadius.circular(8),
@@ -597,15 +632,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         onTap: () => _playMovie(context),
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-          child: const Row(
+          padding: EdgeInsets.symmetric(
+            horizontal: WindowControls.isDesktop ? 48 : 32,
+            vertical: 14,
+          ),
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.play_arrow, color: Colors.white, size: 24),
-              SizedBox(width: 8),
+              const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+              const SizedBox(width: 8),
               Text(
-                '播放',
-                style: TextStyle(
+                buttonText,
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
@@ -627,29 +665,20 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (service != null) {
       final historyResp = await service.getWatchProgress('movie', movie.id);
-      debugPrint(
-        '[_playMovie] historyResp.isSuccess=${historyResp.isSuccess}, data=${historyResp.data}, error=${historyResp.error}',
-      );
       if (historyResp.isSuccess && historyResp.data != null) {
-        debugPrint(
-          '[_playMovie] position=${historyResp.data!.position}, completed=${historyResp.data!.completed}',
-        );
         if (!historyResp.data!.completed) {
           position = historyResp.data!.position;
         }
       }
     }
 
-    debugPrint('[_playMovie] final position=$position, title=${movie.title}');
     if (!context.mounted) return;
-    debugPrint('[_playMovie] before push');
     await context.push(
       '/player/movie/${movie.id}',
       extra: {'position': position, 'title': movie.title},
     );
-    debugPrint('[_playMovie] after push, waiting 500ms');
-    await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('[_playMovie] calling refresh');
+    if (!mounted) return;
+    await _loadWatchHistory();
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 

@@ -169,7 +169,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
   }
 
-  void _saveProgress() {
+  Future<void> _saveProgress() async {
     final position = _player.state.position;
     final duration = _player.state.duration;
 
@@ -181,7 +181,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (service == null) return;
 
     if (widget.type == 'movie') {
-      service.updateWatchProgress(
+      await service.updateWatchProgress(
         mediaType: 'movie',
         mediaId: widget.id,
         position: position.inSeconds,
@@ -189,7 +189,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
     } else if (widget.type == 'episode' && widget.tvShowId != null) {
       final episodeId = _currentEpisode?.id ?? widget.id;
-      service.updateWatchProgress(
+      await service.updateWatchProgress(
         mediaType: 'tv',
         mediaId: widget.tvShowId!,
         episodeId: episodeId,
@@ -716,7 +716,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         player: _player,
         controller: _controller,
         title: _displayTitle,
-        onBack: () => Navigator.of(context).pop(),
+        onBack: () async {
+          await _saveProgress();
+          if (context.mounted) Navigator.of(context).pop();
+        },
         onPrevious: _hasPrevious ? _playPrevious : null,
         onNext: _hasNext ? _playNext : null,
         hasPrevious: _hasPrevious,
