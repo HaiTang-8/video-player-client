@@ -253,6 +253,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _loadVideo({int? episodeIndex}) async {
     if (!mounted) return;
+    if (episodeIndex != null) await _player.pause();
     setState(() {
       _isLoading = true;
       _error = null;

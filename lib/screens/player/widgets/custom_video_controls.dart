@@ -77,6 +77,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   // 长按倍速
   bool _isLongPressSpeed = false;
   double _originalSpeed = 1.0;
+  Timer? _longPressTimer;
 
   /// 剧集列表的滚动位置缓存：
   /// - 关闭列表前记录当前 offset
@@ -190,6 +191,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   void dispose() {
     _hideTimer?.cancel();
+    _longPressTimer?.cancel();
     _focusNode.dispose();
     for (final sub in _subscriptions) {
       sub.cancel();
@@ -274,12 +276,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
     final key = event.logicalKey;
 
-    // 右箭头长按倍速
+    // 右箭头：短按 seek，长按倍速
     if (key == LogicalKeyboardKey.arrowRight) {
       if (event is KeyDownEvent && event is! KeyRepeatEvent) {
-        _startLongPressSpeed();
+        _longPressTimer?.cancel();
+        _longPressTimer = Timer(const Duration(milliseconds: 300), () {
+          _startLongPressSpeed();
+        });
       } else if (event is KeyUpEvent) {
-        _endLongPressSpeed();
+        if (_isLongPressSpeed) {
+          _endLongPressSpeed();
+        } else {
+          _longPressTimer?.cancel();
+          _seekRelative(5);
+        }
       }
       return KeyEventResult.handled;
     }
