@@ -95,7 +95,7 @@ class AppTheme {
       centerTitle: true,
       elevation: 0,
       toolbarHeight: 44,
-      backgroundColor: Color(0xFF0F0F0F),
+      backgroundColor: Color(0xFF1A1A1A),
       titleTextStyle: TextStyle(
         color: Colors.white,
         fontSize: 16,

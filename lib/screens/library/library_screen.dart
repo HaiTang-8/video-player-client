@@ -30,8 +30,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     final categoriesState = ref.watch(categoriesProvider);
     final isDesktop = WindowControls.isDesktop;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
+      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
       appBar: isDesktop
           ? DesktopTitleBar(
               title: const Text('媒体库'),
