@@ -78,6 +78,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   bool _isLongPressSpeed = false;
   double _originalSpeed = 1.0;
 
+  /// 剧集列表的滚动位置缓存：
+  /// - 关闭列表前记录当前 offset
+  /// - 再次打开时使用该 offset 初始化，从而避免“每次打开都自动滚动到当前播放项”
+  /// - 首次打开默认 0.0，即从顶部显示（仍然会高亮当前播放项）
+  double _playlistScrollOffset = 0.0;
+
+  /// 用于判断当前剧集列表是否发生了“换剧/换季/集数变化”等结构性变化：
+  /// - 变化后重置 [_playlistScrollOffset]，避免把旧列表的滚动位置带到新列表导致定位错乱
+  int? _playlistEpisodesKey;
+
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
@@ -85,10 +95,28 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   void initState() {
     super.initState();
+    _playlistEpisodesKey = _buildEpisodesKey(widget.episodes);
     _initBrightness();
     _initCurrentTracks();
     _setupListeners();
     _startHideTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant CustomVideoControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newKey = _buildEpisodesKey(widget.episodes);
+    if (newKey != _playlistEpisodesKey) {
+      _playlistEpisodesKey = newKey;
+      _playlistScrollOffset = 0.0;
+    }
+  }
+
+  int? _buildEpisodesKey(List<Episode>? episodes) {
+    if (episodes == null || episodes.isEmpty) return null;
+    final first = episodes.first;
+    // 这里用「剧 + 季 + 集数」粗粒度区分列表内容，避免频繁误判。
+    return Object.hash(first.tvShowId, first.seasonId, episodes.length);
   }
 
   Future<void> _initBrightness() async {
@@ -226,8 +254,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final delta = details.delta.dx / screenWidth * _duration.inMilliseconds;
     setState(() {
       _seekPosition = Duration(
-        milliseconds: (_seekPosition.inMilliseconds + delta.toInt())
-            .clamp(0, _duration.inMilliseconds),
+        milliseconds: (_seekPosition.inMilliseconds + delta.toInt()).clamp(
+          0,
+          _duration.inMilliseconds,
+        ),
       );
     });
   }
@@ -350,10 +380,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         children: [
           GestureDetector(
             onTap: _toggleVisibility,
-            onLongPressStart: WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
-            onLongPressEnd: WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
+            onLongPressStart:
+                WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
+            onLongPressEnd:
+                WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
             behavior: HitTestBehavior.translucent,
-            child: Video(controller: widget.controller, controls: NoVideoControls),
+            child: Video(
+              controller: widget.controller,
+              controls: NoVideoControls,
+            ),
           ),
           // 左侧亮度手势区域
           if (!WindowControls.isDesktop)
@@ -418,7 +453,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               right: 0,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(4),
@@ -477,7 +515,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              _volume > 0.5 ? Icons.volume_up : (_volume > 0 ? Icons.volume_down : Icons.volume_off),
+              _volume > 0.5
+                  ? Icons.volume_up
+                  : (_volume > 0 ? Icons.volume_down : Icons.volume_off),
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -521,7 +561,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           children: [
             Text(
               _formatSeekDelta(delta),
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
@@ -590,7 +634,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildProgressBar() {
-    final bottomPadding = WindowControls.isDesktop ? 0.0 : MediaQuery.of(context).padding.bottom;
+    final bottomPadding =
+        WindowControls.isDesktop ? 0.0 : MediaQuery.of(context).padding.bottom;
     return Positioned(
       left: 16,
       right: 16,
@@ -689,7 +734,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: _buildIconButton(
-                  widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                  widget.isFullscreen
+                      ? Icons.fullscreen_exit
+                      : Icons.fullscreen,
                   widget.onToggleFullscreen,
                 ),
               ),
@@ -802,7 +849,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return Container(
       width: 14,
       height: 14,
-      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+      ),
       child: const Icon(Icons.check, color: Colors.black, size: 10),
     );
   }
@@ -852,7 +902,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   void _showAudioTrackSheet() => _showAudioTrackMenu();
 
   void _showSubtitleMenu() async {
-    final panelWidth = WindowControls.isDesktop ? 200.0 : MediaQuery.of(context).size.width * 0.6;
+    final panelWidth =
+        WindowControls.isDesktop
+            ? 200.0
+            : MediaQuery.of(context).size.width * 0.6;
     final result = await showGeneralDialog<dynamic>(
       context: context,
       barrierDismissible: true,
@@ -862,14 +915,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       pageBuilder: (_, __, ___) => const SizedBox(),
       transitionBuilder: (ctx, anim, _, __) {
         final currentId = _currentSubtitleTrack?.id;
-        final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
+        final embeddedTracks =
+            _subtitleTracks.where((t) => t.id != 'no').toList();
         final externalSubs = widget.externalSubtitles;
 
         return Align(
           alignment: Alignment.centerRight,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
             child: Material(
               color: const Color(0xFF1C1C1E),
               child: SizedBox(
@@ -881,11 +937,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                     children: [
                       const Padding(
                         padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-                        child: Text('字幕', style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        )),
+                        child: Text(
+                          '字幕',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       const Divider(color: Colors.white24, height: 1),
                       Expanded(
@@ -894,25 +953,45 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                           children: [
                             ListTile(
                               dense: true,
-                              title: const Text('关闭', style: TextStyle(color: Colors.white, fontSize: 14)),
-                              trailing: currentId == 'no' || currentId == null
-                                  ? _buildCheckMark()
-                                  : null,
-                              onTap: () => Navigator.pop(ctx, SubtitleTrack.no()),
+                              title: const Text(
+                                '关闭',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              trailing:
+                                  currentId == 'no' || currentId == null
+                                      ? _buildCheckMark()
+                                      : null,
+                              onTap:
+                                  () => Navigator.pop(ctx, SubtitleTrack.no()),
                             ),
                             if (embeddedTracks.isNotEmpty) ...[
                               const Padding(
                                 padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                                child: Text('内嵌字幕', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                child: Text(
+                                  '内嵌字幕',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
                               ...embeddedTracks.map(
                                 (t) => ListTile(
                                   dense: true,
-                                  title: Text(t.title ?? t.language ?? t.id,
-                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                  trailing: currentId == t.id
-                                      ? _buildCheckMark()
-                                      : null,
+                                  title: Text(
+                                    t.title ?? t.language ?? t.id,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  trailing:
+                                      currentId == t.id
+                                          ? _buildCheckMark()
+                                          : null,
                                   onTap: () => Navigator.pop(ctx, t),
                                 ),
                               ),
@@ -920,24 +999,41 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                             if (externalSubs.isNotEmpty) ...[
                               const Padding(
                                 padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                                child: Text('外挂字幕', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                child: Text(
+                                  '外挂字幕',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 12,
+                                  ),
+                                ),
                               ),
                               ...externalSubs.map(
                                 (sub) => ListTile(
                                   dense: true,
-                                  title: Text(sub.displayName,
-                                      style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                  trailing: currentId == 'external_${sub.path}'
-                                      ? _buildCheckMark()
-                                      : null,
-                                  onTap: () => Navigator.pop(ctx, {'external': sub}),
+                                  title: Text(
+                                    sub.displayName,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                  trailing:
+                                      currentId == 'external_${sub.path}'
+                                          ? _buildCheckMark()
+                                          : null,
+                                  onTap:
+                                      () =>
+                                          Navigator.pop(ctx, {'external': sub}),
                                 ),
                               ),
                             ],
                             if (embeddedTracks.isEmpty && externalSubs.isEmpty)
                               const Padding(
                                 padding: EdgeInsets.all(16),
-                                child: Text('无可用字幕', style: TextStyle(color: Colors.white38)),
+                                child: Text(
+                                  '无可用字幕',
+                                  style: TextStyle(color: Colors.white38),
+                                ),
                               ),
                           ],
                         ),
@@ -957,17 +1053,23 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         widget.player.setSubtitleTrack(result);
       } else if (result is Map && result['external'] != null) {
         final sub = result['external'] as SubtitleInfo;
-        final subUrl = sub.url.startsWith('http')
-            ? sub.url
-            : '${widget.serverUrl ?? ''}${sub.url}';
-        widget.player.setSubtitleTrack(SubtitleTrack.uri(subUrl, title: sub.displayName));
+        final subUrl =
+            sub.url.startsWith('http')
+                ? sub.url
+                : '${widget.serverUrl ?? ''}${sub.url}';
+        widget.player.setSubtitleTrack(
+          SubtitleTrack.uri(subUrl, title: sub.displayName),
+        );
       }
     }
     _startHideTimer();
   }
 
   void _showAudioTrackMenu() async {
-    final panelWidth = WindowControls.isDesktop ? 200.0 : MediaQuery.of(context).size.width * 0.6;
+    final panelWidth =
+        WindowControls.isDesktop
+            ? 200.0
+            : MediaQuery.of(context).size.width * 0.6;
     final result = await showGeneralDialog<AudioTrack>(
       context: context,
       barrierDismissible: true,
@@ -980,8 +1082,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         return Align(
           alignment: Alignment.centerRight,
           child: SlideTransition(
-            position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-                .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+            position: Tween<Offset>(
+              begin: const Offset(1, 0),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
             child: Material(
               color: const Color(0xFF1C1C1E),
               child: SizedBox(
@@ -993,32 +1097,46 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                     children: [
                       const Padding(
                         padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-                        child: Text('音轨', style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        )),
+                        child: Text(
+                          '音轨',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                       const Divider(color: Colors.white24, height: 1),
                       Expanded(
                         child: ListView(
                           padding: const EdgeInsets.only(top: 8),
                           children: [
-                            ..._audioTracks.where((t) => t.id != 'no').map(
+                            ..._audioTracks
+                                .where((t) => t.id != 'no')
+                                .map(
                                   (t) => ListTile(
                                     dense: true,
-                                    title: Text(t.title ?? t.language ?? t.id,
-                                        style: const TextStyle(color: Colors.white, fontSize: 14)),
-                                    trailing: currentId == t.id
-                                        ? _buildCheckMark()
-                                        : null,
+                                    title: Text(
+                                      t.title ?? t.language ?? t.id,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                    trailing:
+                                        currentId == t.id
+                                            ? _buildCheckMark()
+                                            : null,
                                     onTap: () => Navigator.pop(ctx, t),
                                   ),
                                 ),
                             if (_audioTracks.where((t) => t.id != 'no').isEmpty)
                               const Padding(
                                 padding: EdgeInsets.all(16),
-                                child: Text('无可用音轨', style: TextStyle(color: Colors.white38)),
+                                child: Text(
+                                  '无可用音轨',
+                                  style: TextStyle(color: Colors.white38),
+                                ),
                               ),
                           ],
                         ),
@@ -1044,13 +1162,23 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final totalEpisodes = episodes.length;
     final currentIndex = widget.currentEpisodeIndex;
 
-    // 计算初始滚动偏移
-    const itemHeight = 56.0;
     const itemSpacing = 8.0;
-    final initialOffset = (currentIndex * (itemHeight + itemSpacing)).clamp(0.0, double.infinity);
-    final scrollController = ScrollController(initialScrollOffset: initialOffset);
+    final scrollController = ScrollController(
+      initialScrollOffset: _playlistScrollOffset,
+    );
 
-    final panelWidth = WindowControls.isDesktop ? 280.0 : MediaQuery.of(context).size.width * 0.7;
+    void saveScrollOffset() {
+      if (scrollController.hasClients) {
+        _playlistScrollOffset = scrollController.offset;
+      }
+    }
+
+    scrollController.addListener(saveScrollOffset);
+
+    final panelWidth =
+        WindowControls.isDesktop
+            ? 280.0
+            : MediaQuery.of(context).size.width * 0.7;
     final result = await showGeneralDialog<int>(
       context: context,
       barrierDismissible: true,
@@ -1059,8 +1187,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (ctx, anim, secondaryAnim) {
         return SlideTransition(
-          position: Tween<Offset>(begin: const Offset(1, 0), end: Offset.zero)
-              .animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
+          position: Tween<Offset>(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
           child: Align(
             alignment: Alignment.centerRight,
             child: Material(
@@ -1091,19 +1221,29 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                             final ep = episodes[index];
                             final isCurrent = index == currentIndex;
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: itemSpacing),
+                              padding: const EdgeInsets.only(
+                                bottom: itemSpacing,
+                              ),
                               child: GestureDetector(
                                 onTap: () => Navigator.pop(ctx, index),
                                 child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 14,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: isCurrent
-                                        ? const Color(0xFF3A3A3C)
-                                        : const Color(0xFF2C2C2E),
+                                    color:
+                                        isCurrent
+                                            ? const Color(0xFF3A3A3C)
+                                            : const Color(0xFF2C2C2E),
                                     borderRadius: BorderRadius.circular(8),
-                                    border: isCurrent
-                                        ? Border.all(color: Colors.white, width: 2)
-                                        : null,
+                                    border:
+                                        isCurrent
+                                            ? Border.all(
+                                              color: Colors.white,
+                                              width: 2,
+                                            )
+                                            : null,
                                   ),
                                   child: Row(
                                     children: [
@@ -1119,7 +1259,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                                         child: Text(
                                           '${ep.episodeNumber}. ${ep.name ?? '第 ${ep.episodeNumber} 集'}',
                                           style: TextStyle(
-                                            color: isCurrent ? Colors.white : Colors.white70,
+                                            color:
+                                                isCurrent
+                                                    ? Colors.white
+                                                    : Colors.white70,
                                             fontSize: 14,
                                           ),
                                           maxLines: 1,
@@ -1143,6 +1286,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         );
       },
     );
+    saveScrollOffset();
     scrollController.dispose();
     if (result != null && result != widget.currentEpisodeIndex) {
       widget.onSelectEpisode?.call(result);
