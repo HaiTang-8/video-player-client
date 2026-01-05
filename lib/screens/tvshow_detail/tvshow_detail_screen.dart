@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/image_selector_sheet.dart';
@@ -30,6 +31,17 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
 class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   int? _selectedSeasonId;
   int _selectedSeasonIndex = 0;
+  final _castScrollController = ScrollController();
+  final _crewScrollController = ScrollController();
+  final _episodesScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _castScrollController.dispose();
+    _crewScrollController.dispose();
+    _episodesScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -154,6 +166,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     tvShowName: tvShow.name,
                     serverBaseUrl: serverBaseUrl,
                     fallbackImageUrl: episodeFallbackImage,
+                    scrollController: _episodesScrollController,
                   ),
                 )
               else if (_selectedSeasonId != null)
@@ -163,6 +176,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     seasonId: _selectedSeasonId!,
                     tvShowName: tvShow.name,
                     fallbackImageUrl: episodeFallbackImage,
+                    scrollController: _episodesScrollController,
                   ),
                 ),
 
@@ -739,55 +753,63 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 分季切换标签
+          // 分季切换标签 + 箭头按钮
           SizedBox(
             height: 44,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: tvShow.seasons!.length,
-              itemBuilder: (context, index) {
-                final season = tvShow.seasons![index];
-                final isSelected = index == _selectedSeasonIndex;
+            child: Row(
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: tvShow.seasons!.length,
+                    itemBuilder: (context, index) {
+                      final season = tvShow.seasons![index];
+                      final isSelected = index == _selectedSeasonIndex;
 
-                return Padding(
-                  padding: const EdgeInsets.only(right: 32.0),
-                  child: GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _selectedSeasonIndex = index;
-                        _selectedSeasonId = season.id;
-                      });
-                    },
-                    child: IntrinsicWidth(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          // 文本 + 播放源数量角标 + 下拉箭头
-                          _SeasonTabLabel(
-                            tvShowId: widget.tvShowId,
-                            season: season,
-                            isSelected: isSelected,
-                            isSingleSeason: tvShow.seasons!.length == 1,
-                          ),
-                          const SizedBox(height: 4),
-                          // 指示器
-                          Container(
-                            height: 3.0,
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected
-                                      ? Colors.black
-                                      : Colors.transparent,
-                              borderRadius: BorderRadius.circular(1.5),
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 32.0),
+                        child: GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _selectedSeasonIndex = index;
+                              _selectedSeasonId = season.id;
+                            });
+                          },
+                          child: IntrinsicWidth(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                // 文本 + 播放源数量角标 + 下拉箭头
+                                _SeasonTabLabel(
+                                  tvShowId: widget.tvShowId,
+                                  season: season,
+                                  isSelected: isSelected,
+                                  isSingleSeason: tvShow.seasons!.length == 1,
+                                ),
+                                const SizedBox(height: 4),
+                                // 指示器
+                                Container(
+                                  height: 3.0,
+                                  decoration: BoxDecoration(
+                                    color:
+                                        isSelected
+                                            ? Colors.black
+                                            : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(1.5),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+                if (WindowControls.isDesktop)
+                  _EpisodesScrollButtons(controller: _episodesScrollController),
+              ],
             ),
           ),
           const SizedBox(height: 20),
@@ -806,37 +828,34 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 区域标题
-          Padding(
+      child: ScrollableRowWithArrows(
+        controller: _castScrollController,
+        itemWidth: 80,
+        itemSpacing: 8,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        child: SizedBox(
+          height: 120,
+          child: ListView.separated(
+            controller: _castScrollController,
+            physics: ScrollableRowWithArrows.disableManualScroll
+                ? const NeverScrollableScrollPhysics()
+                : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            scrollDirection: Axis.horizontal,
+            itemCount: cast.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              return _buildCastCard(cast[index], serverBaseUrl);
+            },
           ),
-          const SizedBox(height: 16),
-
-          // 演员头像列表
-          SizedBox(
-            height: 120,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: cast.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                return _buildCastCard(cast[index], serverBaseUrl);
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -882,34 +901,34 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
+      child: ScrollableRowWithArrows(
+        controller: _crewScrollController,
+        itemWidth: 80,
+        itemSpacing: 8,
+        title: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.black,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        child: SizedBox(
+          height: 120,
+          child: ListView.separated(
+            controller: _crewScrollController,
+            physics: ScrollableRowWithArrows.disableManualScroll
+                ? const NeverScrollableScrollPhysics()
+                : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              title,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+            scrollDirection: Axis.horizontal,
+            itemCount: crew.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              return _buildCrewCard(crew[index], serverBaseUrl);
+            },
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            height: 120,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: crew.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                return _buildCrewCard(crew[index], serverBaseUrl);
-              },
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1258,13 +1277,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 }
 
 /// 剧集水平滚动卡片列表 - 直接使用数据
-class _EpisodesCarouselDirect extends StatelessWidget {
+class _EpisodesCarouselDirect extends StatefulWidget {
   final List<Episode> episodes;
   final int tvShowId;
   final int seasonId;
   final String? tvShowName;
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
+  final ScrollController scrollController;
+
+  static const double _minItemWidth = 160.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 12.0;
 
   const _EpisodesCarouselDirect({
     required this.episodes,
@@ -1273,27 +1297,104 @@ class _EpisodesCarouselDirect extends StatelessWidget {
     this.tvShowName,
     required this.serverBaseUrl,
     this.fallbackImageUrl,
+    required this.scrollController,
   });
 
   @override
+  State<_EpisodesCarouselDirect> createState() =>
+      _EpisodesCarouselDirectState();
+}
+
+class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
+  double? _lastWidth;
+
+  void _alignScrollPosition(double availableWidth) {
+    if (!widget.scrollController.hasClients) return;
+    final pos = widget.scrollController.position;
+    if (pos.pixels <= pos.minScrollExtent) return;
+
+    final itemCount = ((availableWidth + _EpisodesCarouselDirect._itemSpacing) /
+            (_EpisodesCarouselDirect._minItemWidth +
+                _EpisodesCarouselDirect._itemSpacing))
+        .floor();
+    final itemWidth = itemCount > 0
+        ? (availableWidth -
+                (itemCount - 1) * _EpisodesCarouselDirect._itemSpacing) /
+            itemCount
+        : _EpisodesCarouselDirect._minItemWidth;
+    final pageSize =
+        (itemCount - 1) * (itemWidth + _EpisodesCarouselDirect._itemSpacing);
+
+    if (pageSize > 0) {
+      // 对齐到最近的页边界
+      final currentPage = (pos.pixels / pageSize).round();
+      final alignedPosition =
+          (currentPage * pageSize).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      if ((pos.pixels - alignedPosition).abs() > 1) {
+        widget.scrollController.jumpTo(alignedPosition);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (!WindowControls.isDesktop) {
+      return _buildList(_EpisodesCarouselDirect._minItemWidth);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth -
+            _EpisodesCarouselDirect._horizontalPadding * 2;
+
+        // 窗口大小变化时重新对齐
+        if (_lastWidth != null && _lastWidth != availableWidth) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _alignScrollPosition(availableWidth);
+          });
+        }
+        _lastWidth = availableWidth;
+
+        final itemCount = ((availableWidth +
+                    _EpisodesCarouselDirect._itemSpacing) /
+                (_EpisodesCarouselDirect._minItemWidth +
+                    _EpisodesCarouselDirect._itemSpacing))
+            .floor();
+        final itemWidth = itemCount > 0
+            ? (availableWidth -
+                    (itemCount - 1) * _EpisodesCarouselDirect._itemSpacing) /
+                itemCount
+            : _EpisodesCarouselDirect._minItemWidth;
+        return _buildList(itemWidth);
+      },
+    );
+  }
+
+  Widget _buildList(double itemWidth) {
     return SizedBox(
       height: 140,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        controller: widget.scrollController,
+        physics: ScrollableRowWithArrows.disableManualScroll
+            ? const NeverScrollableScrollPhysics()
+            : null,
+        padding: const EdgeInsets.symmetric(
+            horizontal: _EpisodesCarouselDirect._horizontalPadding),
         scrollDirection: Axis.horizontal,
-        itemCount: episodes.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 16),
+        itemCount: widget.episodes.length,
+        separatorBuilder: (_, __) =>
+            const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
         itemBuilder: (context, index) {
-          final episode = episodes[index];
+          final episode = widget.episodes[index];
           return _EpisodeCard(
             episode: episode,
-            tvShowId: tvShowId,
-            seasonId: seasonId,
-            tvShowName: tvShowName,
-            serverBaseUrl: serverBaseUrl,
-            fallbackImageUrl: fallbackImageUrl,
-            episodes: episodes,
+            tvShowId: widget.tvShowId,
+            seasonId: widget.seasonId,
+            tvShowName: widget.tvShowName,
+            serverBaseUrl: widget.serverBaseUrl,
+            fallbackImageUrl: widget.fallbackImageUrl,
+            episodes: widget.episodes,
+            width: itemWidth,
           );
         },
       ),
@@ -1302,24 +1403,63 @@ class _EpisodesCarouselDirect extends StatelessWidget {
 }
 
 /// 剧集水平滚动卡片列表
-class _EpisodesCarousel extends ConsumerWidget {
+class _EpisodesCarousel extends ConsumerStatefulWidget {
   final int tvShowId;
   final int seasonId;
   final String? tvShowName;
   final String? fallbackImageUrl;
+  final ScrollController scrollController;
+
+  static const double _minItemWidth = 160.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 12.0;
 
   const _EpisodesCarousel({
     required this.tvShowId,
     required this.seasonId,
     this.tvShowName,
     this.fallbackImageUrl,
+    required this.scrollController,
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_EpisodesCarousel> createState() => _EpisodesCarouselState();
+}
+
+class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
+  double? _lastWidth;
+
+  void _alignScrollPosition(double availableWidth) {
+    if (!widget.scrollController.hasClients) return;
+    final pos = widget.scrollController.position;
+    if (pos.pixels <= pos.minScrollExtent) return;
+
+    final itemCount = ((availableWidth + _EpisodesCarousel._itemSpacing) /
+            (_EpisodesCarousel._minItemWidth + _EpisodesCarousel._itemSpacing))
+        .floor();
+    final itemWidth = itemCount > 0
+        ? (availableWidth - (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
+            itemCount
+        : _EpisodesCarousel._minItemWidth;
+    final pageSize =
+        (itemCount - 1) * (itemWidth + _EpisodesCarousel._itemSpacing);
+
+    if (pageSize > 0) {
+      final currentPage = (pos.pixels / pageSize).round();
+      final alignedPosition =
+          (currentPage * pageSize).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      if ((pos.pixels - alignedPosition).abs() > 1) {
+        widget.scrollController.jumpTo(alignedPosition);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final serverBaseUrl = ref.watch(serverUrlProvider);
     final episodesAsync = ref.watch(
-      seasonEpisodesProvider((tvShowId: tvShowId, seasonId: seasonId)),
+      seasonEpisodesProvider(
+          (tvShowId: widget.tvShowId, seasonId: widget.seasonId)),
     );
 
     return episodesAsync.when(
@@ -1349,28 +1489,68 @@ class _EpisodesCarousel extends ConsumerWidget {
           );
         }
 
-        return SizedBox(
-          height: 140,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            scrollDirection: Axis.horizontal,
-            itemCount: episodes.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
-            itemBuilder: (context, index) {
-              final episode = episodes[index];
-              return _EpisodeCard(
-                episode: episode,
-                tvShowId: tvShowId,
-                seasonId: seasonId,
-                tvShowName: tvShowName,
-                serverBaseUrl: serverBaseUrl,
-                fallbackImageUrl: fallbackImageUrl,
-                episodes: episodes,
-              );
-            },
-          ),
+        if (!WindowControls.isDesktop) {
+          return _buildList(
+              episodes, serverBaseUrl, _EpisodesCarousel._minItemWidth);
+        }
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final availableWidth = constraints.maxWidth -
+                _EpisodesCarousel._horizontalPadding * 2;
+
+            if (_lastWidth != null && _lastWidth != availableWidth) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _alignScrollPosition(availableWidth);
+              });
+            }
+            _lastWidth = availableWidth;
+
+            final itemCount = ((availableWidth + _EpisodesCarousel._itemSpacing) /
+                    (_EpisodesCarousel._minItemWidth +
+                        _EpisodesCarousel._itemSpacing))
+                .floor();
+            final itemWidth = itemCount > 0
+                ? (availableWidth -
+                        (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
+                    itemCount
+                : _EpisodesCarousel._minItemWidth;
+            return _buildList(episodes, serverBaseUrl, itemWidth);
+          },
         );
       },
+    );
+  }
+
+  Widget _buildList(
+      List<Episode> episodes, String? serverBaseUrl, double itemWidth) {
+    return SizedBox(
+      height: 140,
+      child: ListView.separated(
+        controller: widget.scrollController,
+        physics: ScrollableRowWithArrows.disableManualScroll
+            ? const NeverScrollableScrollPhysics()
+            : null,
+        padding: const EdgeInsets.symmetric(
+            horizontal: _EpisodesCarousel._horizontalPadding),
+        scrollDirection: Axis.horizontal,
+        itemCount: episodes.length,
+        separatorBuilder: (_, __) =>
+            const SizedBox(width: _EpisodesCarousel._itemSpacing),
+        itemBuilder: (context, index) {
+          final episode = episodes[index];
+          return _EpisodeCard(
+            episode: episode,
+            tvShowId: widget.tvShowId,
+            seasonId: widget.seasonId,
+            tvShowName: widget.tvShowName,
+            serverBaseUrl: serverBaseUrl,
+            fallbackImageUrl: widget.fallbackImageUrl,
+            episodes: episodes,
+            width: itemWidth,
+          );
+        },
+      ),
     );
   }
 }
@@ -1384,6 +1564,7 @@ class _EpisodeCard extends ConsumerWidget {
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
   final List<Episode>? episodes;
+  final double width;
 
   const _EpisodeCard({
     required this.episode,
@@ -1393,14 +1574,16 @@ class _EpisodeCard extends ConsumerWidget {
     required this.serverBaseUrl,
     this.fallbackImageUrl,
     this.episodes,
+    this.width = 160,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final thumbnailHeight = width * 90 / 160; // 保持 16:9 比例
     return GestureDetector(
       onTap: episode.hasFile ? () => _playEpisode(context, ref) : null,
       child: SizedBox(
-        width: 160,
+        width: width,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1409,7 +1592,7 @@ class _EpisodeCard extends ConsumerWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: _buildThumbnail(),
+                  child: _buildThumbnail(thumbnailHeight),
                 ),
 
                 // 时长标签
@@ -1526,25 +1709,25 @@ class _EpisodeCard extends ConsumerWidget {
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 
-  Widget _buildThumbnail() {
+  Widget _buildThumbnail(double height) {
     final hasStill = episode.stillPath != null && episode.stillPath!.isNotEmpty;
     final imageUrl = hasStill ? episode.stillPath! : fallbackImageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: ImageProxy.proxyTMDBIfNeeded(imageUrl, serverBaseUrl),
-        width: 160,
-        height: 90,
+        width: width,
+        height: height,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _buildPlaceholder(),
+        errorWidget: (_, __, ___) => _buildPlaceholder(height),
       );
     }
-    return _buildPlaceholder();
+    return _buildPlaceholder(height);
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(double height) {
     return Container(
-      width: 160,
-      height: 90,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -1829,6 +2012,105 @@ class _SourceGroupTile extends StatelessWidget {
               ? const Icon(Icons.check_circle, color: Colors.blue)
               : const Icon(Icons.chevron_right, color: Colors.grey),
       onTap: onTap,
+    );
+  }
+}
+
+class _EpisodesScrollButtons extends StatefulWidget {
+  final ScrollController controller;
+
+  static const double _minItemWidth = 160.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 12.0;
+
+  const _EpisodesScrollButtons({required this.controller});
+
+  @override
+  State<_EpisodesScrollButtons> createState() => _EpisodesScrollButtonsState();
+}
+
+class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_updateScrollState);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollState());
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_updateScrollState);
+    super.dispose();
+  }
+
+  void _updateScrollState() {
+    if (!mounted || !widget.controller.hasClients) return;
+    final pos = widget.controller.position;
+    setState(() {
+      _canScrollLeft = pos.pixels > pos.minScrollExtent;
+      _canScrollRight = pos.pixels < pos.maxScrollExtent;
+    });
+  }
+
+  void _scroll(bool forward) {
+    final pos = widget.controller.position;
+    final viewportWidth = pos.viewportDimension;
+    // 计算当前视口能显示多少个卡片
+    final availableWidth = viewportWidth - _EpisodesScrollButtons._horizontalPadding * 2;
+    final itemCount = ((availableWidth + _EpisodesScrollButtons._itemSpacing) /
+            (_EpisodesScrollButtons._minItemWidth + _EpisodesScrollButtons._itemSpacing))
+        .floor();
+    final itemWidth = itemCount > 0
+        ? (availableWidth - (itemCount - 1) * _EpisodesScrollButtons._itemSpacing) / itemCount
+        : _EpisodesScrollButtons._minItemWidth;
+    // 滚动距离 = (itemCount - 1) 个卡片的宽度，让最后一个变成第一个
+    final scrollDistance = (itemCount - 1) * (itemWidth + _EpisodesScrollButtons._itemSpacing);
+    final target = (pos.pixels + (forward ? scrollDistance : -scrollDistance))
+        .clamp(pos.minScrollExtent, pos.maxScrollExtent);
+    widget.controller.animateTo(
+      target,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_canScrollLeft && !_canScrollRight) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildButton(Icons.chevron_left, _canScrollLeft, () => _scroll(false)),
+        const SizedBox(width: 4),
+        _buildButton(Icons.chevron_right, _canScrollRight, () => _scroll(true)),
+      ],
+    );
+  }
+
+  Widget _buildButton(IconData icon, bool enabled, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Container(
+        width: 28,
+        height: 28,
+        decoration: BoxDecoration(
+          color: enabled
+              ? Colors.black.withValues(alpha: 0.1)
+              : Colors.black.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Icon(
+          icon,
+          color: enabled
+              ? Colors.black.withValues(alpha: 0.7)
+              : Colors.black.withValues(alpha: 0.3),
+          size: 20,
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/image_selector_sheet.dart';
@@ -28,6 +29,13 @@ class MovieDetailScreen extends ConsumerStatefulWidget {
 
 class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Movie? _movie;
+  final _castScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _castScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -734,37 +742,34 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 区域标题
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              '相关演员',
-              style: TextStyle(
-                color: Colors.black,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+      child: ScrollableRowWithArrows(
+        controller: _castScrollController,
+        itemWidth: 80,
+        itemSpacing: 4,
+        title: const Text(
+          '相关演员',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
           ),
-          const SizedBox(height: 16),
-
-          // 演员头像列表
-          SizedBox(
-            height: 120,
-            child: ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              scrollDirection: Axis.horizontal,
-              itemCount: cast.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 4),
-              itemBuilder: (context, index) {
-                return _buildCastCard(cast[index], serverBaseUrl);
-              },
-            ),
+        ),
+        child: SizedBox(
+          height: 120,
+          child: ListView.separated(
+            controller: _castScrollController,
+            physics: ScrollableRowWithArrows.disableManualScroll
+                ? const NeverScrollableScrollPhysics()
+                : null,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            scrollDirection: Axis.horizontal,
+            itemCount: cast.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 4),
+            itemBuilder: (context, index) {
+              return _buildCastCard(cast[index], serverBaseUrl);
+            },
           ),
-        ],
+        ),
       ),
     );
   }
