@@ -454,7 +454,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ],
           // 缓冲指示器
           if (_buffering)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: Colors.white),
+                  SizedBox(height: 16),
+                  Text(
+                    '缓冲中...',
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
           // 长按倍速提示
           if (_isLongPressSpeed)
             Positioned(

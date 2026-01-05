@@ -617,8 +617,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                 ),
               ),
-        body: const Center(
-          child: CircularProgressIndicator(color: Colors.white),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(color: Colors.white),
+              const SizedBox(height: 16),
+              Text(
+                _currentStreamUrl == null ? '正在获取播放地址...' : '正在加载视频...',
+                style: const TextStyle(color: Colors.white70, fontSize: 14),
+              ),
+            ],
+          ),
         ),
       );
     }
