@@ -59,53 +59,44 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
             ),
             child: SizedBox(
               height: height,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+              child: Stack(
+                alignment: Alignment.center,
                 children: [
-                  SizedBox(width: leftInset),
-                  if (leading != null) ...[
-                    SizedBox(height: height, child: Center(child: leading)),
-                    const SizedBox(width: 1),
-                  ],
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        if (enableDrag && WindowControls.isDesktop)
-                          Positioned.fill(
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onPanStart: (_) => WindowControls.startDrag(),
-                              onDoubleTap: () => WindowControls.toggleMaximize(),
-                            ),
-                          ),
-                        Align(
-                          alignment:
-                              centerTitle
-                                  ? Alignment.center
-                                  : Alignment.centerLeft,
-                          child: Padding(
-                            padding: EdgeInsetsDirectional.only(
-                              start: titlePaddingStart,
-                              end: 4,
-                            ),
-                            child:
-                                title == null
-                                    ? const SizedBox.shrink()
-                                    : (titleInteractive
-                                        ? title!
-                                        : IgnorePointer(child: title!)),
-                          ),
-                        ),
-                      ],
+                  if (enableDrag && WindowControls.isDesktop)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: (_) => WindowControls.startDrag(),
+                        onDoubleTap: () => WindowControls.toggleMaximize(),
+                      ),
                     ),
+                  Row(
+                    children: [
+                      SizedBox(width: leftInset),
+                      if (leading != null) leading!,
+                      if (!centerTitle && title != null) ...[
+                        const SizedBox(width: 4),
+                        titleInteractive ? title! : IgnorePointer(child: title!),
+                      ],
+                      if (centerTitle)
+                        Expanded(
+                          child: Center(
+                            child: title == null
+                                ? const SizedBox.shrink()
+                                : (titleInteractive ? title! : IgnorePointer(child: title!)),
+                          ),
+                        )
+                      else
+                        const Spacer(),
+                      ...actions,
+                      if (WindowControls.isWindows && actions.isNotEmpty)
+                        const SizedBox(width: 16),
+                      if (WindowControls.isWindows)
+                        _WindowCaptionButtons(height: height, foregroundColor: fg)
+                      else
+                        const SizedBox(width: 12),
+                    ],
                   ),
-                  ...actions,
-                  if (WindowControls.isWindows && actions.isNotEmpty)
-                    const SizedBox(width: 16),
-                  if (WindowControls.isWindows)
-                    _WindowCaptionButtons(height: height, foregroundColor: fg)
-                  else
-                    const SizedBox(width: 12),
                 ],
               ),
             ),

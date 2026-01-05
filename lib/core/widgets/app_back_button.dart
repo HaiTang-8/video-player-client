@@ -1,6 +1,7 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-const double kAppBackButtonIconSize = 20;
+const double kAppBackButtonIconSize = 22;
 const double kAppBackButtonLeftPadding = 12;
 const double kAppBackButtonWidth =
     kAppBackButtonLeftPadding + kAppBackButtonIconSize;
@@ -21,24 +22,12 @@ class AppBackButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: leftPadding + iconSize,
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: Padding(
-          padding: EdgeInsets.only(left: leftPadding),
-          child: InkResponse(
-            onTap: onPressed,
-            radius: iconSize,
-            child: SizedBox(
-              width: iconSize,
-              height: iconSize,
-              child: Center(
-                child: Icon(Icons.chevron_left, size: iconSize, color: color),
-              ),
-            ),
-          ),
-        ),
+    return Padding(
+      padding: EdgeInsets.only(left: leftPadding),
+      child: InkResponse(
+        onTap: onPressed,
+        radius: iconSize,
+        child: Icon(CupertinoIcons.back, size: iconSize, color: color),
       ),
     );
   }
