@@ -203,7 +203,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _isDisposing = true;
     _progressTimer?.cancel();
-    _toastOverlay?.remove();
+    try {
+      _toastOverlay?.remove();
+    } catch (_) {}
     _saveProgress(); // 退出时保存最终进度
     if (_isFullscreen) {
       _exitFullscreen();
@@ -524,8 +526,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   OverlayEntry? _toastOverlay;
 
   void _showToast(String message) {
-    _toastOverlay?.remove();
-    _toastOverlay = OverlayEntry(
+    try {
+      _toastOverlay?.remove();
+    } catch (_) {}
+    _toastOverlay = null;
+    if (!mounted) return;
+    final overlay = Overlay.of(context);
+    final entry = OverlayEntry(
       builder:
           (context) => Positioned(
             top: MediaQuery.of(context).padding.top + 60,
@@ -552,10 +559,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             ),
           ),
     );
-    Overlay.of(context).insert(_toastOverlay!);
+    _toastOverlay = entry;
+    overlay.insert(entry);
     Future.delayed(const Duration(seconds: 2), () {
-      _toastOverlay?.remove();
-      _toastOverlay = null;
+      if (_toastOverlay == entry) {
+        try {
+          entry.remove();
+        } catch (_) {}
+        _toastOverlay = null;
+      }
     });
   }
 

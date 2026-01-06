@@ -7,7 +7,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/download_task.dart';
-import '../../providers/download_provider.dart';
+import '../../providers/providers.dart';
 
 class DownloadManagerScreen extends ConsumerWidget {
   const DownloadManagerScreen({super.key});
@@ -116,6 +116,7 @@ class DownloadManagerScreen extends ConsumerWidget {
             children: state.completedTasks
                 .map((task) => _CompletedItem(
                       task: task,
+                      onTap: () => _playCompletedTask(context, ref, task),
                       onDelete: () => _confirmDelete(context, ref, task),
                     ))
                 .toList(),
@@ -220,6 +221,40 @@ class DownloadManagerScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _playCompletedTask(BuildContext context, WidgetRef ref, DownloadTask task) async {
+    final service = ref.read(mediaServiceProvider);
+    int? position;
+
+    if (service != null) {
+      if (task.type == DownloadType.movie && task.movieId != null) {
+        final historyResp = await service.getWatchProgress('movie', task.movieId!);
+        if (historyResp.isSuccess && historyResp.data != null && !historyResp.data!.completed) {
+          position = historyResp.data!.position;
+        }
+      } else if (task.type == DownloadType.episode && task.tvShowId != null) {
+        final historyResp = await service.getWatchProgress('tv', task.tvShowId!);
+        if (historyResp.isSuccess && historyResp.data != null &&
+            historyResp.data!.episodeId == task.episodeId && !historyResp.data!.completed) {
+          position = historyResp.data!.position;
+        }
+      }
+    }
+
+    if (!context.mounted) return;
+
+    if (task.type == DownloadType.movie && task.movieId != null) {
+      context.push('/player/movie/${task.movieId}', extra: {'title': task.movieTitle, 'position': position});
+    } else if (task.type == DownloadType.episode &&
+        task.tvShowId != null &&
+        task.seasonId != null &&
+        task.episodeId != null) {
+      context.push(
+        '/player/episode/${task.tvShowId}/${task.seasonId}/${task.episodeId}',
+        extra: {'title': task.tvShowName != null ? '${task.tvShowName} - ${task.displayTitle}' : task.displayTitle, 'position': position},
+      );
+    }
   }
 
   void _confirmClearCompleted(BuildContext context, WidgetRef ref) {
@@ -475,18 +510,23 @@ class _DownloadingItem extends StatelessWidget {
 
 class _CompletedItem extends StatelessWidget {
   final DownloadTask task;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
 
   const _CompletedItem({
     required this.task,
+    required this.onTap,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
         children: [
           // 视频图标
           Container(
@@ -537,6 +577,7 @@ class _CompletedItem extends StatelessWidget {
             ),
           ),
         ],
+      ),
       ),
     );
   }
