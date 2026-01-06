@@ -201,7 +201,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   void _startHideTimer() {
     _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 4), () {
+    _hideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _visible = false);
     });
   }
@@ -380,26 +380,40 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
+  void _onMouseMove(PointerEvent event) {
+    if (!WindowControls.isDesktop) return;
+    _showControlsTemporarily();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Focus(
       focusNode: _focusNode,
       autofocus: WindowControls.isDesktop,
       onKeyEvent: _handleKeyEvent,
-      child: Stack(
-        children: [
-          GestureDetector(
-            onTap: _toggleVisibility,
-            onLongPressStart:
-                WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
-            onLongPressEnd:
-                WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
-            behavior: HitTestBehavior.translucent,
-            child: Video(
-              controller: widget.controller,
-              controls: NoVideoControls,
+      child: MouseRegion(
+        onHover: _onMouseMove,
+        child: Stack(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (WindowControls.isDesktop) {
+                  widget.player.playOrPause();
+                  _showControlsTemporarily();
+                } else {
+                  _toggleVisibility();
+                }
+              },
+              onLongPressStart:
+                  WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
+              onLongPressEnd:
+                  WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
+              behavior: HitTestBehavior.translucent,
+              child: Video(
+                controller: widget.controller,
+                controls: NoVideoControls,
+              ),
             ),
-          ),
           // 左侧亮度手势区域
           if (!WindowControls.isDesktop)
             Positioned(
@@ -490,7 +504,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 ),
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }
