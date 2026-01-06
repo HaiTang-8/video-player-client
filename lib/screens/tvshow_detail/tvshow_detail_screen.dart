@@ -1712,19 +1712,21 @@ class _EpisodeCard extends ConsumerWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
 
             // 标题
-            Text(
-              '${episode.episodeNumber}. ${episode.name ?? "第${episode.episodeNumber}集"}',
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
+            Expanded(
+              child: Text(
+                '${episode.episodeNumber}. ${episode.name ?? "第${episode.episodeNumber}集"}',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
             ),
           ],
         ),
