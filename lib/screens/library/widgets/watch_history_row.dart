@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/widgets/tap_feedback.dart';
+import '../../../core/window/window_controls.dart';
 import '../../../data/models/models.dart';
 import '../../../core/utils/image_proxy.dart';
 import '../../../providers/providers.dart';
@@ -16,6 +17,11 @@ class WatchHistoryRow extends ConsumerStatefulWidget {
 }
 
 class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
+  static const double _mobileItemWidth = 220.0;
+  static const double _desktopMinItemWidth = 220.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 16.0;
+
   @override
   void initState() {
     super.initState();
@@ -74,36 +80,88 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             ),
           ),
         ),
-        SizedBox(
-          height: 190,
-          child: state.isLoading && state.items.isEmpty
-              ? const Center(child: CircularProgressIndicator())
-              : state.error != null && state.items.isEmpty
-                  ? Center(
-                      child: Text(
-                        '加载失败',
-                        style: TextStyle(color: theme.colorScheme.error),
-                      ),
-                    )
-                  : ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: state.items.length,
-                      itemBuilder: (context, index) {
-                        final item = state.items[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 16),
-                          child: _WatchHistoryCard(
-                            item: item,
-                            width: 220,
-                            onTap: () => _navigateToDetail(item),
-                          ),
-                        );
-                      },
-                    ),
-        ),
+        _buildContent(theme, state),
         const SizedBox(height: 16),
       ],
+    );
+  }
+
+  Widget _buildContent(ThemeData theme, WatchHistoryState state) {
+    if (state.isLoading && state.items.isEmpty) {
+      return const SizedBox(
+        height: 190,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (state.error != null && state.items.isEmpty) {
+      return SizedBox(
+        height: 190,
+        child: Center(
+          child: Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
+        ),
+      );
+    }
+
+    if (!WindowControls.isDesktop) {
+      return _buildMobileList(state.items);
+    }
+    return _buildDesktopList(state.items);
+  }
+
+  Widget _buildMobileList(List<WatchHistoryItem> items) {
+    return SizedBox(
+      height: 190,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+        itemCount: items.length,
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Padding(
+            padding: const EdgeInsets.only(right: _itemSpacing),
+            child: _WatchHistoryCard(
+              item: item,
+              width: _mobileItemWidth,
+              onTap: () => _navigateToDetail(item),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDesktopList(List<WatchHistoryItem> items) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final availableWidth = constraints.maxWidth - _horizontalPadding * 2;
+        final itemCount = ((availableWidth + _itemSpacing) /
+                (_desktopMinItemWidth + _itemSpacing))
+            .floor();
+        final itemWidth = itemCount > 0
+            ? (availableWidth - (itemCount - 1) * _itemSpacing) / itemCount
+            : _desktopMinItemWidth;
+        // 图片高度 + 间距 + 文字区域
+        final imageHeight = itemWidth * 9 / 16;
+        final listHeight = imageHeight + 8 + 40 + 2 + 16;
+
+        return SizedBox(
+          height: listHeight,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              return _WatchHistoryCard(
+                item: item,
+                width: itemWidth,
+                onTap: () => _navigateToDetail(item),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
