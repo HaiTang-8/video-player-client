@@ -14,7 +14,7 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.light,
     fontFamily: 'HarmonyOS_Sans',
-    scaffoldBackgroundColor: Colors.white,
+    scaffoldBackgroundColor: const Color(0xFFF5F5F5),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.light,

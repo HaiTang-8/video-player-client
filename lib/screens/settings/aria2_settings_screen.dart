@@ -610,7 +610,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1C1C1E) : const Color(0xFFF5F5F7),
+            color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
