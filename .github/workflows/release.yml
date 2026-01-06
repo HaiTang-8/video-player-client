@@ -37,10 +37,10 @@ jobs:
         run: |
           brew install create-dmg
           create-dmg \
-            --volname "Media Player" \
+            --volname "观影" \
             --no-internet-enable \
             "media_player-macos.dmg" \
-            "build/macos/Build/Products/Release/media_player.app"
+            "build/macos/Build/Products/Release/观影.app"
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
@@ -99,3 +99,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
+          generate_release_notes: true
