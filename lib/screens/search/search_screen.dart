@@ -128,6 +128,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               placeholderStyle: const TextStyle(
                 fontSize: 13,
                 color: CupertinoColors.systemGrey,
+                decoration: TextDecoration.none,
               ),
               autofocus: true,
               onChanged: _onSearchChanged,

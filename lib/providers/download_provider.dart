@@ -74,24 +74,50 @@ class DownloadManagerState {
   }
 }
 
-class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
-  final DownloadService _service;
-  final Aria2Service? _aria2;
+final downloadServiceProvider = Provider<DownloadService?>((ref) {
+  final serverUrl = ref.watch(serverUrlProvider);
+  if (serverUrl == null || serverUrl.isEmpty) return null;
+
+  final downloadSettings = ref.watch(downloadSettingsProvider);
+
+  final dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(hours: 2),
+  ));
+
+  final service = DownloadService(dio, serverUrl);
+  service.useMultiThread = downloadSettings.multiThreadEnabled;
+  service.threadCount = downloadSettings.threadCount;
+  return service;
+});
+
+final downloadManagerProvider = NotifierProvider<DownloadManagerNotifier, DownloadManagerState>(DownloadManagerNotifier.new);
+
+class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
   DateTime? _lastSaveTime;
   static const _saveThrottleMs = 2000;
 
-  DownloadManagerNotifier(this._service, this._aria2) : super(const DownloadManagerState()) {
-    _loadTasks();
+  @override
+  DownloadManagerState build() {
+    Future.microtask(_loadTasks);
+    return const DownloadManagerState();
   }
 
+  DownloadService? get _service => ref.read(downloadServiceProvider);
+  Aria2Service? get _aria2 => ref.read(aria2ServiceProvider);
+
   Future<void> _loadTasks() async {
+    final service = _service;
+    if (service == null) return;
     state = state.copyWith(isLoading: true);
-    final tasks = await _service.loadTasks();
+    final tasks = await service.loadTasks();
     state = state.copyWith(tasks: tasks, isLoading: false);
   }
 
   Future<void> _saveTasks() async {
-    await _service.saveTasks(state.tasks);
+    final service = _service;
+    if (service == null) return;
+    await service.saveTasks(state.tasks);
   }
 
   void _updateTask(DownloadTask task, {bool forceSave = false}) {
@@ -112,12 +138,14 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
     required int seasonNumber,
     String? storageName,
   }) async {
+    final service = _service;
+    if (service == null) return;
     if (state.tasks.any((t) => t.episodeId == episode.id)) {
       debugPrint('Episode ${episode.id} already in download list');
       return;
     }
 
-    final task = await _service.createTask(
+    final task = await service.createTask(
       episode: episode,
       tvShowName: tvShowName,
       seasonNumber: seasonNumber,
@@ -136,15 +164,15 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
     required int seasonNumber,
     String? storageName,
   }) async {
+    final service = _service;
+    if (service == null) return;
     final newTasks = <DownloadTask>[];
 
     for (final episode in episodes) {
-      if (state.tasks.any((t) => t.episodeId == episode.id)) {
-        continue;
-      }
+      if (state.tasks.any((t) => t.episodeId == episode.id)) continue;
       if (!episode.hasFile) continue;
 
-      final task = await _service.createTask(
+      final task = await service.createTask(
         episode: episode,
         tvShowName: tvShowName,
         seasonNumber: seasonNumber,
@@ -164,12 +192,14 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   Future<void> addMovieDownload({required Movie movie}) async {
+    final service = _service;
+    if (service == null) return;
     if (state.tasks.any((t) => t.movieId == movie.id)) {
       debugPrint('Movie ${movie.id} already in download list');
       return;
     }
 
-    final task = await _service.createMovieTask(movie: movie);
+    final task = await service.createMovieTask(movie: movie);
 
     state = state.copyWith(tasks: [...state.tasks, task]);
     await _saveTasks();
@@ -186,9 +216,12 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   Future<void> _startAria2Download(DownloadTask task) async {
+    final service = _service;
+    final aria2 = _aria2;
+    if (service == null || aria2 == null) return;
+
     try {
-      // 使用 aria2 的 User-Agent 获取下载链接，这样 aria2 下载时用同样的 UA 就不会 403
-      final info = await _service.getDownloadInfo(
+      final info = await service.getDownloadInfo(
         task,
         userAgent: DownloadService.aria2UserAgent,
       );
@@ -210,7 +243,7 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
       debugPrint('[Aria2] Dir: $dir, Filename: $filename');
       debugPrint('[Aria2] Headers: ${info.headers}');
 
-      final gid = await _aria2!.addUri(
+      final gid = await aria2.addUri(
         info.url!,
         dir: dir,
         filename: filename,
@@ -237,7 +270,8 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   Future<void> _pollAria2Status(String gid, DownloadTask task) async {
-    if (_aria2 == null) return;
+    final aria2 = _aria2;
+    if (aria2 == null) return;
 
     try {
       while (true) {
@@ -253,7 +287,7 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
           break;
         }
 
-        final status = await _aria2.tellStatus(gid);
+        final status = await aria2.tellStatus(gid);
         final downloadedBytes = int.tryParse(status['completedLength']?.toString() ?? '0') ?? 0;
         final totalBytes = int.tryParse(status['totalLength']?.toString() ?? '0') ?? 0;
         final downloadSpeed = double.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
@@ -301,7 +335,9 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   void _startDioDownload(DownloadTask task) {
-    _service.startDownload(
+    final service = _service;
+    if (service == null) return;
+    service.startDownload(
       task,
       (updated) => _updateTask(updated),
       (completed) {
@@ -329,7 +365,9 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   void pauseDownload(String taskId) {
-    _service.pauseDownload(taskId);
+    final service = _service;
+    if (service == null) return;
+    service.pauseDownload(taskId);
     final task = state.tasks.firstWhere((t) => t.id == taskId);
     _updateTask(task.copyWith(status: DownloadStatus.paused), forceSave: true);
   }
@@ -342,8 +380,10 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   Future<void> deleteDownload(String taskId) async {
+    final service = _service;
+    if (service == null) return;
     final task = state.tasks.firstWhere((t) => t.id == taskId);
-    await _service.deleteDownload(task);
+    await service.deleteDownload(task);
     state = state.copyWith(tasks: state.tasks.where((t) => t.id != taskId).toList());
     await _saveTasks();
   }
@@ -361,9 +401,11 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
   }
 
   Future<void> deleteAllCompleted() async {
+    final service = _service;
+    if (service == null) return;
     final completed = state.completedTasks;
     for (final task in completed) {
-      await _service.deleteDownload(task);
+      await service.deleteDownload(task);
     }
     state = state.copyWith(
       tasks: state.tasks.where((t) => t.status != DownloadStatus.completed).toList(),
@@ -371,30 +413,3 @@ class DownloadManagerNotifier extends StateNotifier<DownloadManagerState> {
     await _saveTasks();
   }
 }
-
-final downloadServiceProvider = Provider<DownloadService?>((ref) {
-  final serverUrl = ref.watch(serverUrlProvider);
-  if (serverUrl == null || serverUrl.isEmpty) return null;
-
-  final downloadSettings = ref.watch(downloadSettingsProvider);
-
-  final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(hours: 2),
-  ));
-
-  final service = DownloadService(dio, serverUrl);
-  service.useMultiThread = downloadSettings.multiThreadEnabled;
-  service.threadCount = downloadSettings.threadCount;
-  return service;
-});
-
-final downloadManagerProvider =
-    StateNotifierProvider<DownloadManagerNotifier, DownloadManagerState>((ref) {
-  final service = ref.watch(downloadServiceProvider);
-  final aria2 = ref.watch(aria2ServiceProvider);
-  if (service == null) {
-    return DownloadManagerNotifier(DownloadService(Dio(), ''), null);
-  }
-  return DownloadManagerNotifier(service, aria2);
-});

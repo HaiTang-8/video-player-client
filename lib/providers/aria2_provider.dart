@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 import '../data/services/aria2_service.dart';
 import 'server_provider.dart';
@@ -26,18 +25,12 @@ class Aria2Config {
   }
 }
 
-final aria2ConfigProvider =
-    StateNotifierProvider<Aria2ConfigNotifier, Aria2Config>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return Aria2ConfigNotifier(prefs);
-});
+final aria2ConfigProvider = NotifierProvider<Aria2ConfigNotifier, Aria2Config>(Aria2ConfigNotifier.new);
 
-class Aria2ConfigNotifier extends StateNotifier<Aria2Config> {
-  final SharedPreferences _prefs;
-
-  Aria2ConfigNotifier(this._prefs) : super(_loadConfig(_prefs));
-
-  static Aria2Config _loadConfig(SharedPreferences prefs) {
+class Aria2ConfigNotifier extends Notifier<Aria2Config> {
+  @override
+  Aria2Config build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
     return Aria2Config(
       enabled: prefs.getBool(AppConstants.aria2EnabledKey) ?? false,
       rpcUrl: prefs.getString(AppConstants.aria2RpcUrlKey) ?? 'http://localhost:6800/jsonrpc',
@@ -46,24 +39,28 @@ class Aria2ConfigNotifier extends StateNotifier<Aria2Config> {
   }
 
   Future<void> setEnabled(bool enabled) async {
-    await _prefs.setBool(AppConstants.aria2EnabledKey, enabled);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool(AppConstants.aria2EnabledKey, enabled);
     state = state.copyWith(enabled: enabled);
   }
 
   Future<void> setRpcUrl(String url) async {
-    await _prefs.setString(AppConstants.aria2RpcUrlKey, url);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString(AppConstants.aria2RpcUrlKey, url);
     state = state.copyWith(rpcUrl: url);
   }
 
   Future<void> setSecret(String secret) async {
-    await _prefs.setString(AppConstants.aria2RpcSecretKey, secret);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString(AppConstants.aria2RpcSecretKey, secret);
     state = state.copyWith(secret: secret);
   }
 
   Future<void> updateConfig({bool? enabled, String? rpcUrl, String? secret}) async {
-    if (enabled != null) await _prefs.setBool(AppConstants.aria2EnabledKey, enabled);
-    if (rpcUrl != null) await _prefs.setString(AppConstants.aria2RpcUrlKey, rpcUrl);
-    if (secret != null) await _prefs.setString(AppConstants.aria2RpcSecretKey, secret);
+    final prefs = ref.read(sharedPreferencesProvider);
+    if (enabled != null) await prefs.setBool(AppConstants.aria2EnabledKey, enabled);
+    if (rpcUrl != null) await prefs.setString(AppConstants.aria2RpcUrlKey, rpcUrl);
+    if (secret != null) await prefs.setString(AppConstants.aria2RpcSecretKey, secret);
     state = state.copyWith(enabled: enabled, rpcUrl: rpcUrl, secret: secret);
   }
 }

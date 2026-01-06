@@ -503,7 +503,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                   return;
                 }
 
-                await ref.read(browseProvider(storage.id).notifier).browse('/');
+                await browseStorage(ref, storage.id, '/');
                 setState(() => isTesting = false);
 
                 if (context.mounted) {

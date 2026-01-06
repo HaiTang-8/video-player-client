@@ -417,7 +417,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<Storage?> _getStorageById(int storageId) async {
-    final current = ref.read(storagesProvider).valueOrNull;
+    final current = ref.read(storagesProvider).value;
     if (current != null) {
       try {
         return current.firstWhere((s) => s.id == storageId);
@@ -425,7 +425,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     await ref.read(storagesProvider.notifier).loadStorages();
-    final loaded = ref.read(storagesProvider).valueOrNull;
+    final loaded = ref.read(storagesProvider).value;
     if (loaded == null) return null;
     try {
       return loaded.firstWhere((s) => s.id == storageId);

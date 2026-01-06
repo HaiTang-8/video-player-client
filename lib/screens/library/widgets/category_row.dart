@@ -35,7 +35,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
     // 移动端直接加载默认数量
     if (!WindowControls.isDesktop) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(categoryItemsProvider(widget.category.id).notifier).load();
+        loadCategoryItems(ref, widget.category.id);
         _loaded = true;
       });
     }
@@ -50,9 +50,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
         .floor();
     final pageSize = itemsPerRow * _rowCount;
 
-    ref
-        .read(categoryItemsProvider(widget.category.id).notifier)
-        .load(pageSize: pageSize);
+    loadCategoryItems(ref, widget.category.id, pageSize: pageSize);
   }
 
   @override

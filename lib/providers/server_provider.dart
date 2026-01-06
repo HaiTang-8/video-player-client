@@ -7,12 +7,10 @@ import '../data/services/api_client.dart';
 import '../data/services/storage_service.dart';
 import 'error_notification_provider.dart';
 
-/// SharedPreferences Provider
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('需要在 main.dart 中覆盖此 Provider');
 });
 
-/// 服务器列表状态
 class ServerListState {
   final List<ServerConfig> servers;
   final String? currentServerId;
@@ -36,23 +34,18 @@ class ServerListState {
   }
 }
 
-/// 服务器列表 Provider
-final serverListProvider =
-    StateNotifierProvider<ServerListNotifier, ServerListState>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return ServerListNotifier(prefs);
-});
+final serverListProvider = NotifierProvider<ServerListNotifier, ServerListState>(ServerListNotifier.new);
 
-class ServerListNotifier extends StateNotifier<ServerListState> {
-  final SharedPreferences _prefs;
-
-  ServerListNotifier(this._prefs) : super(ServerListState(servers: [])) {
-    _loadServers();
+class ServerListNotifier extends Notifier<ServerListState> {
+  @override
+  ServerListState build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
+    return _loadServers(prefs);
   }
 
-  void _loadServers() {
-    final listJson = _prefs.getString(AppConstants.serverListKey);
-    final currentId = _prefs.getString(AppConstants.currentServerIdKey);
+  ServerListState _loadServers(SharedPreferences prefs) {
+    final listJson = prefs.getString(AppConstants.serverListKey);
+    final currentId = prefs.getString(AppConstants.currentServerIdKey);
 
     List<ServerConfig> servers = [];
     if (listJson != null) {
@@ -60,43 +53,43 @@ class ServerListNotifier extends StateNotifier<ServerListState> {
       servers = list.map((e) => ServerConfig.fromJson(e)).toList();
     }
 
-    // 迁移旧版单服务器数据
     if (servers.isEmpty) {
-      final oldUrl = _prefs.getString(AppConstants.serverUrlKey);
+      final oldUrl = prefs.getString(AppConstants.serverUrlKey);
       if (oldUrl != null && oldUrl.isNotEmpty) {
         final migrated = ServerConfig.create(name: '默认服务器', url: oldUrl);
         servers = [migrated];
         _saveServers(servers);
-        _prefs.setString(AppConstants.currentServerIdKey, migrated.id);
-        state = ServerListState(servers: servers, currentServerId: migrated.id);
-        return;
+        prefs.setString(AppConstants.currentServerIdKey, migrated.id);
+        return ServerListState(servers: servers, currentServerId: migrated.id);
       }
     }
 
-    state = ServerListState(servers: servers, currentServerId: currentId);
+    return ServerListState(servers: servers, currentServerId: currentId);
   }
 
   Future<void> _saveServers(List<ServerConfig> servers) async {
+    final prefs = ref.read(sharedPreferencesProvider);
     final json = jsonEncode(servers.map((e) => e.toJson()).toList());
-    await _prefs.setString(AppConstants.serverListKey, json);
+    await prefs.setString(AppConstants.serverListKey, json);
   }
 
   Future<void> addServer(String name, String url) async {
+    final prefs = ref.read(sharedPreferencesProvider);
     final server = ServerConfig.create(name: name, url: url);
     final newServers = [...state.servers, server];
     await _saveServers(newServers);
 
-    // 如果是第一个服务器，自动设为当前
     String? newCurrentId = state.currentServerId;
     if (newCurrentId == null) {
       newCurrentId = server.id;
-      await _prefs.setString(AppConstants.currentServerIdKey, newCurrentId);
+      await prefs.setString(AppConstants.currentServerIdKey, newCurrentId);
     }
 
     state = state.copyWith(servers: newServers, currentServerId: newCurrentId);
   }
 
   Future<void> removeServer(String id) async {
+    final prefs = ref.read(sharedPreferencesProvider);
     final newServers = state.servers.where((s) => s.id != id).toList();
     await _saveServers(newServers);
 
@@ -104,9 +97,9 @@ class ServerListNotifier extends StateNotifier<ServerListState> {
     if (newCurrentId == id) {
       newCurrentId = newServers.isNotEmpty ? newServers.first.id : null;
       if (newCurrentId != null) {
-        await _prefs.setString(AppConstants.currentServerIdKey, newCurrentId);
+        await prefs.setString(AppConstants.currentServerIdKey, newCurrentId);
       } else {
-        await _prefs.remove(AppConstants.currentServerIdKey);
+        await prefs.remove(AppConstants.currentServerIdKey);
       }
     }
 
@@ -125,18 +118,17 @@ class ServerListNotifier extends StateNotifier<ServerListState> {
   }
 
   Future<void> setCurrentServer(String id) async {
-    await _prefs.setString(AppConstants.currentServerIdKey, id);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString(AppConstants.currentServerIdKey, id);
     state = state.copyWith(currentServerId: id);
   }
 }
 
-/// 当前服务器 URL Provider（兼容旧接口）
 final serverUrlProvider = Provider<String?>((ref) {
   final serverState = ref.watch(serverListProvider);
   return serverState.currentServer?.url;
 });
 
-/// API Client Provider
 final apiClientProvider = Provider<ApiClient?>((ref) {
   final serverUrl = ref.watch(serverUrlProvider);
   if (serverUrl == null || serverUrl.isEmpty) {
@@ -148,7 +140,6 @@ final apiClientProvider = Provider<ApiClient?>((ref) {
   );
 });
 
-/// 服务器连接状态
 enum ServerConnectionState {
   disconnected,
   connecting,
@@ -156,16 +147,11 @@ enum ServerConnectionState {
   error,
 }
 
-/// 服务器连接状态 Provider
-final serverConnectionProvider =
-    StateNotifierProvider<ServerConnectionNotifier, ServerConnectionState>((ref) {
-  return ServerConnectionNotifier(ref);
-});
+final serverConnectionProvider = NotifierProvider<ServerConnectionNotifier, ServerConnectionState>(ServerConnectionNotifier.new);
 
-class ServerConnectionNotifier extends StateNotifier<ServerConnectionState> {
-  final Ref _ref;
-
-  ServerConnectionNotifier(this._ref) : super(ServerConnectionState.disconnected);
+class ServerConnectionNotifier extends Notifier<ServerConnectionState> {
+  @override
+  ServerConnectionState build() => ServerConnectionState.disconnected;
 
   Future<bool> testConnection(String url) async {
     state = ServerConnectionState.connecting;
@@ -188,7 +174,7 @@ class ServerConnectionNotifier extends StateNotifier<ServerConnectionState> {
   }
 
   Future<void> connectToSavedServer() async {
-    final serverUrl = _ref.read(serverUrlProvider);
+    final serverUrl = ref.read(serverUrlProvider);
     if (serverUrl != null && serverUrl.isNotEmpty) {
       await testConnection(serverUrl);
     }

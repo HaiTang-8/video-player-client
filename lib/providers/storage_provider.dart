@@ -3,58 +3,44 @@ import '../data/models/models.dart';
 import '../data/services/storage_service.dart';
 import 'server_provider.dart';
 
-/// StorageService Provider
 final storageServiceProvider = Provider<StorageService?>((ref) {
   final client = ref.watch(apiClientProvider);
   if (client == null) return null;
   return StorageService(client);
 });
 
-/// 存储源列表 Provider
-final storagesProvider =
-    StateNotifierProvider<StoragesNotifier, AsyncValue<List<Storage>>>((ref) {
-  final service = ref.watch(storageServiceProvider);
-  return StoragesNotifier(service);
-});
+final storagesProvider = NotifierProvider<StoragesNotifier, AsyncValue<List<Storage>>>(StoragesNotifier.new);
 
-class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
-  final StorageService? _service;
+class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
+  @override
+  AsyncValue<List<Storage>> build() => const AsyncValue.loading();
 
-  StoragesNotifier(this._service) : super(const AsyncValue.loading());
-
-  /// 加载存储源列表
   Future<void> loadStorages() async {
-    if (_service == null) {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
       state = const AsyncValue.data([]);
       return;
     }
 
     state = const AsyncValue.loading();
-    final response = await _service.getStorages();
+    final response = await service.getStorages();
 
     if (response.isSuccess && response.data != null) {
       state = AsyncValue.data(response.data!);
     } else {
-      state = AsyncValue.error(
-        response.error ?? '加载失败',
-        StackTrace.current,
-      );
+      state = AsyncValue.error(response.error ?? '加载失败', StackTrace.current);
     }
   }
 
-  /// 添加存储源
   Future<bool> addStorage({
     required String name,
     required String type,
     required Map<String, String> settings,
   }) async {
-    if (_service == null) return false;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
 
-    final response = await _service.addStorage(
-      name: name,
-      type: type,
-      settings: settings,
-    );
+    final response = await service.addStorage(name: name, type: type, settings: settings);
 
     if (response.isSuccess) {
       await loadStorages();
@@ -63,11 +49,11 @@ class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
     return false;
   }
 
-  /// 删除存储源
   Future<bool> deleteStorage(int id) async {
-    if (_service == null) return false;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
 
-    final response = await _service.deleteStorage(id);
+    final response = await service.deleteStorage(id);
 
     if (response.isSuccess) {
       await loadStorages();
@@ -76,21 +62,16 @@ class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
     return false;
   }
 
-  /// 更新存储源
   Future<bool> updateStorage({
     required int id,
     required String name,
     required String type,
     required Map<String, String> settings,
   }) async {
-    if (_service == null) return false;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
 
-    final response = await _service.updateStorage(
-      id: id,
-      name: name,
-      type: type,
-      settings: settings,
-    );
+    final response = await service.updateStorage(id: id, name: name, type: type, settings: settings);
 
     if (response.isSuccess) {
       await loadStorages();
@@ -100,13 +81,12 @@ class StoragesNotifier extends StateNotifier<AsyncValue<List<Storage>>> {
   }
 }
 
-/// 全局扫描聚合状态
 class GlobalScanState {
   final bool isScanning;
-  final int foundFiles;      // 已找到（所有存储源的 totalFiles 之和）
-  final int pendingFiles;    // 待更新（totalFiles - scannedFiles）
-  final int updatedFiles;    // 已更新（scannedFiles）
-  final bool dismissed;      // 用户已手动关闭弹框
+  final int foundFiles;
+  final int pendingFiles;
+  final int updatedFiles;
+  final bool dismissed;
 
   const GlobalScanState({
     this.isScanning = false,
@@ -133,7 +113,6 @@ class GlobalScanState {
   }
 }
 
-/// 扫描进度状态
 class ScanState {
   final Map<int, ScanProgress> progresses;
   final Set<int> scanning;
@@ -154,32 +133,21 @@ class ScanState {
   }
 }
 
-/// 扫描状态 Provider
-final scanStateProvider =
-    StateNotifierProvider<ScanStateNotifier, ScanState>((ref) {
-  final service = ref.watch(storageServiceProvider);
-  return ScanStateNotifier(service);
-});
+final scanStateProvider = NotifierProvider<ScanStateNotifier, ScanState>(ScanStateNotifier.new);
 
-/// 全局扫描状态 Provider
-final globalScanStateProvider =
-    StateNotifierProvider<GlobalScanNotifier, GlobalScanState>((ref) {
-  final service = ref.watch(storageServiceProvider);
-  final storages = ref.watch(storagesProvider);
-  return GlobalScanNotifier(service, storages);
-});
+final globalScanStateProvider = NotifierProvider<GlobalScanNotifier, GlobalScanState>(GlobalScanNotifier.new);
 
-class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
-  final StorageService? _service;
-  final AsyncValue<List<Storage>> _storages;
+class GlobalScanNotifier extends Notifier<GlobalScanState> {
   final Map<int, ScanProgress> _progresses = {};
   bool _cancelled = false;
 
-  GlobalScanNotifier(this._service, this._storages) : super(const GlobalScanState());
+  @override
+  GlobalScanState build() => const GlobalScanState();
 
   Future<void> startScanAll({bool forceScrape = false}) async {
-    if (_service == null) return;
-    final storages = _storages.valueOrNull ?? [];
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return;
+    final storages = ref.read(storagesProvider).value ?? [];
     if (storages.isEmpty) return;
 
     _cancelled = false;
@@ -187,14 +155,15 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
     _progresses.clear();
 
     for (final storage in storages) {
-      await _service.startScan(storage.id, forceScrape: forceScrape);
+      await service.startScan(storage.id, forceScrape: forceScrape);
     }
 
     _pollProgress(storages.map((s) => s.id).toList());
   }
 
   void _pollProgress(List<int> storageIds) async {
-    if (_service == null) return;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return;
 
     while (state.isScanning && !_cancelled) {
       await Future.delayed(const Duration(seconds: 1));
@@ -206,7 +175,7 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
 
       for (final id in storageIds) {
         if (_cancelled) break;
-        final response = await _service.getScanProgress(id);
+        final response = await service.getScanProgress(id);
         if (response.isSuccess && response.data != null) {
           _progresses[id] = response.data!;
           if (response.data!.isRunning) anyRunning = true;
@@ -239,29 +208,27 @@ class GlobalScanNotifier extends StateNotifier<GlobalScanState> {
     state = state.copyWith(dismissed: false);
   }
 
-  /// 取消所有扫描任务
   Future<void> cancelAllScans() async {
-    if (_service == null) return;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return;
 
     _cancelled = true;
-    await _service.cancelAllScans();
+    await service.cancelAllScans();
 
-    // 重置状态
     state = const GlobalScanState();
     _progresses.clear();
   }
 }
 
-class ScanStateNotifier extends StateNotifier<ScanState> {
-  final StorageService? _service;
+class ScanStateNotifier extends Notifier<ScanState> {
+  @override
+  ScanState build() => ScanState();
 
-  ScanStateNotifier(this._service) : super(ScanState());
-
-  /// 启动扫描
   Future<bool> startScan(int storageId, {bool forceScrape = false}) async {
-    if (_service == null) return false;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
 
-    final response = await _service.startScan(storageId, forceScrape: forceScrape);
+    final response = await service.startScan(storageId, forceScrape: forceScrape);
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
@@ -273,11 +240,11 @@ class ScanStateNotifier extends StateNotifier<ScanState> {
     return false;
   }
 
-  /// 获取扫描进度
   Future<void> refreshProgress(int storageId) async {
-    if (_service == null) return;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return;
 
-    final response = await _service.getScanProgress(storageId);
+    final response = await service.getScanProgress(storageId);
 
     if (response.isSuccess && response.data != null) {
       final progress = response.data!;
@@ -294,13 +261,11 @@ class ScanStateNotifier extends StateNotifier<ScanState> {
     }
   }
 
-  /// 检查是否正在扫描
   bool isScanning(int storageId) {
     return state.scanning.contains(storageId);
   }
 }
 
-/// 目录浏览状态
 class BrowseState {
   final List<FileInfo> files;
   final String currentPath;
@@ -329,55 +294,46 @@ class BrowseState {
   }
 }
 
-/// 目录浏览 Provider（按存储源 ID）
-final browseProvider = StateNotifierProvider.family<BrowseNotifier, BrowseState, int>(
-    (ref, storageId) {
-  final service = ref.watch(storageServiceProvider);
-  return BrowseNotifier(service, storageId);
+final _browseCache = <int, BrowseState>{};
+
+final browseProvider = Provider.family<BrowseState, int>((ref, storageId) {
+  return _browseCache[storageId] ?? BrowseState();
 });
 
-class BrowseNotifier extends StateNotifier<BrowseState> {
-  final StorageService? _service;
-  final int _storageId;
+void _updateBrowseState(int storageId, BrowseState state) {
+  _browseCache[storageId] = state;
+}
 
-  BrowseNotifier(this._service, this._storageId) : super(BrowseState());
+Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
+  final service = ref.read(storageServiceProvider);
+  if (service == null) return;
 
-  /// 浏览目录
-  Future<void> browse(String path) async {
-    if (_service == null) return;
+  final currentState = _browseCache[storageId] ?? BrowseState();
+  _updateBrowseState(storageId, currentState.copyWith(isLoading: true, error: null, currentPath: path));
+  ref.invalidate(browseProvider(storageId));
 
-    state = state.copyWith(isLoading: true, error: null, currentPath: path);
+  final response = await service.browseStorage(storageId, path: path);
 
-    final response = await _service.browseStorage(_storageId, path: path);
-
-    if (response.isSuccess && response.data != null) {
-      state = state.copyWith(
-        files: response.data!,
-        isLoading: false,
-      );
-    } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: response.error,
-      );
-    }
+  if (response.isSuccess && response.data != null) {
+    _updateBrowseState(storageId, BrowseState(files: response.data!, currentPath: path, isLoading: false));
+  } else {
+    _updateBrowseState(storageId, currentState.copyWith(isLoading: false, error: response.error, currentPath: path));
   }
+  ref.invalidate(browseProvider(storageId));
+}
 
-  /// 进入子目录
-  Future<void> enterDirectory(String dirName) async {
-    final newPath = state.currentPath == '/'
-        ? '/$dirName'
-        : '${state.currentPath}/$dirName';
-    await browse(newPath);
-  }
+Future<void> enterDirectory(WidgetRef ref, int storageId, String dirName) async {
+  final currentPath = (_browseCache[storageId] ?? BrowseState()).currentPath;
+  final newPath = currentPath == '/' ? '/$dirName' : '$currentPath/$dirName';
+  await browseStorage(ref, storageId, newPath);
+}
 
-  /// 返回上级目录
-  Future<void> goBack() async {
-    if (state.currentPath == '/') return;
+Future<void> goBackDirectory(WidgetRef ref, int storageId) async {
+  final currentPath = (_browseCache[storageId] ?? BrowseState()).currentPath;
+  if (currentPath == '/') return;
 
-    final parts = state.currentPath.split('/');
-    parts.removeLast();
-    final newPath = parts.isEmpty ? '/' : parts.join('/');
-    await browse(newPath.isEmpty ? '/' : newPath);
-  }
+  final parts = currentPath.split('/');
+  parts.removeLast();
+  final newPath = parts.isEmpty ? '/' : parts.join('/');
+  await browseStorage(ref, storageId, newPath.isEmpty ? '/' : newPath);
 }

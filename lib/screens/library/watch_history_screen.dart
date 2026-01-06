@@ -177,33 +177,22 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return GridView.builder(
+      padding: const EdgeInsets.all(16),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 280,
+        childAspectRatio: 1.35,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
+      ),
       itemCount: state.items.length,
       itemBuilder: (context, index) {
         final item = state.items[index];
-        if (_isEditMode) {
-          return _WatchHistoryListItem(
-            item: item,
-            isEditMode: true,
-            isSelected: _selectedIds.contains(item.id),
-            onTap: () => _toggleSelection(item.id),
-          );
-        }
-        return Dismissible(
-          key: ValueKey(item.id),
-          direction: DismissDirection.endToStart,
-          background: Container(
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            color: CupertinoColors.destructiveRed,
-            child: const Icon(CupertinoIcons.delete, color: CupertinoColors.white),
-          ),
-          onDismissed: (_) => ref.read(watchHistoryProvider.notifier).delete(item.id),
-          child: _WatchHistoryListItem(
-            item: item,
-            onTap: () => _navigateToDetail(item),
-          ),
+        return _WatchHistoryGridItem(
+          item: item,
+          isEditMode: _isEditMode,
+          isSelected: _selectedIds.contains(item.id),
+          onTap: _isEditMode ? () => _toggleSelection(item.id) : () => _navigateToDetail(item),
         );
       },
     );
@@ -252,13 +241,13 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   }
 }
 
-class _WatchHistoryListItem extends ConsumerWidget {
+class _WatchHistoryGridItem extends ConsumerWidget {
   final WatchHistoryItem item;
   final VoidCallback? onTap;
   final bool isEditMode;
   final bool isSelected;
 
-  const _WatchHistoryListItem({
+  const _WatchHistoryGridItem({
     required this.item,
     this.onTap,
     this.isEditMode = false,
@@ -269,71 +258,66 @@ class _WatchHistoryListItem extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
-    final isEpisode = item.mediaType == 'tv' && item.mediaInfo?.episodeInfo != null;
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(
-          children: [
-            if (isEditMode) ...[
-              Icon(
-                isSelected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
-                color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.inactiveGray,
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-            ],
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: SizedBox(
-                width: isEpisode ? 100 : 60,
-                height: isEpisode ? 56 : 90,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    _buildImage(serverBaseUrl, isEpisode),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        height: 3,
-                        color: CupertinoColors.black.withValues(alpha: 0.45),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: item.progress.clamp(0.0, 1.0),
-                          child: Container(color: CupertinoColors.activeBlue),
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildImage(serverBaseUrl),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          height: 4,
+                          color: Colors.black45,
+                          child: FractionallySizedBox(
+                            alignment: Alignment.centerLeft,
+                            widthFactor: item.progress.clamp(0.0, 1.0),
+                            child: Container(color: const Color(0xFF3D5BF6)),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _displayTitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _subtitle,
-                    style: theme.textTheme.bodySmall?.copyWith(color: CupertinoColors.secondaryLabel),
-                  ),
-                ],
+              const SizedBox(height: 8),
+              Text(
+                _displayTitle,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '已观看 ${(item.progress * 100).toInt()}%',
+                style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
+                maxLines: 1,
+              ),
+            ],
+          ),
+          if (isEditMode)
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Icon(
+                isSelected ? CupertinoIcons.checkmark_circle_fill : CupertinoIcons.circle,
+                color: isSelected ? CupertinoColors.activeBlue : CupertinoColors.white,
+                size: 24,
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -346,27 +330,21 @@ class _WatchHistoryListItem extends ConsumerWidget {
       final parts = <String>[mediaInfo.title];
       if (episodeInfo.seasonNumber > 0) parts.add('第${episodeInfo.seasonNumber}季');
       parts.add('第${episodeInfo.episodeNumber}集');
-      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
-        parts.add(episodeInfo.episodeName!);
-      }
       return parts.join(' ');
     }
     return mediaInfo.title;
   }
 
-  String get _subtitle {
-    return '已观看 ${(item.progress * 100).toInt()}%';
-  }
-
   String? get _imagePath {
-    final episodeInfo = item.mediaInfo?.episodeInfo;
+    final mediaInfo = item.mediaInfo;
+    final episodeInfo = mediaInfo?.episodeInfo;
     if (item.mediaType == 'tv' && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
       return episodeInfo.stillPath;
     }
-    return item.mediaInfo?.posterPath;
+    return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
   }
 
-  Widget _buildImage(String? serverBaseUrl, bool isEpisode) {
+  Widget _buildImage(String? serverBaseUrl) {
     final imagePath = _imagePath;
     if (imagePath != null && imagePath.isNotEmpty) {
       final imageUrl = ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl);
@@ -382,8 +360,8 @@ class _WatchHistoryListItem extends ConsumerWidget {
 
   Widget _buildPlaceholder() {
     return Container(
-      color: CupertinoColors.systemGrey5,
-      child: const Center(child: Icon(CupertinoIcons.film, size: 24, color: CupertinoColors.systemGrey)),
+      color: Colors.grey[300],
+      child: const Center(child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey)),
     );
   }
 }

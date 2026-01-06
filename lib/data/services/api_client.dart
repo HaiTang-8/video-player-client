@@ -19,15 +19,7 @@ class ApiClient {
             'Accept': 'application/json',
           },
         ),
-      ) {
-    _dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: (obj) => _logger.d(obj),
-      ),
-    );
-  }
+      );
 
   /// 更新 baseUrl
   void updateBaseUrl(String baseUrl) {

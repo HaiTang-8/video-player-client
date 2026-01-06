@@ -28,7 +28,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(browseProvider(widget.storageId).notifier).browse('/');
+      browseStorage(ref, widget.storageId, '/');
     });
   }
 
@@ -46,7 +46,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       canPop: browseState.currentPath == '/',
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
-        ref.read(browseProvider(widget.storageId).notifier).goBack();
+        goBackDirectory(ref, widget.storageId);
       },
       child: Scaffold(
         appBar: isDesktop
@@ -54,7 +54,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                 title: Text(title),
                 onBack: () {
                   if (browseState.currentPath != '/') {
-                    ref.read(browseProvider(widget.storageId).notifier).goBack();
+                    goBackDirectory(ref, widget.storageId);
                     return;
                   }
                   context.pop();
@@ -64,7 +64,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     tooltip: '刷新',
                     icon: const Icon(CupertinoIcons.refresh),
                     onPressed: () {
-                      ref.read(browseProvider(widget.storageId).notifier).browse(browseState.currentPath);
+                      browseStorage(ref, widget.storageId, browseState.currentPath);
                     },
                   ),
                   IconButton(
@@ -78,7 +78,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                 title: Text(title),
                 onBack: () {
                   if (browseState.currentPath != '/') {
-                    ref.read(browseProvider(widget.storageId).notifier).goBack();
+                    goBackDirectory(ref, widget.storageId);
                     return;
                   }
                   context.pop();
@@ -88,7 +88,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     tooltip: '刷新',
                     icon: const Icon(CupertinoIcons.refresh, size: 20),
                     onPressed: () {
-                      ref.read(browseProvider(widget.storageId).notifier).browse(browseState.currentPath);
+                      browseStorage(ref, widget.storageId, browseState.currentPath);
                     },
                   ),
                   IconButton(
@@ -123,7 +123,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     if (state.error != null && state.files.isEmpty) {
       return AppErrorWidget(
         message: state.error!,
-        onRetry: () => ref.read(browseProvider(widget.storageId).notifier).browse(state.currentPath),
+        onRetry: () => browseStorage(ref, widget.storageId, state.currentPath),
       );
     }
 
@@ -146,7 +146,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       children: [
         RefreshIndicator(
       onRefresh: () async {
-        await ref.read(browseProvider(widget.storageId).notifier).browse(state.currentPath);
+        await browseStorage(ref, widget.storageId, state.currentPath);
       },
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -166,7 +166,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                       file: items[i],
                       onTap: () async {
                         if (items[i].isDir) {
-                          await ref.read(browseProvider(widget.storageId).notifier).enterDirectory(items[i].name);
+                          await enterDirectory(ref, widget.storageId, items[i].name);
                         } else {
                           await _showFileInfo(context, items[i]);
                         }
@@ -224,7 +224,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
 
     if (!mounted) return;
     if (applied == true) {
-      await ref.read(browseProvider(widget.storageId).notifier).browse(currentPath);
+      await browseStorage(ref, widget.storageId, currentPath);
     }
   }
 

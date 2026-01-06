@@ -34,9 +34,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     super.initState();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(categoryItemsProvider(widget.categoryId).notifier)
-          .refresh(pageSize: 30);
+      refreshCategoryItems(ref, widget.categoryId, pageSize: 30);
     });
   }
 
@@ -49,9 +47,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      ref
-          .read(categoryItemsProvider(widget.categoryId).notifier)
-          .loadMore(pageSize: 30);
+      loadMoreCategoryItems(ref, widget.categoryId, pageSize: 30);
     }
   }
 
@@ -71,9 +67,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
               onBack: () => context.pop(),
             ),
       body: RefreshIndicator(
-        onRefresh: () => ref
-            .read(categoryItemsProvider(widget.categoryId).notifier)
-            .refresh(pageSize: 30),
+        onRefresh: () => refreshCategoryItems(ref, widget.categoryId, pageSize: 30),
         child: _buildBody(itemsState),
       ),
     );
@@ -87,9 +81,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     if (state.error != null && state.items.isEmpty) {
       return AppErrorWidget(
         message: state.error!,
-        onRetry: () => ref
-            .read(categoryItemsProvider(widget.categoryId).notifier)
-            .refresh(pageSize: 30),
+        onRetry: () => refreshCategoryItems(ref, widget.categoryId, pageSize: 30),
       );
     }
 

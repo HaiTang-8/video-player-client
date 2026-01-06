@@ -84,6 +84,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
                             color: Colors.white,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                       ),

@@ -9,27 +9,20 @@ final databaseBackupServiceProvider = Provider<DatabaseBackupService?>((ref) {
   return DatabaseBackupService(client);
 });
 
-final databaseBackupsProvider = StateNotifierProvider<
-  DatabaseBackupsNotifier,
-  AsyncValue<List<DatabaseBackupInfo>>
->((ref) {
-  final service = ref.watch(databaseBackupServiceProvider);
-  return DatabaseBackupsNotifier(service);
-});
+final databaseBackupsProvider = NotifierProvider<DatabaseBackupsNotifier, AsyncValue<List<DatabaseBackupInfo>>>(DatabaseBackupsNotifier.new);
 
-class DatabaseBackupsNotifier
-    extends StateNotifier<AsyncValue<List<DatabaseBackupInfo>>> {
-  final DatabaseBackupService? _service;
-
-  DatabaseBackupsNotifier(this._service) : super(const AsyncValue.loading());
+class DatabaseBackupsNotifier extends Notifier<AsyncValue<List<DatabaseBackupInfo>>> {
+  @override
+  AsyncValue<List<DatabaseBackupInfo>> build() => const AsyncValue.loading();
 
   Future<void> loadBackups() async {
-    if (_service == null) {
+    final service = ref.read(databaseBackupServiceProvider);
+    if (service == null) {
       state = const AsyncValue.data([]);
       return;
     }
     state = const AsyncValue.loading();
-    final response = await _service.getBackups();
+    final response = await service.getBackups();
     if (response.isSuccess && response.data != null) {
       state = AsyncValue.data(response.data!);
     } else {
@@ -38,8 +31,9 @@ class DatabaseBackupsNotifier
   }
 
   Future<bool> createBackup({String? name}) async {
-    if (_service == null) return false;
-    final response = await _service.createBackup(name: name);
+    final service = ref.read(databaseBackupServiceProvider);
+    if (service == null) return false;
+    final response = await service.createBackup(name: name);
     if (response.isSuccess) {
       await loadBackups();
       return true;
@@ -48,14 +42,16 @@ class DatabaseBackupsNotifier
   }
 
   Future<bool> rollback(String backupName) async {
-    if (_service == null) return false;
-    final response = await _service.rollback(backupName);
+    final service = ref.read(databaseBackupServiceProvider);
+    if (service == null) return false;
+    final response = await service.rollback(backupName);
     return response.isSuccess;
   }
 
   Future<bool> deleteBackup(String backupName) async {
-    if (_service == null) return false;
-    final response = await _service.deleteBackup(backupName);
+    final service = ref.read(databaseBackupServiceProvider);
+    if (service == null) return false;
+    final response = await service.deleteBackup(backupName);
     if (response.isSuccess) {
       await loadBackups();
       return true;

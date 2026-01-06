@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 import 'server_provider.dart';
 
-/// 主题模式 Provider
-final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider);
-  return ThemeModeNotifier(prefs);
-});
+final themeModeProvider = NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
 
-class ThemeModeNotifier extends StateNotifier<ThemeMode> {
-  final SharedPreferences _prefs;
-
-  ThemeModeNotifier(this._prefs) : super(_loadThemeMode(_prefs));
-
-  static ThemeMode _loadThemeMode(SharedPreferences prefs) {
+class ThemeModeNotifier extends Notifier<ThemeMode> {
+  @override
+  ThemeMode build() {
+    final prefs = ref.watch(sharedPreferencesProvider);
     final value = prefs.getString(AppConstants.themeKey);
     switch (value) {
       case 'light':
@@ -28,6 +21,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
+    final prefs = ref.read(sharedPreferencesProvider);
     String value;
     switch (mode) {
       case ThemeMode.light:
@@ -40,7 +34,7 @@ class ThemeModeNotifier extends StateNotifier<ThemeMode> {
         value = 'system';
         break;
     }
-    await _prefs.setString(AppConstants.themeKey, value);
+    await prefs.setString(AppConstants.themeKey, value);
     state = mode;
   }
 }
