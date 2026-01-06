@@ -23,7 +23,6 @@ class DownloadManagerScreen extends ConsumerWidget {
     );
 
     return Scaffold(
-      backgroundColor: Colors.white,
       appBar: isDesktop
           ? DesktopAppBar(
               title: const Text('下载管理'),

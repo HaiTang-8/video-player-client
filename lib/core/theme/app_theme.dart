@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../widgets/ios_page_transition.dart';
 
@@ -15,6 +16,11 @@ class AppTheme {
     brightness: Brightness.light,
     fontFamily: 'HarmonyOS_Sans',
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+    cupertinoOverrideTheme: const CupertinoThemeData(
+      textTheme: CupertinoTextThemeData(
+        textStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+      ),
+    ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.light,
@@ -86,6 +92,11 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.dark,
     fontFamily: 'HarmonyOS_Sans',
+    cupertinoOverrideTheme: const CupertinoThemeData(
+      textTheme: CupertinoTextThemeData(
+        textStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+      ),
+    ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.dark,
