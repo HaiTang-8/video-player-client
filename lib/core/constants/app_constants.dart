@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Media Player';
+  static const String appName = '观影';
   static const String appVersion = '1.0.0';
 
   // 本地存储 Key
