@@ -79,6 +79,9 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+  # 图标生成
+  flutter_launcher_icons: ^0.14.3
+
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
   # activated in the `analysis_options.yaml` file located at the root of your
@@ -138,3 +141,15 @@ flutter:
     - family: HarmonyOS_Sans
       fonts:
         - asset: assets/fonts/HarmonyOS_SansSC_Regular.ttf
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  windows:
+    generate: true
+    image_path: "assets/logo.png"
+    icon_size: 256
+  image_path: "assets/logo.png"
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: "assets/logo.png"
