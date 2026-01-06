@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <windows.h>
+#include <windowsx.h>
 
 #include "flutter/generated_plugin_registrant.h"
 
@@ -153,6 +154,14 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Handle WM_NCHITTEST before Flutter to enable window border resizing
+  if (message == WM_NCHITTEST) {
+    LRESULT hit = Win32Window::MessageHandler(hwnd, message, wparam, lparam);
+    if (hit != HTCLIENT) {
+      return hit;
+    }
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =

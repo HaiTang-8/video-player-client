@@ -10,6 +10,17 @@ class AppTheme {
   static const Color primaryColor = Color(0xFF007AFF);
   static const Color secondaryColor = Color(0xFF8B5CF6);
 
+  static const _cupertinoTextTheme = CupertinoTextThemeData(
+    textStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    actionTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    tabLabelTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    navTitleTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    navLargeTitleTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    navActionTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    pickerTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+    dateTimePickerTextStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
+  );
+
   // 亮色主题
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
@@ -17,9 +28,7 @@ class AppTheme {
     fontFamily: 'HarmonyOS_Sans',
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
     cupertinoOverrideTheme: const CupertinoThemeData(
-      textTheme: CupertinoTextThemeData(
-        textStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
-      ),
+      textTheme: _cupertinoTextTheme,
     ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
@@ -93,9 +102,7 @@ class AppTheme {
     brightness: Brightness.dark,
     fontFamily: 'HarmonyOS_Sans',
     cupertinoOverrideTheme: const CupertinoThemeData(
-      textTheme: CupertinoTextThemeData(
-        textStyle: TextStyle(fontFamily: 'HarmonyOS_Sans'),
-      ),
+      textTheme: _cupertinoTextTheme,
     ),
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,

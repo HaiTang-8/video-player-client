@@ -42,7 +42,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
         theme.colorScheme.onSurface;
     final dividerColor = theme.dividerColor.withValues(alpha: 0.2);
 
-    final leftInset = WindowControls.isMacOS ? 72.0 : 138.0;
+    final leftInset = WindowControls.isMacOS ? 72.0 : 0.0;
 
     return Material(
       color: bg,
