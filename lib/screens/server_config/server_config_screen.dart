@@ -561,7 +561,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
 
     return CupertinoPageScaffold(
       backgroundColor: bgColor,
-      child: DefaultTextStyle(
+      child: DefaultTextStyle.merge(
         style: TextStyle(
           decoration: TextDecoration.none,
           color: isDark ? CupertinoColors.white : CupertinoColors.black,

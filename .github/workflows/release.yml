@@ -61,12 +61,20 @@ jobs:
           flutter-version: '3.38.5'
           channel: 'stable'
       - run: flutter pub get
-      - run: flutter build apk --release
-      - run: mv build/app/outputs/flutter-apk/app-release.apk media_player-android.apk
+      # 说明：
+      # 1) 默认 `flutter build apk --release` 会生成「通用 APK」（universal/fat），把多个 ABI（armv7/arm64/x86_64）的 so 一起打进去，体积会非常大。
+      # 2) `--split-per-abi` 会按 ABI 拆分产物；再配合 `--target-platform` 只产出 armv7 + arm64，避免把 x86_64 一起打进发布包。
+      - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64
+      - name: Rename artifacts
+        run: |
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk media_player-android-armeabi-v7a.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk media_player-android-arm64-v8a.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android-build
-          path: media_player-android.apk
+          path: |
+            media_player-android-armeabi-v7a.apk
+            media_player-android-arm64-v8a.apk
 
   build-ios:
     runs-on: macos-latest
