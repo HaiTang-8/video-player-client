@@ -3,6 +3,7 @@
 #include <dwmapi.h>
 #include <flutter_windows.h>
 #include <shellapi.h>
+#include <unordered_map>
 #include <windowsx.h>
 
 #include "resource.h"
@@ -33,6 +34,9 @@ static int g_active_window_count = 0;
 
 using EnableNonClientDpiScaling = BOOL __stdcall(HWND hwnd);
 
+// 缓存子窗口（Flutter View）的原始 WndProc，用于在自定义无边框窗口中实现边缘缩放。
+static std::unordered_map<HWND, WNDPROC> g_child_content_procs;
+
 // Scale helper to convert logical scaler values to physical using passed in
 // scale factor
 int Scale(int source, double scale_factor) {
@@ -53,6 +57,56 @@ void EnableFullDpiSupportIfAvailable(HWND hwnd) {
     enable_non_client_dpi_scaling(hwnd);
   }
   FreeLibrary(user32_module);
+}
+
+LRESULT CALLBACK ChildContentWndProc(HWND const window,
+                                     UINT const message,
+                                     WPARAM const wparam,
+                                     LPARAM const lparam) noexcept {
+  const auto it = g_child_content_procs.find(window);
+  const WNDPROC original_proc =
+      it == g_child_content_procs.end() ? nullptr : it->second;
+
+  // 关键点：
+  // 当前窗口是自绘标题栏/无边框（WM_NCCALCSIZE 让 client 覆盖整窗），Flutter 的子窗口
+  // 通常会铺满整个 client area。这样鼠标移到窗口边缘时，WM_NCHITTEST 会先发给子窗口，
+  // 父窗口收不到命中测试，自然也就不会返回 HTLEFT/HTTOP...，导致：
+  // - 鼠标样式不变（没有拉伸光标）
+  // - 不能拖拽缩放
+  //
+  // 解决：子窗口在边缘区域返回 HTTRANSPARENT，让系统继续向“底下”的父窗口做命中测试，
+  // 父窗口的 WM_NCHITTEST 再返回 HTLEFT/HTTOP... 以启用系统的缩放行为。
+  if (message == WM_NCHITTEST) {
+    const HWND parent = GetParent(window);
+    if (parent) {
+      POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+      ScreenToClient(parent, &pt);
+
+      RECT rc;
+      GetClientRect(parent, &rc);
+
+      const int borderWidthX = GetSystemMetrics(SM_CXSIZEFRAME) +
+                               GetSystemMetrics(SM_CXPADDEDBORDER);
+      const int borderWidthY = GetSystemMetrics(SM_CYSIZEFRAME) +
+                               GetSystemMetrics(SM_CXPADDEDBORDER);
+
+      if ((borderWidthX > 0 || borderWidthY > 0) &&
+          (pt.x < borderWidthX || pt.x >= rc.right - borderWidthX ||
+           pt.y < borderWidthY || pt.y >= rc.bottom - borderWidthY)) {
+        return HTTRANSPARENT;
+      }
+    }
+    return HTCLIENT;
+  }
+
+  if (message == WM_NCDESTROY) {
+    g_child_content_procs.erase(window);
+  }
+
+  if (original_proc) {
+    return CallWindowProc(original_proc, window, message, wparam, lparam);
+  }
+  return DefWindowProc(window, message, wparam, lparam);
 }
 
 }  // namespace
@@ -221,26 +275,32 @@ Win32Window::MessageHandler(HWND hwnd,
       return 0;
 
     case WM_NCCALCSIZE:
-      return 0;
+      if (wparam) {
+        return 0;
+      }
+      break;
 
     case WM_NCHITTEST: {
       POINT pt = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
       ScreenToClient(hwnd, &pt);
       RECT rc;
       GetClientRect(hwnd, &rc);
-      const int borderWidth = 8;
-      if (pt.y < borderWidth) {
-        if (pt.x < borderWidth) return HTTOPLEFT;
-        if (pt.x > rc.right - borderWidth) return HTTOPRIGHT;
+      const int borderWidthX =
+          GetSystemMetrics(SM_CXSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+      const int borderWidthY =
+          GetSystemMetrics(SM_CYSIZEFRAME) + GetSystemMetrics(SM_CXPADDEDBORDER);
+      if (pt.y < borderWidthY) {
+        if (pt.x < borderWidthX) return HTTOPLEFT;
+        if (pt.x > rc.right - borderWidthX) return HTTOPRIGHT;
         return HTTOP;
       }
-      if (pt.y > rc.bottom - borderWidth) {
-        if (pt.x < borderWidth) return HTBOTTOMLEFT;
-        if (pt.x > rc.right - borderWidth) return HTBOTTOMRIGHT;
+      if (pt.y > rc.bottom - borderWidthY) {
+        if (pt.x < borderWidthX) return HTBOTTOMLEFT;
+        if (pt.x > rc.right - borderWidthX) return HTBOTTOMRIGHT;
         return HTBOTTOM;
       }
-      if (pt.x < borderWidth) return HTLEFT;
-      if (pt.x > rc.right - borderWidth) return HTRIGHT;
+      if (pt.x < borderWidthX) return HTLEFT;
+      if (pt.x > rc.right - borderWidthX) return HTRIGHT;
       return HTCLIENT;
     }
   }
@@ -272,6 +332,16 @@ void Win32Window::SetChildContent(HWND content) {
 
   MoveWindow(content, frame.left, frame.top, frame.right - frame.left,
              frame.bottom - frame.top, true);
+
+  // 将 Flutter View 子窗口子类化：在边缘区域返回 HTTRANSPARENT，让父窗口接管命中测试，
+  // 从而在无边框窗口下也能显示拉伸光标并支持边缘拖拽缩放。
+  const WNDPROC current_proc =
+      reinterpret_cast<WNDPROC>(GetWindowLongPtr(content, GWLP_WNDPROC));
+  if (current_proc != ChildContentWndProc) {
+    g_child_content_procs[content] = current_proc;
+    SetWindowLongPtr(content, GWLP_WNDPROC,
+                     reinterpret_cast<LONG_PTR>(ChildContentWndProc));
+  }
 
   SetFocus(child_content_);
 }

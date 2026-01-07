@@ -103,14 +103,22 @@ void _updateCategoryItems(String categoryId, CategoryItemsState state) {
 }
 
 Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
-  final service = ref.read(mediaServiceProvider);
+  // 注意：此方法会被 Widget 的生命周期触发（例如列表行 initState 后异步加载）。
+  // 异步请求返回时，触发加载的 Widget 可能已经 dispose/unmount，
+  // 此时继续使用 `ref`（尤其是 `ref.invalidate`）会触发 Riverpod 的
+  // "Using ref when a widget is about to or has been unmounted is unsafe" 异常。
+  //
+  // 这里在同步阶段通过 `ref.context` 获取 ProviderContainer 并缓存下来，
+  // 后续使用 container 读/失效 provider，不再依赖已失效的 BuildContext。
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final service = container.read(mediaServiceProvider);
   if (service == null) return;
 
   final currentState = _categoryItemsCache[categoryId] ?? CategoryItemsState();
   if (currentState.isLoading) return;
 
   _updateCategoryItems(categoryId, currentState.copyWith(isLoading: true, error: null));
-  ref.invalidate(categoryItemsProvider(categoryId));
+  container.invalidate(categoryItemsProvider(categoryId));
 
   final response = await service.getCategoryItems(categoryId, page: 1, pageSize: pageSize);
 
@@ -124,18 +132,20 @@ Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize =
   } else {
     _updateCategoryItems(categoryId, currentState.copyWith(isLoading: false, error: response.error));
   }
-  ref.invalidate(categoryItemsProvider(categoryId));
+  container.invalidate(categoryItemsProvider(categoryId));
 }
 
 Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
-  final service = ref.read(mediaServiceProvider);
+  // 同上：用 container 替代 `ref.invalidate`，避免在 Widget 已卸载时访问 `ref`。
+  final container = ProviderScope.containerOf(ref.context, listen: false);
+  final service = container.read(mediaServiceProvider);
   if (service == null) return;
 
   final currentState = _categoryItemsCache[categoryId] ?? CategoryItemsState();
   if (currentState.isLoading || !currentState.hasMore) return;
 
   _updateCategoryItems(categoryId, currentState.copyWith(isLoading: true));
-  ref.invalidate(categoryItemsProvider(categoryId));
+  container.invalidate(categoryItemsProvider(categoryId));
 
   final nextPage = currentState.currentPage + 1;
   final response = await service.getCategoryItems(categoryId, page: nextPage, pageSize: pageSize);
@@ -150,11 +160,13 @@ Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSi
   } else {
     _updateCategoryItems(categoryId, currentState.copyWith(isLoading: false, error: response.error));
   }
-  ref.invalidate(categoryItemsProvider(categoryId));
+  container.invalidate(categoryItemsProvider(categoryId));
 }
 
 Future<void> refreshCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
+  // 同上：先拿到 container，确保后续 invalidate 不依赖 Widget 是否仍挂载。
+  final container = ProviderScope.containerOf(ref.context, listen: false);
   _categoryItemsCache.remove(categoryId);
-  ref.invalidate(categoryItemsProvider(categoryId));
+  container.invalidate(categoryItemsProvider(categoryId));
   await loadCategoryItems(ref, categoryId, pageSize: pageSize);
 }
