@@ -12,6 +12,10 @@
 .swiftpm/
 migrate_working_dir/
 
+# 本地工具状态（不要提交）
+.home/
+.tmp_home/
+
 # IntelliJ related
 *.iml
 *.ipr
@@ -46,3 +50,4 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 AGENTS.md
+.vscode/
