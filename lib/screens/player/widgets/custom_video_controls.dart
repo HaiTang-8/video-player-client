@@ -88,13 +88,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   /// 剧集列表的滚动位置缓存：
   /// - 关闭列表前记录当前 offset
-  /// - 再次打开时使用该 offset 初始化，从而避免“每次打开都自动滚动到当前播放项”
+  /// - 再次打开时使用该 offset 初始化，从而避免"每次打开都自动滚动到当前播放项"
   /// - 首次打开默认 0.0，即从顶部显示（仍然会高亮当前播放项）
   double _playlistScrollOffset = 0.0;
 
-  /// 用于判断当前剧集列表是否发生了“换剧/换季/集数变化”等结构性变化：
+  /// 用于判断当前剧集列表是否发生了"换剧/换季/集数变化"等结构性变化：
   /// - 变化后重置 [_playlistScrollOffset]，避免把旧列表的滚动位置带到新列表导致定位错乱
   int? _playlistEpisodesKey;
+
+  // 屏幕锁定状态（仅移动端）
+  bool _isLocked = false;
 
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
@@ -438,12 +441,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 }
               },
               onLongPressStart:
-                  WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
+                  WindowControls.isDesktop || _isLocked ? null : (_) => _startLongPressSpeed(),
               onLongPressEnd:
-                  WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
-              onPanStart: WindowControls.isDesktop ? null : _onPanStart,
-              onPanUpdate: WindowControls.isDesktop ? null : _onPanUpdate,
-              onPanEnd: WindowControls.isDesktop ? null : _onPanEnd,
+                  WindowControls.isDesktop || _isLocked ? null : (_) => _endLongPressSpeed(),
+              onPanStart: WindowControls.isDesktop || _isLocked ? null : _onPanStart,
+              onPanUpdate: WindowControls.isDesktop || _isLocked ? null : _onPanUpdate,
+              onPanEnd: WindowControls.isDesktop || _isLocked ? null : _onPanEnd,
               behavior: HitTestBehavior.translucent,
               child: Video(
                 controller: widget.controller,
@@ -459,9 +462,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           // 控制栏
           if (_visible) ...[
             _buildTopBar(),
-            _buildBottomBar(),
+            if (!_isLocked) _buildBottomBar(),
             _buildProgressBar(),
           ],
+          // 锁定按钮（仅移动端）
+          if (_visible && !WindowControls.isDesktop) _buildLockButton(),
           // 缓冲指示器
           if (_buffering)
             const Center(
@@ -645,8 +650,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               height: WindowControls.isMacOS ? 52 : 44,
               child: Row(
                 children: [
-                  AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
-                  const SizedBox(width: 8),
+                  if (!_isLocked) ...[
+                    AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       widget.title ?? '',
@@ -675,7 +682,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return Positioned(
       left: horizontalPadding + padding.left,
       right: horizontalPadding + padding.right,
-      bottom: 56 + bottomPadding,
+      bottom: _isLocked ? (padding.bottom + 16) : (56 + bottomPadding),
       child: Row(
         children: [
           Text(
@@ -684,39 +691,42 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
-              ),
-              child: Slider(
-                value:
-                    _duration.inMilliseconds > 0
-                        ? _position.inMilliseconds / _duration.inMilliseconds
-                        : 0,
-                onChangeStart: (_) {
-                  _dragging = true;
-                  _hideTimer?.cancel();
-                },
-                onChanged: (v) {
-                  setState(() {
-                    _position = Duration(
-                      milliseconds: (v * _duration.inMilliseconds).round(),
+            child: IgnorePointer(
+              ignoring: _isLocked,
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: _isLocked ? 0 : 6),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                ),
+                child: Slider(
+                  value:
+                      _duration.inMilliseconds > 0
+                          ? _position.inMilliseconds / _duration.inMilliseconds
+                          : 0,
+                  onChangeStart: (_) {
+                    _dragging = true;
+                    _hideTimer?.cancel();
+                  },
+                  onChanged: (v) {
+                    setState(() {
+                      _position = Duration(
+                        milliseconds: (v * _duration.inMilliseconds).round(),
+                      );
+                    });
+                  },
+                  onChangeEnd: (v) {
+                    _dragging = false;
+                    widget.player.seek(
+                      Duration(
+                        milliseconds: (v * _duration.inMilliseconds).round(),
+                      ),
                     );
-                  });
-                },
-                onChangeEnd: (v) {
-                  _dragging = false;
-                  widget.player.seek(
-                    Duration(
-                      milliseconds: (v * _duration.inMilliseconds).round(),
-                    ),
-                  );
-                  _startHideTimer();
-                },
-                activeColor: Colors.white,
-                inactiveColor: Colors.white38,
+                    _startHideTimer();
+                  },
+                  activeColor: Colors.white,
+                  inactiveColor: Colors.white38,
+                ),
               ),
             ),
           ),
@@ -914,6 +924,35 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         shape: BoxShape.circle,
       ),
       child: const Icon(Icons.check, color: Colors.black, size: 10),
+    );
+  }
+
+  Widget _buildLockButton() {
+    final padding = MediaQuery.of(context).padding;
+    return Positioned(
+      right: padding.right + 12,
+      top: 0,
+      bottom: 0,
+      child: Center(
+        child: GestureDetector(
+          onTap: () {
+            setState(() => _isLocked = !_isLocked);
+            _showControlsTemporarily();
+          },
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.black38,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _isLocked ? Icons.lock : Icons.lock_open,
+              color: Colors.white,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
     );
   }
 
