@@ -53,6 +53,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   String? _currentStreamUrl; // 当前播放地址，用于错误显示
   bool _isFullscreen = false;
   bool _isDisposing = false;
+  bool _isExiting = false;
   int _currentEpisodeIndex = 0;
   Timer? _progressTimer;
   Duration _lastSavedPosition = Duration.zero;
@@ -724,25 +725,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: CustomVideoControls(
-        player: _player,
-        controller: _controller,
-        title: _displayTitle,
-        onBack: () async {
-          await _saveProgress();
-          if (context.mounted) Navigator.of(context).pop();
-        },
-        onPrevious: _hasPrevious ? _playPrevious : null,
-        onNext: _hasNext ? _playNext : null,
-        hasPrevious: _hasPrevious,
-        hasNext: _hasNext,
-        onToggleFullscreen: _toggleFullscreen,
-        isFullscreen: _isFullscreen,
-        episodes: _episodes,
-        currentEpisodeIndex: _currentEpisodeIndex,
-        onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
-        externalSubtitles: _externalSubtitles,
-        serverUrl: ref.read(serverUrlProvider),
+      body: Stack(
+        children: [
+          CustomVideoControls(
+            player: _player,
+            controller: _controller,
+            title: _displayTitle,
+            onBack: () async {
+              if (_isExiting) return;
+              setState(() => _isExiting = true);
+              await _player.pause();
+              await _saveProgress();
+              if (context.mounted) Navigator.of(context).pop();
+            },
+            onPrevious: _hasPrevious ? _playPrevious : null,
+            onNext: _hasNext ? _playNext : null,
+            hasPrevious: _hasPrevious,
+            hasNext: _hasNext,
+            onToggleFullscreen: _toggleFullscreen,
+            isFullscreen: _isFullscreen,
+            episodes: _episodes,
+            currentEpisodeIndex: _currentEpisodeIndex,
+            onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
+            externalSubtitles: _externalSubtitles,
+            serverUrl: ref.read(serverUrlProvider),
+          ),
+          if (_isExiting)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -410,7 +410,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
+    return '$h:$m:$s';
   }
 
   void _onMouseMove(PointerEvent event) {
@@ -617,6 +617,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         () {
           Navigator.of(context).maybePop();
         };
+    final padding = MediaQuery.of(context).padding;
+    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
 
     return Positioned(
       top: 0,
@@ -630,34 +632,34 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             colors: [Colors.black54, Colors.transparent],
           ),
         ),
-        child: SafeArea(
-          bottom: false,
+        child: Padding(
+          padding: EdgeInsets.only(
+            top: padding.top + 10,
+            left: padding.left + horizontalPadding,
+            right: padding.right + horizontalPadding,
+            bottom: 10,
+          ),
           child: Material(
             color: Colors.transparent,
-            child: Padding(
-              padding: const EdgeInsetsDirectional.only(bottom: 10),
-              child: SizedBox(
-                height: WindowControls.isMacOS ? 52 : 44,
-                child: Row(
-                  children: [
-                    if (WindowControls.isMacOS) const SizedBox(width: 72),
-                    AppBackButton(onPressed: onBack, color: Colors.white),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        widget.title ?? '',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+            child: SizedBox(
+              height: WindowControls.isMacOS ? 52 : 44,
+              child: Row(
+                children: [
+                  AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.title ?? '',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: 16),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -667,11 +669,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildProgressBar() {
-    final bottomPadding =
-        WindowControls.isDesktop ? 0.0 : MediaQuery.of(context).padding.bottom;
+    final padding = MediaQuery.of(context).padding;
+    final bottomPadding = WindowControls.isDesktop ? 0.0 : padding.bottom;
+    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
     return Positioned(
-      left: 16,
-      right: 16,
+      left: horizontalPadding + padding.left,
+      right: horizontalPadding + padding.right,
       bottom: 56 + bottomPadding,
       child: Row(
         children: [
@@ -728,15 +731,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildBottomBar() {
+    final padding = MediaQuery.of(context).padding;
+    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
     return Positioned(
       left: 0,
       right: 0,
       bottom: 0,
       child: Container(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).padding.bottom + 8,
-          left: 8,
-          right: 8,
+          bottom: padding.bottom + 8,
+          left: padding.left + horizontalPadding,
+          right: padding.right + horizontalPadding,
           top: 8,
         ),
         decoration: const BoxDecoration(
@@ -746,35 +751,40 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             colors: [Colors.black54, Colors.transparent],
           ),
         ),
-        child: Row(
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            Expanded(
-              child: Row(
-                children: [
-                  if (WindowControls.isDesktop) _buildVolumeControl(),
-                  _buildSpeedButton(),
-                ],
-              ),
-            ),
+            // 中间播放控制按钮（绝对居中）
             _buildPlayControls(),
-            Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
-                  _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet()),
-                  if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                    _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
-                  if (WindowControls.isDesktop)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: _buildIconButton(
-                        widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                        widget.onToggleFullscreen,
+            // 左右两侧控件
+            Row(
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (WindowControls.isDesktop) _buildVolumeControl(),
+                    _buildSpeedButton(),
+                  ],
+                ),
+                const Spacer(),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
+                    _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet()),
+                    if (widget.episodes != null && widget.episodes!.isNotEmpty)
+                      _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
+                    if (WindowControls.isDesktop)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: _buildIconButton(
+                          widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                          widget.onToggleFullscreen,
+                        ),
                       ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -819,12 +829,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildSpeedButton() {
-    return TextButton(
-      onPressed: _showSpeedSheet,
-      style: TextButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        minimumSize: Size.zero,
-      ),
+    return GestureDetector(
+      onTap: _showSpeedSheet,
       child: Text(
         '${_playbackSpeed}x',
         style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
