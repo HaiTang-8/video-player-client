@@ -26,6 +26,7 @@ class Movie {
   final int? storageId;
   final String? storageName;
   final List<String>? sourceFolders;
+  final DateTime? fileModTime;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -50,6 +51,7 @@ class Movie {
     this.storageId,
     this.storageName,
     this.sourceFolders,
+    this.fileModTime,
     this.createdAt,
     this.updatedAt,
   });
@@ -78,6 +80,9 @@ class Movie {
       storageId: (json['storage_id'] as num?)?.toInt(),
       storageName: json['storage_name'] as String?,
       sourceFolders: _parseStringList(json['source_folders']),
+      fileModTime: json['file_mod_time'] != null
+          ? DateTime.tryParse(json['file_mod_time'].toString())
+          : null,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString())
           : null,
@@ -108,6 +113,7 @@ class Movie {
         'storage_id': storageId,
         'storage_name': storageName,
         'source_folders': sourceFolders,
+        'file_mod_time': fileModTime?.toIso8601String(),
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };

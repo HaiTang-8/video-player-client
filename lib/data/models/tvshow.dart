@@ -33,6 +33,7 @@ class TvShow {
   final int? storageId;
   final String? storageName;
   final List<String>? sourceFolders;
+  final DateTime? fileModTime;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -60,6 +61,7 @@ class TvShow {
     this.storageId,
     this.storageName,
     this.sourceFolders,
+    this.fileModTime,
     this.createdAt,
     this.updatedAt,
   });
@@ -95,6 +97,10 @@ class TvShow {
       storageId: (json['storage_id'] as num?)?.toInt(),
       storageName: json['storage_name'] as String?,
       sourceFolders: _parseGenres(json['source_folders']),
+      fileModTime:
+          json['file_mod_time'] != null
+              ? DateTime.tryParse(json['file_mod_time'].toString())
+              : null,
       createdAt:
           json['created_at'] != null
               ? DateTime.tryParse(json['created_at'].toString())
@@ -130,6 +136,7 @@ class TvShow {
     'storage_id': storageId,
     'storage_name': storageName,
     'source_folders': sourceFolders,
+    'file_mod_time': fileModTime?.toIso8601String(),
     'created_at': createdAt?.toIso8601String(),
     'updated_at': updatedAt?.toIso8601String(),
   };
