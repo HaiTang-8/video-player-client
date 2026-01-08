@@ -99,6 +99,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   // 屏幕锁定状态（仅移动端）
   bool _isLocked = false;
 
+  // 视频填充模式（true: 铺满无黑边, false: 默认保持比例）
+  bool _isFillMode = false;
+
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
@@ -451,6 +454,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               child: Video(
                 controller: widget.controller,
                 controls: NoVideoControls,
+                fit: _isFillMode ? BoxFit.cover : BoxFit.contain,
               ),
             ),
           // 亮度指示器
@@ -774,6 +778,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   children: [
                     if (WindowControls.isDesktop) _buildVolumeControl(),
                     _buildSpeedButton(),
+                    _buildFillModeButton(),
                   ],
                 ),
                 const Spacer(),
@@ -838,12 +843,34 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     );
   }
 
+  Widget _buildFillModeButton() {
+    final isDesktop = WindowControls.isDesktop;
+    return IconButton(
+      onPressed: () {
+        setState(() => _isFillMode = !_isFillMode);
+        _showControlsTemporarily();
+      },
+      icon: Icon(
+        _isFillMode ? Icons.zoom_in_map : Icons.zoom_out_map,
+        color: Colors.white,
+        size: 24,
+      ),
+      padding: EdgeInsets.zero,
+      constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
+    );
+  }
+
   Widget _buildSpeedButton() {
+    final isDesktop = WindowControls.isDesktop;
     return GestureDetector(
       onTap: _showSpeedSheet,
-      child: Text(
-        '${_playbackSpeed}x',
-        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+      child: Container(
+        constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
+        alignment: Alignment.center,
+        child: Text(
+          '${_playbackSpeed}x',
+          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
