@@ -76,12 +76,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _controller = VideoController(_player);
     _initEpisodeIndex();
     _applyPlaybackSettings();
+    _configurePlayerNetwork();
     _setupPlayerListeners();
     _loadVideo();
     _loadEpisodesIfNeeded();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
+    }
+  }
+
+  void _configurePlayerNetwork() {
+    final platform = _player.platform;
+    if (platform is NativePlayer) {
+      // 配置 HTTP 流自动重连（暂停后恢复播放时需要）
+      platform.setProperty('stream-lavf-o', 'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5');
+      // 增加网络超时时间
+      platform.setProperty('network-timeout', '30');
     }
   }
 
