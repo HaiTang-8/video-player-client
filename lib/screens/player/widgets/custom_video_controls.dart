@@ -771,16 +771,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
-                    _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet()),
+                    _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet(),
+                        isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                      _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
+                      _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu,
+                          isLast: !WindowControls.isDesktop),
                     if (WindowControls.isDesktop)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: _buildIconButton(
-                          widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-                          widget.onToggleFullscreen,
-                        ),
+                      _buildIconButton(
+                        widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                        widget.onToggleFullscreen,
+                        isLast: true,
                       ),
                   ],
                 ),
@@ -800,13 +800,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           icon: Icon(
             _volume == 0 ? Icons.volume_off : Icons.volume_up,
             color: Colors.white,
-            size: 22,
+            size: 28,
           ),
           onPressed: () {
             widget.player.setVolume(_volume == 0 ? 100 : 0);
           },
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 36),
+          constraints: const BoxConstraints(minWidth: 48),
         ),
         SizedBox(
           width: 80,
@@ -846,27 +846,33 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           icon: Icon(
             Icons.skip_previous,
             color: widget.hasPrevious ? Colors.white : Colors.white38,
-            size: 28,
+            size: 36,
           ),
           onPressed: widget.hasPrevious ? widget.onPrevious : null,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 48),
         ),
         const SizedBox(width: 8),
         IconButton(
-          iconSize: 44,
           icon: Icon(
             _playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
             color: Colors.white,
+            size: 36,
           ),
           onPressed: () => widget.player.playOrPause(),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 48),
         ),
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
             Icons.skip_next,
             color: widget.hasNext ? Colors.white : Colors.white38,
-            size: 28,
+            size: 36,
           ),
           onPressed: widget.hasNext ? widget.onNext : null,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 48),
         ),
       ],
     );
@@ -876,14 +882,26 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     IconData icon,
     VoidCallback? onPressed, {
     GlobalKey? key,
+    bool isLast = false,
   }) {
     final isDesktop = WindowControls.isDesktop;
+    final minW = isDesktop ? 48.0 : 40.0;
+    if (isLast) {
+      return Padding(
+        padding: EdgeInsets.only(left: (minW - 28) / 2),
+        child: GestureDetector(
+          key: key,
+          onTap: onPressed,
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+      );
+    }
     return IconButton(
       key: key,
-      icon: Icon(icon, color: Colors.white, size: 24),
+      icon: Icon(icon, color: Colors.white, size: 28),
       onPressed: onPressed,
       padding: EdgeInsets.zero,
-      constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
+      constraints: BoxConstraints(minWidth: minW),
     );
   }
 
