@@ -681,7 +681,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         children: [
           Text(
             _formatDuration(_position),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -724,7 +724,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           const SizedBox(width: 8),
           Text(
             _formatDuration(_duration),
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -752,31 +752,34 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         ),
         child: Row(
           children: [
-            // 左侧：音量 + 倍速（桌面端）
-            if (WindowControls.isDesktop) _buildVolumeControl(),
-            if (WindowControls.isDesktop) _buildSpeedButton(),
-            const Spacer(),
-            // 中间：播放控制
-            _buildPlayControls(),
-            const Spacer(),
-            // 右侧：音轨 + 字幕 + 列表 + 全屏
-            _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
-            _buildIconButton(
-              Icons.subtitles_outlined,
-              () => _showSubtitleSheet(),
-            ),
-            if (widget.episodes != null && widget.episodes!.isNotEmpty)
-              _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
-            if (WindowControls.isDesktop)
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: _buildIconButton(
-                  widget.isFullscreen
-                      ? Icons.fullscreen_exit
-                      : Icons.fullscreen,
-                  widget.onToggleFullscreen,
-                ),
+            Expanded(
+              child: Row(
+                children: [
+                  if (WindowControls.isDesktop) _buildVolumeControl(),
+                  _buildSpeedButton(),
+                ],
               ),
+            ),
+            _buildPlayControls(),
+            Expanded(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
+                  _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet()),
+                  if (widget.episodes != null && widget.episodes!.isNotEmpty)
+                    _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu),
+                  if (WindowControls.isDesktop)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: _buildIconButton(
+                        widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                        widget.onToggleFullscreen,
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -828,7 +831,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       ),
       child: Text(
         '${_playbackSpeed}x',
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
       ),
     );
   }
