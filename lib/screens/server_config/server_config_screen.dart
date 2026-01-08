@@ -53,46 +53,49 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => CupertinoAlertDialog(
           title: const Text('添加服务器'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CupertinoTextField(
-                  controller: nameController,
-                  placeholder: '名称（如：家里、公司）',
-                  padding: const EdgeInsets.all(12),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoSlidingSegmentedControl<String>(
-                    groupValue: protocol,
-                    children: const {
-                      'http': Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('HTTP'),
-                      ),
-                      'https': Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('HTTPS'),
-                      ),
-                    },
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() => protocol = value);
-                      }
-                    },
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 160),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CupertinoTextField(
+                    controller: nameController,
+                    placeholder: '名称（如：家里、公司）',
+                    padding: const EdgeInsets.all(12),
                   ),
-                ),
-                const SizedBox(height: 12),
-                CupertinoTextField(
-                  controller: hostController,
-                  placeholder: '192.168.1.100:8080',
-                  keyboardType: TextInputType.url,
-                  padding: const EdgeInsets.all(12),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: CupertinoSlidingSegmentedControl<String>(
+                      groupValue: protocol,
+                      children: const {
+                        'http': Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('HTTP'),
+                        ),
+                        'https': Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('HTTPS'),
+                        ),
+                      },
+                      onValueChanged: (value) {
+                        if (value != null) {
+                          setDialogState(() => protocol = value);
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  CupertinoTextField(
+                    controller: hostController,
+                    placeholder: '192.168.1.100:8080',
+                    keyboardType: TextInputType.url,
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
