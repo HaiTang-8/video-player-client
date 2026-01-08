@@ -653,7 +653,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -715,7 +715,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   );
                   _startHideTimer();
                 },
-                activeColor: Colors.red,
+                activeColor: Colors.white,
                 inactiveColor: Colors.white38,
               ),
             ),
