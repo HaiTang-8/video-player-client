@@ -115,7 +115,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         children: [
           CupertinoButton(
             padding: EdgeInsets.zero,
-            minSize: 32,
+            minimumSize: const Size(32, 32),
             onPressed: () => context.pop(),
             child: const Icon(CupertinoIcons.back, size: 24),
           ),
@@ -143,7 +143,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   hasQuery ? CupertinoColors.activeBlue : CupertinoColors.systemGrey;
               return CupertinoButton(
                 padding: const EdgeInsets.only(left: 8),
-                minSize: 32,
+                minimumSize: const Size(32, 32),
                 onPressed: _doSearch,
                 child: Text('搜索', style: TextStyle(fontSize: 15, color: color)),
               );

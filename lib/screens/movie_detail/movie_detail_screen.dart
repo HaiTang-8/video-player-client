@@ -594,7 +594,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             icon: CupertinoIcons.photo_on_rectangle,
             onTap: () => _showImageSelector(context, movie, ImageSelectorType.backdrop),
           ),
-          const PullDownMenuDivider(),
           PullDownMenuItem(
             title: '重新刮削',
             icon: CupertinoIcons.wand_stars,

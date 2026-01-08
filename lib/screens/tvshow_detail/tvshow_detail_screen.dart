@@ -625,7 +625,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             icon: CupertinoIcons.photo_on_rectangle,
             onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.backdrop),
           ),
-          const PullDownMenuDivider(),
           PullDownMenuItem(
             title: '重新刮削',
             icon: CupertinoIcons.wand_stars,

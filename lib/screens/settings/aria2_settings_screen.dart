@@ -238,13 +238,12 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
                               _secretController.text.trim(),
                             );
                             if (valid) {
-                              if (mounted) Navigator.pop(context);
                               await Aria2Manager.instance.stop();
+                              if (!context.mounted) return;
+                              Navigator.pop(context);
                               setState(() => _builtinVersion = null);
                               ref.read(aria2ConfigProvider.notifier).setEnabled(true);
-                              if (mounted) {
-                                IosUiUtils.showToast(context: context, message: '已切换到外部 aria2');
-                              }
+                              IosUiUtils.showToast(context: context, message: '已切换到外部 aria2');
                             } else {
                               setDialogState(() {
                                 isConnecting = false;

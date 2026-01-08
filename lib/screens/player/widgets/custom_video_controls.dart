@@ -56,12 +56,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Timer? _hideTimer;
   bool _dragging = false;
   double _brightness = 0.5;
+  bool _brightnessChanged = false;
   bool _showBrightnessOverlay = false;
   bool _showVolumeOverlay = false;
   bool _showSeekOverlay = false;
   Duration _seekPosition = Duration.zero;
   Duration _seekStartPosition = Duration.zero;
   bool _wasPlayingBeforeSeek = false;
+
+  // 统一手势状态
+  Offset? _panStartPosition;
+  String? _panDirection; // 'horizontal', 'vertical_left', 'vertical_right'
+  double _panAccumulatedDx = 0;
+  double _panAccumulatedDy = 0;
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
@@ -196,6 +203,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
+    if (_brightnessChanged && !WindowControls.isDesktop) {
+      ScreenBrightness().resetApplicationScreenBrightness();
+    }
     super.dispose();
   }
 
@@ -213,62 +223,85 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     });
   }
 
-  void _onVerticalDragUpdate(DragUpdateDetails details, bool isLeft) {
+  void _onPanStart(DragStartDetails details) {
     if (WindowControls.isDesktop) return;
-    final delta = -details.delta.dy / 200;
-    setState(() {
-      if (isLeft) {
-        _brightness = (_brightness + delta).clamp(0.0, 1.0);
-        _showBrightnessOverlay = true;
-        ScreenBrightness().setApplicationScreenBrightness(_brightness);
+    _panStartPosition = details.globalPosition;
+    _panDirection = null;
+    _panAccumulatedDx = 0;
+    _panAccumulatedDy = 0;
+  }
+
+  void _onPanUpdate(DragUpdateDetails details) {
+    if (WindowControls.isDesktop || _panStartPosition == null) return;
+
+    _panAccumulatedDx += details.delta.dx.abs();
+    _panAccumulatedDy += details.delta.dy.abs();
+
+    // 判断方向（需要累计一定位移后才锁定）
+    if (_panDirection == null && (_panAccumulatedDx > 10 || _panAccumulatedDy > 10)) {
+      if (_panAccumulatedDx > _panAccumulatedDy) {
+        _panDirection = 'horizontal';
+        // 初始化进度拖动
+        _wasPlayingBeforeSeek = _playing;
+        if (_playing) widget.player.pause();
+        setState(() {
+          _seekStartPosition = _position;
+          _seekPosition = _position;
+          _showSeekOverlay = true;
+        });
       } else {
-        _volume = (_volume + delta).clamp(0.0, 1.0);
-        _showVolumeOverlay = true;
-        widget.player.setVolume(_volume * 100);
+        final screenWidth = MediaQuery.of(context).size.width;
+        _panDirection = _panStartPosition!.dx < screenWidth / 2
+            ? 'vertical_left'
+            : 'vertical_right';
       }
-    });
+    }
+
+    if (_panDirection == null) return;
+
+    if (_panDirection == 'horizontal') {
+      final screenWidth = MediaQuery.of(context).size.width;
+      final delta = details.delta.dx / screenWidth * _duration.inMilliseconds;
+      setState(() {
+        _seekPosition = Duration(
+          milliseconds: (_seekPosition.inMilliseconds + delta.toInt()).clamp(
+            0,
+            _duration.inMilliseconds,
+          ),
+        );
+      });
+    } else {
+      final delta = -details.delta.dy / 200;
+      setState(() {
+        if (_panDirection == 'vertical_left') {
+          _brightness = (_brightness + delta).clamp(0.0, 1.0);
+          _showBrightnessOverlay = true;
+          _brightnessChanged = true;
+          ScreenBrightness().setApplicationScreenBrightness(_brightness);
+        } else {
+          _volume = (_volume + delta).clamp(0.0, 1.0);
+          _showVolumeOverlay = true;
+          widget.player.setVolume(_volume * 100);
+        }
+      });
+    }
   }
 
-  void _onVerticalDragEnd(DragEndDetails details, bool isLeft) {
-    setState(() {
-      if (isLeft) {
-        _showBrightnessOverlay = false;
-      } else {
-        _showVolumeOverlay = false;
-      }
-    });
-  }
-
-  void _onHorizontalDragStart(DragStartDetails details) {
+  void _onPanEnd(DragEndDetails details) {
     if (WindowControls.isDesktop) return;
-    _wasPlayingBeforeSeek = _playing;
-    if (_playing) widget.player.pause();
-    setState(() {
-      _seekStartPosition = _position;
-      _seekPosition = _position;
-      _showSeekOverlay = true;
-    });
-  }
 
-  void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (WindowControls.isDesktop) return;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final delta = details.delta.dx / screenWidth * _duration.inMilliseconds;
-    setState(() {
-      _seekPosition = Duration(
-        milliseconds: (_seekPosition.inMilliseconds + delta.toInt()).clamp(
-          0,
-          _duration.inMilliseconds,
-        ),
-      );
-    });
-  }
+    if (_panDirection == 'horizontal') {
+      widget.player.seek(_seekPosition);
+      if (_wasPlayingBeforeSeek) widget.player.play();
+      setState(() => _showSeekOverlay = false);
+    } else if (_panDirection == 'vertical_left') {
+      setState(() => _showBrightnessOverlay = false);
+    } else if (_panDirection == 'vertical_right') {
+      setState(() => _showVolumeOverlay = false);
+    }
 
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    if (WindowControls.isDesktop) return;
-    widget.player.seek(_seekPosition);
-    if (_wasPlayingBeforeSeek) widget.player.play();
-    setState(() => _showSeekOverlay = false);
+    _panStartPosition = null;
+    _panDirection = null;
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -408,50 +441,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   WindowControls.isDesktop ? null : (_) => _startLongPressSpeed(),
               onLongPressEnd:
                   WindowControls.isDesktop ? null : (_) => _endLongPressSpeed(),
+              onPanStart: WindowControls.isDesktop ? null : _onPanStart,
+              onPanUpdate: WindowControls.isDesktop ? null : _onPanUpdate,
+              onPanEnd: WindowControls.isDesktop ? null : _onPanEnd,
               behavior: HitTestBehavior.translucent,
               child: Video(
                 controller: widget.controller,
                 controls: NoVideoControls,
-              ),
-            ),
-          // 左侧亮度手势区域
-          if (!WindowControls.isDesktop)
-            Positioned(
-              left: 0,
-              top: 60,
-              bottom: 100,
-              width: MediaQuery.of(context).size.width * 0.3,
-              child: GestureDetector(
-                onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, true),
-                onVerticalDragEnd: (d) => _onVerticalDragEnd(d, true),
-                behavior: HitTestBehavior.translucent,
-              ),
-            ),
-          // 右侧音量手势区域
-          if (!WindowControls.isDesktop)
-            Positioned(
-              right: 0,
-              top: 60,
-              bottom: 100,
-              width: MediaQuery.of(context).size.width * 0.3,
-              child: GestureDetector(
-                onVerticalDragUpdate: (d) => _onVerticalDragUpdate(d, false),
-                onVerticalDragEnd: (d) => _onVerticalDragEnd(d, false),
-                behavior: HitTestBehavior.translucent,
-              ),
-            ),
-          // 中间水平滑动进度区域
-          if (!WindowControls.isDesktop)
-            Positioned(
-              left: MediaQuery.of(context).size.width * 0.3,
-              right: MediaQuery.of(context).size.width * 0.3,
-              top: 60,
-              bottom: 100,
-              child: GestureDetector(
-                onHorizontalDragStart: _onHorizontalDragStart,
-                onHorizontalDragUpdate: _onHorizontalDragUpdate,
-                onHorizontalDragEnd: _onHorizontalDragEnd,
-                behavior: HitTestBehavior.translucent,
               ),
             ),
           // 亮度指示器
