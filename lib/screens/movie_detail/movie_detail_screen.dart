@@ -567,6 +567,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Future<void> _downloadMovie(BuildContext context, Movie movie) async {
+    final confirmed = await IosUiUtils.showConfirmDialog(
+      context: context,
+      title: '下载电影',
+      content: '确定要下载「${movie.title}」吗？',
+      confirmText: '下载',
+    );
+    if (confirmed != true || !context.mounted) return;
+
     final downloadManager = ref.read(downloadManagerProvider.notifier);
     downloadManager.addMovieDownload(movie: movie);
     IosUiUtils.showToast(context: context, message: '已添加到下载队列');

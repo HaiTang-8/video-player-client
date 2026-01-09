@@ -93,19 +93,24 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     }
 
     final isDesktop = WindowControls.isDesktop;
-    final maxCrossAxisExtent = isDesktop ? 160.0 : 100.0;
-    final cardWidth = isDesktop ? 140.0 : 90.0;
 
     return GridView.builder(
       controller: _scrollController,
       clipBehavior: Clip.none,
-      padding: const EdgeInsets.all(24),
-      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: maxCrossAxisExtent,
-        childAspectRatio: 0.48,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-      ),
+      padding: EdgeInsets.all(isDesktop ? 24 : 16),
+      gridDelegate: isDesktop
+          ? const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 160.0,
+              childAspectRatio: 0.48,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+            )
+          : const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              childAspectRatio: 0.48,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
       itemCount: state.items.length + (state.isLoading ? 1 : 0),
       itemBuilder: (context, index) {
         if (index >= state.items.length) {
@@ -114,7 +119,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
         final item = state.items[index];
         return LibraryPosterCard(
           item: item,
-          width: cardWidth,
+          width: isDesktop ? 140.0 : double.infinity,
           onTap: () => _navigateToDetail(item),
         );
       },
