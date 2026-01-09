@@ -373,10 +373,12 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
   }
 
   void resumeDownload(String taskId) {
+    final service = _service;
+    if (service == null) return;
     final task = state.tasks.firstWhere((t) => t.id == taskId);
-    final updatedTask = task.copyWith(status: DownloadStatus.pending);
+    final updatedTask = task.copyWith(status: DownloadStatus.downloading);
     _updateTask(updatedTask, forceSave: true);
-    _startDownload(updatedTask);
+    service.resumeDownload(taskId);
   }
 
   Future<void> deleteDownload(String taskId) async {

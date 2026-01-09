@@ -196,6 +196,15 @@ class DownloadTask {
     return episodeName ?? '未知剧集';
   }
 
+  String get liveActivityTitle {
+    if (type == DownloadType.movie) {
+      return movieTitle ?? '未知电影';
+    }
+    final sNum = seasonNumber?.toString().padLeft(2, '0') ?? '01';
+    final eNum = episodeNumber?.toString().padLeft(2, '0') ?? '01';
+    return '${tvShowName ?? '未知剧集'}.S$sNum.E$eNum';
+  }
+
   String get displaySubtitle {
     if (type == DownloadType.movie) {
       return storageName ?? '';

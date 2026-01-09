@@ -96,6 +96,7 @@ class NativeDownloader {
     required String taskId,
     required String url,
     required String savePath,
+    String? displayName,
     Map<String, String>? headers,
     int threadCount = 8,
     void Function(NativeDownloadProgress)? onProgress,
@@ -111,6 +112,7 @@ class NativeDownloader {
         'taskId': taskId,
         'url': url,
         'savePath': savePath,
+        'displayName': displayName,
         'headers': headers ?? {},
         'threadCount': threadCount,
       });
@@ -145,6 +147,27 @@ class NativeDownloader {
       _cleanupCallbacks(taskId);
     } catch (e) {
       debugPrint('[NativeDownloader] cancelDownload error: $e');
+    }
+  }
+
+  Future<bool> isLiveActivityEnabled() async {
+    try {
+      final result = await _channel.invokeMethod<bool>('isLiveActivityEnabled');
+      return result ?? false;
+    } catch (e) {
+      debugPrint('[NativeDownloader] isLiveActivityEnabled error: $e');
+      return false;
+    }
+  }
+
+  Future<void> endLiveActivity(String taskId, {String status = 'completed'}) async {
+    try {
+      await _channel.invokeMethod('endLiveActivity', {
+        'taskId': taskId,
+        'status': status,
+      });
+    } catch (e) {
+      debugPrint('[NativeDownloader] endLiveActivity error: $e');
     }
   }
 

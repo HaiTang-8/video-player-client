@@ -1,4 +1,6 @@
 import Foundation
+import ActivityKit
+import UIKit
 
 struct DownloadProgress {
     let taskId: String
@@ -22,35 +24,43 @@ struct DownloadProgress {
     }
 }
 
-class DownloadChunk {
-    let index: Int
-    let start: Int64
-    let end: Int64
-    var downloaded: Int64 = 0
-    var currentOffset: Int64
-    var completed: Bool = false
-    var failed: Bool = false
-    var taskIdentifier: Int = 0
-
-    init(index: Int, start: Int64, end: Int64) {
-        self.index = index
-        self.start = start
-        self.end = end
-        self.currentOffset = start
-    }
-
-    var length: Int64 { end - start + 1 }
-}
-
 class MultiThreadDownloader: NSObject {
     static let defaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57"
+    static let shared = MultiThreadDownloader(threadCount: 8)
 
     private let threadCount: Int
-    private var downloadTasks: [String: DownloadTask] = [:]
+    private var downloadTasks: [String: BackgroundDownloadTask] = [:]
+    private var backgroundSession: URLSession!
+    private var backgroundCompletionHandler: (() -> Void)?
+    private let lock = NSLock()
 
-    init(threadCount: Int = 8) {
+    override init() {
+        self.threadCount = 8
+        super.init()
+        setupBackgroundSession()
+    }
+
+    init(threadCount: Int) {
         self.threadCount = threadCount
         super.init()
+        setupBackgroundSession()
+    }
+
+    private func setupBackgroundSession() {
+        let config = URLSessionConfiguration.background(withIdentifier: "com.mediaserver.mediaPlayer.backgroundDownload")
+        config.isDiscretionary = false
+        config.sessionSendsLaunchEvents = true
+        config.shouldUseExtendedBackgroundIdleMode = true
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 86400 * 7
+        config.httpMaximumConnectionsPerHost = 6
+
+        backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        NSLog("[iOS-Downloader] Background session initialized")
+    }
+
+    func handleBackgroundSessionCompletion(_ completionHandler: @escaping () -> Void) {
+        backgroundCompletionHandler = completionHandler
     }
 
     func startDownload(
@@ -58,79 +68,173 @@ class MultiThreadDownloader: NSObject {
         url: String,
         savePath: String,
         headers: [String: String],
+        displayName: String? = nil,
         onProgress: @escaping (DownloadProgress) -> Void
     ) {
-        let task = DownloadTask(
+        let task = BackgroundDownloadTask(
             taskId: taskId,
             url: url,
             savePath: savePath,
             headers: headers,
             threadCount: threadCount,
+            session: backgroundSession,
+            displayName: displayName,
             onProgress: onProgress
         )
+
+        lock.lock()
         downloadTasks[taskId] = task
+        lock.unlock()
+
         task.start()
     }
 
     func pauseDownload(taskId: String) {
-        downloadTasks[taskId]?.pause()
+        lock.lock()
+        let task = downloadTasks[taskId]
+        lock.unlock()
+        task?.pause()
     }
 
     func resumeDownload(taskId: String) {
-        downloadTasks[taskId]?.resume()
+        lock.lock()
+        let task = downloadTasks[taskId]
+        lock.unlock()
+        task?.resume()
     }
 
     func cancelDownload(taskId: String) {
-        downloadTasks[taskId]?.cancel()
+        lock.lock()
+        let task = downloadTasks[taskId]
         downloadTasks.removeValue(forKey: taskId)
+        lock.unlock()
+        task?.cancel()
+    }
+
+    func getTask(byURLSessionTaskId taskId: Int) -> BackgroundDownloadTask? {
+        lock.lock()
+        defer { lock.unlock() }
+        for (_, task) in downloadTasks {
+            if task.hasURLSessionTask(taskId) {
+                return task
+            }
+        }
+        return nil
+    }
+
+    func removeTask(_ taskId: String) {
+        lock.lock()
+        downloadTasks.removeValue(forKey: taskId)
+        lock.unlock()
+    }
+
+    func handleAppWillResignActive() {}
+    func handleAppDidBecomeActive() {}
+}
+
+// MARK: - URLSessionDelegate
+extension MultiThreadDownloader: URLSessionDelegate, URLSessionDownloadDelegate {
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let task = getTask(byURLSessionTaskId: downloadTask.taskIdentifier) else {
+            NSLog("[iOS-Downloader] No task found for download task %d", downloadTask.taskIdentifier)
+            return
+        }
+        task.handleDownloadComplete(downloadTask: downloadTask, location: location)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard let task = getTask(byURLSessionTaskId: downloadTask.taskIdentifier) else { return }
+        task.handleProgress(downloadTask: downloadTask, bytesWritten: bytesWritten, totalBytesWritten: totalBytesWritten)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error = error {
+            let nsError = error as NSError
+            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
+                return
+            }
+            NSLog("[iOS-Downloader] Task %d error: %@", task.taskIdentifier, error.localizedDescription)
+            if let downloadTask = getTask(byURLSessionTaskId: task.taskIdentifier) {
+                downloadTask.handleError(sessionTask: task, error: error)
+            }
+        }
+    }
+
+    func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
+        NSLog("[iOS-Downloader] Background session events finished")
+        DispatchQueue.main.async { [weak self] in
+            self?.backgroundCompletionHandler?()
+            self?.backgroundCompletionHandler = nil
+        }
     }
 }
 
-class DownloadTask: NSObject, URLSessionDataDelegate {
+// MARK: - BackgroundDownloadTask
+class BackgroundDownloadTask {
     let taskId: String
     let url: String
     let savePath: String
     let headers: [String: String]
     let threadCount: Int
     let onProgress: (DownloadProgress) -> Void
+    let displayName: String?
+    var enableLiveActivity: Bool = true
 
-    private var fileHandle: FileHandle?
-    private var chunks: [DownloadChunk] = []
-    private var chunkByTaskId: [Int: DownloadChunk] = [:]
+    private weak var session: URLSession?
+    private var urlSessionTasks: [Int: URLSessionDownloadTask] = [:]
+    private var chunkInfo: [Int: ChunkInfo] = [:]
     private var totalBytes: Int64 = 0
     private var downloadedBytes: Int64 = 0
-    private var activeThreads: Int = 0
     private var completedChunks: Int = 0
+    private var totalChunks: Int = 0
     private var cancelled = false
-    private var paused = false
-    private var finished = false
+    private(set) var isPaused = false
+    private(set) var isFinished = false
     private var lastUpdateTime: Date?
     private var lastBytes: Int64 = 0
     private var smoothedSpeed: Double = 0
-    private var progressTimer: Timer?
     private let lock = NSLock()
-    private var session: URLSession?
-    private var dataTasks: [URLSessionDataTask] = []
+    private var progressTimer: Timer?
+    private var tempDirectory: String = ""
 
-    // 检测是否是 115 链接
     private var is115Link: Bool {
         return url.contains("115cdn.net") || url.contains("cdnfhnfile") || url.contains("115.com")
     }
 
-    // 115 链接只能用单线程
     private var effectiveThreadCount: Int {
         return is115Link ? 1 : threadCount
     }
 
+    private var liveActivityFileName: String {
+        return displayName ?? (savePath as NSString).lastPathComponent
+    }
+
+    struct ChunkInfo {
+        let index: Int
+        let start: Int64
+        let end: Int64
+        var downloadedBytes: Int64 = 0
+        var completed: Bool = false
+        var tempFile: String = ""
+    }
+
     init(taskId: String, url: String, savePath: String, headers: [String: String],
-         threadCount: Int, onProgress: @escaping (DownloadProgress) -> Void) {
+         threadCount: Int, session: URLSession, displayName: String? = nil, onProgress: @escaping (DownloadProgress) -> Void) {
         self.taskId = taskId
         self.url = url
         self.savePath = savePath
         self.headers = headers
         self.threadCount = threadCount
+        self.session = session
+        self.displayName = displayName
         self.onProgress = onProgress
-        super.init()
+    }
+
+    func hasURLSessionTask(_ taskId: Int) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return urlSessionTasks[taskId] != nil
     }
 
     func start() {
@@ -141,39 +245,47 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
 
     func pause() {
         lock.lock()
-        paused = true
-        let tasks = dataTasks
+        isPaused = true
+        let tasks = Array(urlSessionTasks.values)
         lock.unlock()
-        tasks.forEach { $0.suspend() }
+
+        for task in tasks {
+            task.suspend()
+        }
+
+        updateLiveActivity(status: "paused")
     }
 
     func resume() {
         lock.lock()
-        paused = false
-        let tasks = dataTasks
+        isPaused = false
+        let tasks = Array(urlSessionTasks.values)
         lock.unlock()
-        tasks.forEach { $0.resume() }
+
+        for task in tasks {
+            task.resume()
+        }
     }
 
     func cancel() {
         lock.lock()
         cancelled = true
-        let tasks = dataTasks
-        let sess = session
+        let tasks = Array(urlSessionTasks.values)
         lock.unlock()
 
-        tasks.forEach { $0.cancel() }
+        for task in tasks {
+            task.cancel()
+        }
 
         DispatchQueue.main.async { [weak self] in
             self?.progressTimer?.invalidate()
         }
 
-        lock.lock()
-        fileHandle?.closeFile()
-        fileHandle = nil
-        lock.unlock()
+        if enableLiveActivity {
+            DownloadActivityManagerWrapper.shared.removeTask(taskId: taskId)
+        }
 
-        sess?.invalidateAndCancel()
+        cleanupTempFiles()
     }
 
     private func doDownload() {
@@ -191,25 +303,16 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
         totalBytes = fileSize
         NSLog("[iOS-Downloader] File size: %lld, threads: %d (is115: %@)", fileSize, effectiveThreadCount, is115Link ? "true" : "false")
 
+        if enableLiveActivity {
+            DownloadActivityManagerWrapper.shared.addTask(taskId: taskId, displayName: liveActivityFileName, totalBytes: fileSize)
+        }
+
         let fileManager = FileManager.default
         let directory = (savePath as NSString).deletingLastPathComponent
         try? fileManager.createDirectory(atPath: directory, withIntermediateDirectories: true)
 
-        if !fileManager.fileExists(atPath: savePath) {
-            fileManager.createFile(atPath: savePath, contents: nil)
-        }
-
-        guard let handle = FileHandle(forWritingAtPath: savePath) else {
-            onProgress(DownloadProgress(taskId: taskId, downloadedBytes: 0, totalBytes: fileSize,
-                                        speed: 0, activeThreads: 0, status: "failed", error: "Cannot open file"))
-            return
-        }
-
-        lock.lock()
-        fileHandle = handle
-        lock.unlock()
-
-        handle.truncateFile(atOffset: UInt64(fileSize))
+        tempDirectory = (directory as NSString).appendingPathComponent(".download_\(taskId)")
+        try? fileManager.createDirectory(atPath: tempDirectory, withIntermediateDirectories: true)
 
         let chunkSize = (fileSize + Int64(effectiveThreadCount) - 1) / Int64(effectiveThreadCount)
         var offset: Int64 = 0
@@ -217,22 +320,19 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
 
         while offset < fileSize {
             let end = min(offset + chunkSize - 1, fileSize - 1)
-            chunks.append(DownloadChunk(index: index, start: offset, end: end))
+            var info = ChunkInfo(index: index, start: offset, end: end)
+            info.tempFile = (tempDirectory as NSString).appendingPathComponent("chunk_\(index).tmp")
+
+            lock.lock()
+            chunkInfo[index] = info
+            lock.unlock()
+
             offset = end + 1
             index += 1
         }
 
-        NSLog("[iOS-Downloader] Created %d chunks", chunks.count)
-
-        // Create session
-        let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 7200
-        config.httpMaximumConnectionsPerHost = effectiveThreadCount
-
-        lock.lock()
-        session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-        lock.unlock()
+        totalChunks = index
+        NSLog("[iOS-Downloader] Created %d chunks", totalChunks)
 
         DispatchQueue.main.async { [weak self] in
             self?.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -240,123 +340,236 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
             }
         }
 
-        // Start all chunks simultaneously using shared session
-        for chunk in chunks {
+        for i in 0..<totalChunks {
             lock.lock()
             let isCancelled = cancelled
             lock.unlock()
 
             if isCancelled { break }
-            startChunkDownload(chunk: chunk, headers: effectiveHeaders)
+            startChunkDownload(index: i, headers: effectiveHeaders)
         }
     }
 
-    private func startChunkDownload(chunk: DownloadChunk, headers: [String: String]) {
-        guard let urlObj = URL(string: url) else {
-            markChunkCompleted(chunk: chunk, success: false)
+    private func startChunkDownload(index: Int, headers: [String: String]) {
+        guard let urlObj = URL(string: url),
+              let session = session else {
+            markChunkCompleted(index: index, success: false)
             return
         }
 
+        lock.lock()
+        guard let info = chunkInfo[index] else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
         var request = URLRequest(url: urlObj)
-        request.setValue("bytes=\(chunk.start)-\(chunk.end)", forHTTPHeaderField: "Range")
+        request.setValue("bytes=\(info.start)-\(info.end)", forHTTPHeaderField: "Range")
 
         for (key, value) in headers {
             request.setValue(value, forHTTPHeaderField: key)
         }
 
-        lock.lock()
-        guard let sess = session else {
-            lock.unlock()
-            markChunkCompleted(chunk: chunk, success: false)
-            return
-        }
+        let task = session.downloadTask(with: request)
 
-        let task = sess.dataTask(with: request)
-        chunk.taskIdentifier = task.taskIdentifier
-        chunkByTaskId[task.taskIdentifier] = chunk
-        activeThreads += 1
-        dataTasks.append(task)
+        lock.lock()
+        urlSessionTasks[task.taskIdentifier] = task
+        chunkInfo[index]?.downloadedBytes = 0
         lock.unlock()
 
+        task.taskDescription = "\(taskId)|\(index)"
         task.resume()
+
+        NSLog("[iOS-Downloader] Started chunk %d, task %d", index, task.taskIdentifier)
     }
 
-    private func markChunkCompleted(chunk: DownloadChunk, success: Bool) {
-        lock.lock()
+    func handleProgress(downloadTask: URLSessionDownloadTask, bytesWritten: Int64, totalBytesWritten: Int64) {
+        guard let desc = downloadTask.taskDescription,
+              let index = parseChunkIndex(from: desc) else { return }
 
-        // Prevent double completion
-        if chunk.completed || chunk.failed {
+        lock.lock()
+        if var info = chunkInfo[index] {
+            let prevBytes = info.downloadedBytes
+            info.downloadedBytes = totalBytesWritten
+            chunkInfo[index] = info
+            downloadedBytes += (totalBytesWritten - prevBytes)
+        }
+        let currentBytes = downloadedBytes
+        let total = totalBytes
+        lock.unlock()
+
+        updateLiveActivityFromDelegate(downloadedBytes: currentBytes, totalBytes: total)
+    }
+
+    private var lastDelegateUpdateTime: Date?
+
+    private func updateLiveActivityFromDelegate(downloadedBytes: Int64, totalBytes: Int64) {
+        guard enableLiveActivity, totalBytes > 0 else { return }
+
+        let now = Date()
+        if let lastUpdate = lastDelegateUpdateTime, now.timeIntervalSince(lastUpdate) < 1.0 {
+            return
+        }
+        lastDelegateUpdateTime = now
+
+        DownloadActivityManagerWrapper.shared.updateTask(
+            taskId: taskId,
+            downloadedBytes: downloadedBytes,
+            totalBytes: totalBytes,
+            speed: smoothedSpeed,
+            status: "downloading"
+        )
+    }
+
+    func handleDownloadComplete(downloadTask: URLSessionDownloadTask, location: URL) {
+        guard let desc = downloadTask.taskDescription,
+              let index = parseChunkIndex(from: desc) else { return }
+
+        lock.lock()
+        guard var info = chunkInfo[index] else {
             lock.unlock()
             return
         }
 
-        if success {
-            chunk.completed = true
-        } else {
-            chunk.failed = true
-        }
-
-        activeThreads = max(0, activeThreads - 1)
-        completedChunks += 1
-        let allDone = completedChunks >= chunks.count
-        let isFinished = finished
+        let tempFile = info.tempFile
         lock.unlock()
 
-        NSLog("[iOS-Downloader] Chunk %d completed: %@, downloaded: %lld/%lld",
-              chunk.index, success ? "true" : "false", chunk.downloaded, chunk.length)
+        let fileManager = FileManager.default
+        do {
+            if fileManager.fileExists(atPath: tempFile) {
+                try fileManager.removeItem(atPath: tempFile)
+            }
+            try fileManager.moveItem(at: location, to: URL(fileURLWithPath: tempFile))
 
-        if allDone && !isFinished {
+            lock.lock()
+            info.completed = true
+            chunkInfo[index] = info
+            lock.unlock()
+
+            NSLog("[iOS-Downloader] Chunk %d completed, saved to %@", index, tempFile)
+            markChunkCompleted(index: index, success: true)
+        } catch {
+            NSLog("[iOS-Downloader] Chunk %d failed to save: %@", index, error.localizedDescription)
+            markChunkCompleted(index: index, success: false)
+        }
+    }
+
+    func handleError(sessionTask: URLSessionTask, error: Error) {
+        guard let desc = sessionTask.taskDescription,
+              let index = parseChunkIndex(from: desc) else { return }
+
+        NSLog("[iOS-Downloader] Chunk %d error: %@", index, error.localizedDescription)
+        markChunkCompleted(index: index, success: false)
+    }
+
+    private func parseChunkIndex(from description: String) -> Int? {
+        let parts = description.split(separator: "|")
+        guard parts.count == 2, let index = Int(parts[1]) else { return nil }
+        return index
+    }
+
+    private func markChunkCompleted(index: Int, success: Bool) {
+        lock.lock()
+        completedChunks += 1
+        let allDone = completedChunks >= totalChunks
+        let finished = isFinished
+        lock.unlock()
+
+        if allDone && !finished {
             finishDownload()
         }
     }
 
     private func finishDownload() {
         lock.lock()
-        if finished {
+        if isFinished {
             lock.unlock()
             return
         }
-        finished = true
-        let finalBytes = downloadedBytes
+        isFinished = true
         let isCancelled = cancelled
-        let sess = session
         lock.unlock()
 
         DispatchQueue.main.async { [weak self] in
             self?.progressTimer?.invalidate()
         }
 
-        lock.lock()
-        fileHandle?.closeFile()
-        fileHandle = nil
-        lock.unlock()
-
-        sess?.finishTasksAndInvalidate()
-
         if isCancelled {
-            onProgress(DownloadProgress(taskId: taskId, downloadedBytes: finalBytes, totalBytes: totalBytes,
+            onProgress(DownloadProgress(taskId: taskId, downloadedBytes: downloadedBytes, totalBytes: totalBytes,
                                         speed: 0, activeThreads: 0, status: "cancelled", error: nil))
+            if enableLiveActivity {
+                DownloadActivityManagerWrapper.shared.removeTask(taskId: taskId)
+            }
+            cleanupTempFiles()
+            MultiThreadDownloader.shared.removeTask(taskId)
             return
         }
 
-        let tolerance = Int64(Double(totalBytes) * 0.01)
-        let allCompleted = finalBytes >= (totalBytes - tolerance)
+        let success = mergeChunks()
 
-        if allCompleted {
+        if success {
             onProgress(DownloadProgress(taskId: taskId, downloadedBytes: totalBytes, totalBytes: totalBytes,
                                         speed: 0, activeThreads: 0, status: "completed", error: nil))
-        } else {
-            NSLog("[iOS-Downloader] Download incomplete: %lld/%lld", finalBytes, totalBytes)
-            var debugInfo = "Downloaded \(finalBytes)/\(totalBytes). "
-            for chunk in chunks {
-                NSLog("[iOS-Downloader] Chunk %d: downloaded=%lld, expected=%lld, completed=%@",
-                      chunk.index, chunk.downloaded, chunk.length, chunk.completed ? "true" : "false")
-                if !chunk.completed {
-                    debugInfo += "Chunk\(chunk.index):\(chunk.downloaded)/\(chunk.length) "
-                }
+            if enableLiveActivity {
+                DownloadActivityManagerWrapper.shared.removeTask(taskId: taskId)
             }
-            onProgress(DownloadProgress(taskId: taskId, downloadedBytes: finalBytes, totalBytes: totalBytes,
-                                        speed: 0, activeThreads: 0, status: "failed", error: debugInfo))
+        } else {
+            onProgress(DownloadProgress(taskId: taskId, downloadedBytes: downloadedBytes, totalBytes: totalBytes,
+                                        speed: 0, activeThreads: 0, status: "failed", error: "Failed to merge chunks"))
+            if enableLiveActivity {
+                DownloadActivityManagerWrapper.shared.removeTask(taskId: taskId)
+            }
+        }
+
+        cleanupTempFiles()
+        MultiThreadDownloader.shared.removeTask(taskId)
+    }
+
+    private func mergeChunks() -> Bool {
+        let fileManager = FileManager.default
+
+        lock.lock()
+        let chunks = chunkInfo.sorted { $0.key < $1.key }
+        lock.unlock()
+
+        for (_, info) in chunks {
+            if !info.completed || !fileManager.fileExists(atPath: info.tempFile) {
+                NSLog("[iOS-Downloader] Chunk %d not completed or missing", info.index)
+                return false
+            }
+        }
+
+        do {
+            if fileManager.fileExists(atPath: savePath) {
+                try fileManager.removeItem(atPath: savePath)
+            }
+
+            fileManager.createFile(atPath: savePath, contents: nil)
+            guard let outputHandle = FileHandle(forWritingAtPath: savePath) else {
+                NSLog("[iOS-Downloader] Cannot open output file")
+                return false
+            }
+
+            defer { outputHandle.closeFile() }
+
+            for (_, info) in chunks {
+                let data = try Data(contentsOf: URL(fileURLWithPath: info.tempFile))
+                outputHandle.write(data)
+            }
+
+            NSLog("[iOS-Downloader] Merged %d chunks to %@", chunks.count, savePath)
+            return true
+        } catch {
+            NSLog("[iOS-Downloader] Merge error: %@", error.localizedDescription)
+            return false
+        }
+    }
+
+    private func cleanupTempFiles() {
+        let fileManager = FileManager.default
+        if !tempDirectory.isEmpty && fileManager.fileExists(atPath: tempDirectory) {
+            try? fileManager.removeItem(atPath: tempDirectory)
         }
     }
 
@@ -365,9 +578,9 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
 
         lock.lock()
         let currentBytes = downloadedBytes
-        let threads = activeThreads
-        let isPaused = paused
+        let paused = isPaused
         let total = totalBytes
+        let activeCount = urlSessionTasks.count
         lock.unlock()
 
         guard let lastTime = lastUpdateTime else {
@@ -378,8 +591,8 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
                 downloadedBytes: currentBytes,
                 totalBytes: total,
                 speed: 0,
-                activeThreads: threads,
-                status: isPaused ? "paused" : "downloading",
+                activeThreads: activeCount,
+                status: paused ? "paused" : "downloading",
                 error: nil
             ))
             return
@@ -404,10 +617,24 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
                 downloadedBytes: currentBytes,
                 totalBytes: total,
                 speed: smoothedSpeed,
-                activeThreads: threads,
-                status: isPaused ? "paused" : "downloading",
+                activeThreads: activeCount,
+                status: paused ? "paused" : "downloading",
                 error: nil
             ))
+
+            updateLiveActivity(status: paused ? "paused" : "downloading")
+        }
+    }
+
+    private func updateLiveActivity(status: String) {
+        if enableLiveActivity {
+            DownloadActivityManagerWrapper.shared.updateTask(
+                taskId: taskId,
+                downloadedBytes: downloadedBytes,
+                totalBytes: totalBytes,
+                speed: status == "paused" ? 0 : smoothedSpeed,
+                status: status
+            )
         }
     }
 
@@ -461,67 +688,5 @@ class DownloadTask: NSObject, URLSessionDataDelegate {
         tempSession2.finishTasksAndInvalidate()
 
         return fileSize
-    }
-
-    // MARK: - URLSessionDataDelegate
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse, completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        lock.lock()
-        let chunk = chunkByTaskId[dataTask.taskIdentifier]
-        lock.unlock()
-
-        if let httpResponse = response as? HTTPURLResponse {
-            let statusCode = httpResponse.statusCode
-            if statusCode != 200 && statusCode != 206 {
-                NSLog("[iOS-Downloader] Chunk %d got status %d", chunk?.index ?? -1, statusCode)
-                completionHandler(.cancel)
-                return
-            }
-        }
-
-        completionHandler(.allow)
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        lock.lock()
-        guard let chunk = chunkByTaskId[dataTask.taskIdentifier],
-              let handle = fileHandle else {
-            lock.unlock()
-            return
-        }
-
-        handle.seek(toFileOffset: UInt64(chunk.currentOffset))
-        handle.write(data)
-        chunk.currentOffset += Int64(data.count)
-        chunk.downloaded += Int64(data.count)
-        downloadedBytes += Int64(data.count)
-        lock.unlock()
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        lock.lock()
-        guard let chunk = chunkByTaskId[task.taskIdentifier] else {
-            lock.unlock()
-            return
-        }
-        chunkByTaskId.removeValue(forKey: task.taskIdentifier)
-        lock.unlock()
-
-        if let error = error {
-            // Ignore cancellation errors
-            let nsError = error as NSError
-            if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled {
-                NSLog("[iOS-Downloader] Chunk %d cancelled", chunk.index)
-            } else {
-                NSLog("[iOS-Downloader] Chunk %d error: %@", chunk.index, error.localizedDescription)
-            }
-            markChunkCompleted(chunk: chunk, success: false)
-        } else {
-            let success = chunk.downloaded >= chunk.length
-            if !success {
-                NSLog("[iOS-Downloader] Chunk %d incomplete: got %lld, expected %lld", chunk.index, chunk.downloaded, chunk.length)
-            }
-            markChunkCompleted(chunk: chunk, success: success)
-        }
     }
 }

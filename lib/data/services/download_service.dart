@@ -461,10 +461,15 @@ class DownloadService {
       taskId: task.id,
       url: url,
       savePath: task.localPath,
+      displayName: task.liveActivityTitle,
       headers: headers,
       threadCount: threadCount,
       onProgress: (progress) {
+        final status = progress.status == 'paused'
+            ? DownloadStatus.paused
+            : DownloadStatus.downloading;
         updatedTask = updatedTask.copyWith(
+          status: status,
           progress: progress.progress,
           downloadedBytes: progress.downloadedBytes,
           fileSize: progress.totalBytes > 0 ? progress.totalBytes : updatedTask.fileSize,

@@ -434,7 +434,7 @@ class _DownloadingItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  task.fileName ?? '${task.tvShowName}.S${task.seasonNumber.toString().padLeft(2, '0')}E${task.episodeNumber.toString().padLeft(2, '0')}.mp4',
+                  task.liveActivityTitle,
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,

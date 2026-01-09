@@ -1,9 +1,9 @@
 import Flutter
 import UIKit
+import ActivityKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
-  private var downloader: MultiThreadDownloader?
   private var eventSink: FlutterEventSink?
 
   override func application(
@@ -39,8 +39,6 @@ import UIKit
     }
 
     // Downloader channel
-    downloader = MultiThreadDownloader(threadCount: 8)
-
     let downloaderChannel = FlutterMethodChannel(
       name: "media_player/downloader",
       binaryMessenger: controller.binaryMessenger
@@ -63,8 +61,9 @@ import UIKit
         }
 
         let headers = args["headers"] as? [String: String] ?? [:]
+        let displayName = args["displayName"] as? String
 
-        self.downloader?.startDownload(taskId: taskId, url: url, savePath: savePath, headers: headers) { [weak self] progress in
+        MultiThreadDownloader.shared.startDownload(taskId: taskId, url: url, savePath: savePath, headers: headers, displayName: displayName) { [weak self] progress in
           DispatchQueue.main.async {
             self?.eventSink?(progress.toDict())
           }
@@ -77,7 +76,7 @@ import UIKit
           result(FlutterError(code: "INVALID_ARGS", message: "Missing taskId", details: nil))
           return
         }
-        self.downloader?.pauseDownload(taskId: taskId)
+        MultiThreadDownloader.shared.pauseDownload(taskId: taskId)
         result(nil)
 
       case "resumeDownload":
@@ -86,7 +85,7 @@ import UIKit
           result(FlutterError(code: "INVALID_ARGS", message: "Missing taskId", details: nil))
           return
         }
-        self.downloader?.resumeDownload(taskId: taskId)
+        MultiThreadDownloader.shared.resumeDownload(taskId: taskId)
         result(nil)
 
       case "cancelDownload":
@@ -95,8 +94,15 @@ import UIKit
           result(FlutterError(code: "INVALID_ARGS", message: "Missing taskId", details: nil))
           return
         }
-        self.downloader?.cancelDownload(taskId: taskId)
+        MultiThreadDownloader.shared.cancelDownload(taskId: taskId)
         result(nil)
+
+      case "isLiveActivityEnabled":
+        if #available(iOS 16.2, *) {
+          result(ActivityAuthorizationInfo().areActivitiesEnabled)
+        } else {
+          result(false)
+        }
 
       default:
         result(FlutterMethodNotImplemented)
@@ -112,6 +118,14 @@ import UIKit
     eventChannel.setStreamHandler(self)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  // Handle background URLSession events
+  override func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String, completionHandler: @escaping () -> Void) {
+    NSLog("[iOS-Downloader] Handling background session: %@", identifier)
+    if identifier == "com.mediaserver.mediaPlayer.backgroundDownload" {
+      MultiThreadDownloader.shared.handleBackgroundSessionCompletion(completionHandler)
+    }
   }
 }
 
