@@ -97,16 +97,14 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     // 监听扫描状态变化，自动管理弹窗
     ref.listen<GlobalScanState>(globalScanStateProvider, (prev, next) {
       final shouldShow = !next.dismissed && (next.isScanning || next.foundFiles > 0);
-      final wasShowing = prev != null && !prev.dismissed && (prev.isScanning || prev.foundFiles > 0);
 
-      if (shouldShow && !wasShowing) {
+      if (shouldShow && _popoverEntry == null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _showPopover();
+          if (mounted && _popoverEntry == null) _showPopover();
         });
-      } else if (!shouldShow && wasShowing) {
+      } else if (!shouldShow && _popoverEntry != null) {
         _removePopover();
       } else if (shouldShow && _popoverEntry != null) {
-        // 更新弹窗内容
         _popoverEntry!.markNeedsBuild();
       }
     });
