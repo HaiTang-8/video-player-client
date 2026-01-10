@@ -59,7 +59,6 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
             child: SizedBox(
               height: height,
               child: Stack(
-                alignment: Alignment.center,
                 children: [
                   if (enableDrag && WindowControls.isDesktop)
                     Positioned.fill(
@@ -67,6 +66,12 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
                         behavior: HitTestBehavior.translucent,
                         onPanStart: (_) => WindowControls.startDrag(),
                         onDoubleTap: () => WindowControls.toggleMaximize(),
+                      ),
+                    ),
+                  if (centerTitle && title != null)
+                    Positioned.fill(
+                      child: Center(
+                        child: titleInteractive ? title! : IgnorePointer(child: title!),
                       ),
                     ),
                   Row(
@@ -77,16 +82,7 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
                         const SizedBox(width: 4),
                         titleInteractive ? title! : IgnorePointer(child: title!),
                       ],
-                      if (centerTitle)
-                        Expanded(
-                          child: Center(
-                            child: title == null
-                                ? const SizedBox.shrink()
-                                : (titleInteractive ? title! : IgnorePointer(child: title!)),
-                          ),
-                        )
-                      else
-                        const Spacer(),
+                      const Spacer(),
                       ...actions,
                       if (WindowControls.isWindows && actions.isNotEmpty)
                         const SizedBox(width: 16),
