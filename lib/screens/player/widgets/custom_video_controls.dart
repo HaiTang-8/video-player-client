@@ -628,6 +628,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         };
     final padding = MediaQuery.of(context).padding;
     final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
+    const barHeight = 44.0;
 
     return Positioned(
       top: 0,
@@ -645,30 +646,58 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           padding: EdgeInsets.only(
             top: padding.top + 10,
             left: padding.left + horizontalPadding,
-            right: padding.right + horizontalPadding,
+            right: padding.right + (WindowControls.isWindows ? 0 : horizontalPadding),
             bottom: 10,
           ),
           child: Material(
             color: Colors.transparent,
             child: SizedBox(
-              height: WindowControls.isMacOS ? 52 : 44,
-              child: Row(
+              height: WindowControls.isMacOS ? 52 : barHeight,
+              child: Stack(
                 children: [
-                  if (!_isLocked) ...[
-                    AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
-                    const SizedBox(width: 8),
-                  ],
-                  Expanded(
-                    child: Text(
-                      widget.title ?? '',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                  if (WindowControls.isDesktop)
+                    Positioned.fill(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onPanStart: (_) => WindowControls.startDrag(),
+                        onDoubleTap: () => WindowControls.toggleMaximize(),
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
+                  Row(
+                    children: [
+                      if (!_isLocked) ...[
+                        AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          widget.title ?? '',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (WindowControls.isWindows) ...[
+                        const SizedBox(width: 16),
+                        _WindowCaptionButton(
+                          icon: Icons.remove,
+                          onPressed: () => WindowControls.minimize(),
+                        ),
+                        _WindowCaptionButton(
+                          icon: Icons.crop_square,
+                          onPressed: () => WindowControls.toggleMaximize(),
+                        ),
+                        _WindowCaptionButton(
+                          icon: Icons.close,
+                          hoverColor: const Color(0xFFE81123),
+                          onPressed: () => WindowControls.close(),
+                        ),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -1418,5 +1447,44 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       widget.onSelectEpisode?.call(result);
     }
     _startHideTimer();
+  }
+}
+
+class _WindowCaptionButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? hoverColor;
+
+  const _WindowCaptionButton({
+    required this.icon,
+    required this.onPressed,
+    this.hoverColor,
+  });
+
+  @override
+  State<_WindowCaptionButton> createState() => _WindowCaptionButtonState();
+}
+
+class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _hovered ? (widget.hoverColor ?? Colors.white24) : Colors.transparent;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Container(
+          width: 46,
+          height: 44,
+          color: bg,
+          child: Center(child: Icon(widget.icon, size: 16, color: Colors.white)),
+        ),
+      ),
+    );
   }
 }

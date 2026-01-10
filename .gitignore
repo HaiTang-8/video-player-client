@@ -51,3 +51,5 @@ app.*.map.json
 /android/app/release
 AGENTS.md
 .vscode/
+.stignore
+.stfolder/
