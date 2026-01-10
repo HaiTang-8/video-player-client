@@ -7,7 +7,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
-import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -46,7 +46,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                 onBack: () => context.pop(),
               ),
       body: storagesAsync.when(
-        loading: () => const LoadingWidget(message: '加载中...'),
+        loading: () => const ListSkeletonLoader(),
         error:
             (error, stack) => AppErrorWidget(
               message: error.toString(),

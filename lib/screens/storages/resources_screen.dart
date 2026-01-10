@@ -7,7 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
-import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -196,7 +196,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
       body: Stack(
         children: [
           storagesAsync.when(
-            loading: () => const LoadingWidget(message: '加载中...'),
+            loading: () => const StoragesSkeletonLoader(),
             error: (error, stack) => AppErrorWidget(
               message: error.toString(),
               onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),

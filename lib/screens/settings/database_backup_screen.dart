@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
-import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
 
@@ -48,7 +48,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
                 onBack: () => context.pop(),
               ),
       body: backupsAsync.when(
-        loading: () => const LoadingWidget(message: '加载中...'),
+        loading: () => const ListSkeletonLoader(),
         error:
             (error, _) => AppErrorWidget(
               message: error.toString(),

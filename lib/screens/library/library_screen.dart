@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
-import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/providers.dart';
 import 'widgets/category_row.dart';
 import 'widgets/watch_history_row.dart';
@@ -76,7 +76,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Widget _buildBody(CategoriesState state) {
     if (state.isLoading && state.categories.isEmpty) {
-      return const LoadingWidget(message: '加载中...');
+      return const LibrarySkeletonLoader();
     }
 
     if (state.error != null && state.categories.isEmpty) {

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+export 'loading_widget.dart' show AppErrorWidget, EmptyWidget;
+
 /// 骨架屏的 Shimmer 动画作用域。
 ///
 /// 性能优化点：
@@ -283,6 +285,305 @@ class ListSkeletonLoader extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 8),
         itemCount: itemCount,
         itemBuilder: (context, index) => const ListItemSkeleton(),
+      ),
+    );
+  }
+}
+
+/// 媒体库页面骨架屏 - 模拟分类横向滚动布局
+class LibrarySkeletonLoader extends StatelessWidget {
+  final int categoryCount;
+
+  const LibrarySkeletonLoader({super.key, this.categoryCount = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return SkeletonShimmer(
+      child: ListView.builder(
+        padding: const EdgeInsets.only(top: 8, bottom: 16),
+        itemCount: categoryCount,
+        itemBuilder: (context, index) => const _CategoryRowSkeleton(),
+      ),
+    );
+  }
+}
+
+class _CategoryRowSkeleton extends StatelessWidget {
+  const _CategoryRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              SkeletonBox(
+                width: 80,
+                height: 20,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(width: 8),
+              SkeletonBox(
+                width: 24,
+                height: 16,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 180,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: 6,
+            itemBuilder: (context, index) => Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: _PosterSkeleton(width: 88),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+}
+
+class _PosterSkeleton extends StatelessWidget {
+  final double width;
+
+  const _PosterSkeleton({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(
+            width: width,
+            height: width * 1.5,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          const SizedBox(height: 6),
+          SkeletonBox(
+            width: width * 0.8,
+            height: 12,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 资源库页面骨架屏 - 模拟存储源列表
+class StoragesSkeletonLoader extends StatelessWidget {
+  final int itemCount;
+
+  const StoragesSkeletonLoader({super.key, this.itemCount = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return SkeletonShimmer(
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+            child: SkeletonBox(
+              width: 50,
+              height: 14,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              children: List.generate(
+                itemCount,
+                (index) => _StorageTileSkeleton(
+                  showDivider: index < itemCount - 1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StorageTileSkeleton extends StatelessWidget {
+  final bool showDivider;
+
+  const _StorageTileSkeleton({this.showDivider = true});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              SkeletonBox(
+                width: 36,
+                height: 36,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SkeletonBox(
+                      width: 100,
+                      height: 16,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 4),
+                    SkeletonBox(
+                      width: 160,
+                      height: 12,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ],
+                ),
+              ),
+              SkeletonBox(
+                width: 20,
+                height: 20,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+        ),
+        if (showDivider)
+          Padding(
+            padding: const EdgeInsets.only(left: 60),
+            child: Divider(
+              height: 1,
+              thickness: 0.5,
+              color: theme.dividerColor.withValues(alpha: 0.3),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 详情页骨架屏 - 模拟电影/剧集详情布局
+class DetailSkeletonLoader extends StatelessWidget {
+  const DetailSkeletonLoader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final backdropHeight = size.height * 0.35;
+
+    return SkeletonShimmer(
+      child: SingleChildScrollView(
+        physics: const NeverScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SkeletonBox(
+              width: double.infinity,
+              height: backdropHeight,
+              borderRadius: BorderRadius.zero,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SkeletonBox(
+                    width: 200,
+                    height: 24,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: 120,
+                    height: 16,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 16),
+                  SkeletonBox(
+                    width: double.infinity,
+                    height: 48,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  const SizedBox(height: 24),
+                  SkeletonBox(
+                    width: double.infinity,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: double.infinity,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: 200,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 24),
+                  SkeletonBox(
+                    width: 60,
+                    height: 18,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 6,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: Column(
+                          children: [
+                            SkeletonBox(
+                              width: 56,
+                              height: 56,
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            const SizedBox(height: 6),
+                            SkeletonBox(
+                              width: 50,
+                              height: 12,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

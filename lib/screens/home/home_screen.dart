@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/poster_card.dart';
-import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -116,10 +116,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ),
 
-            // 初始加载
             if (postersState.isLoading && postersState.items.isEmpty)
               const SliverFillRemaining(
-                child: LoadingWidget(message: '加载中...'),
+                child: GridSkeletonLoader(),
               ),
           ],
         ),
