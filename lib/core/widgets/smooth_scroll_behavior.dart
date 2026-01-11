@@ -70,16 +70,18 @@ class _DesktopSmoothScrollState extends State<DesktopSmoothScroll> {
 
   void _onPointerSignal(PointerSignalEvent event) {
     if (event is PointerScrollEvent && widget.controller.hasClients) {
-      final pos = widget.controller.position;
-      _targetOffset = (_targetOffset + event.scrollDelta.dy).clamp(
-        pos.minScrollExtent,
-        pos.maxScrollExtent,
-      );
-      widget.controller.animateTo(
-        _targetOffset,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-      );
+      GestureBinding.instance.pointerSignalResolver.register(event, (event) {
+        final pos = widget.controller.position;
+        _targetOffset = (_targetOffset + (event as PointerScrollEvent).scrollDelta.dy).clamp(
+          pos.minScrollExtent,
+          pos.maxScrollExtent,
+        );
+        widget.controller.animateTo(
+          _targetOffset,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+        );
+      });
     }
   }
 

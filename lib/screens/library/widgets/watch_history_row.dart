@@ -144,21 +144,24 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         final imageHeight = itemWidth * 9 / 16;
         final listHeight = imageHeight + 8 + 40 + 2 + 16;
 
-        return SizedBox(
-          height: listHeight,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-            itemCount: items.length,
-            separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
-            itemBuilder: (context, index) {
-              final item = items[index];
-              return _WatchHistoryCard(
-                item: item,
-                width: itemWidth,
-                onTap: () => _navigateToDetail(item),
-              );
-            },
+        return ScrollConfiguration(
+          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+          child: SizedBox(
+            height: listHeight,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+              itemCount: items.length,
+              separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return _WatchHistoryCard(
+                  item: item,
+                  width: itemWidth,
+                  onTap: () => _navigateToDetail(item),
+                );
+              },
+            ),
           ),
         );
       },
@@ -279,83 +282,83 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         behavior: HitTestBehavior.opaque,
-        child: AnimatedScale(
-          scale: _isHovered ? 1.05 : 1.0,
-          duration: const Duration(milliseconds: 150),
-          curve: Curves.easeOut,
-          child: SizedBox(
-            width: widget.width,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TapFeedback(
-                  onTap: widget.onTap,
-                  borderRadius: BorderRadius.circular(8),
-                  child: AnimatedContainer(
+        child: SizedBox(
+          width: widget.width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TapFeedback(
+                onTap: widget.onTap,
+                borderRadius: BorderRadius.circular(8),
+                child: AnimatedScale(
+                  scale: _isHovered ? 1.05 : 1.0,
                   duration: const Duration(milliseconds: 150),
-                  width: widget.width,
-                  height: imageHeight,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(
-                          alpha: _isHovered ? 0.3 : 0.15,
-                        ),
-                        blurRadius: _isHovered ? 16 : 8,
-                        offset: Offset(0, _isHovered ? 8 : 4),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        _buildImage(serverBaseUrl),
-                        // 进度条
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            height: 4,
-                            color: Colors.black45,
-                            child: FractionallySizedBox(
-                              alignment: Alignment.centerLeft,
-                              widthFactor: widget.item.progress.clamp(0.0, 1.0),
-                              child: Container(
-                                color: const Color(0xFF3D5BF6),
-                              ),
-                            ),
+                  curve: Curves.easeOut,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    width: widget.width,
+                    height: imageHeight,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: _isHovered ? 0.3 : 0.15,
                           ),
+                          blurRadius: _isHovered ? 16 : 8,
+                          offset: Offset(0, _isHovered ? 8 : 4),
                         ),
                       ],
                     ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _buildImage(serverBaseUrl),
+                          // 进度条
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              height: 4,
+                              color: Colors.black45,
+                              child: FractionallySizedBox(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: widget.item.progress.clamp(0.0, 1.0),
+                                child: Container(
+                                  color: const Color(0xFF3D5BF6),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _displayTitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  _displayTitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                _getSubtitle(),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.outline,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  _getSubtitle(),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),
