@@ -5,6 +5,10 @@ class AppConstants {
   static const String appName = '观影';
   static const String appVersion = '1.0.0';
 
+  // GitHub 更新配置
+  static const String githubOwner = 'HaiTang-8';
+  static const String githubRepo = 'video-player-client';
+
   // 本地存储 Key
   static const String serverUrlKey = 'server_url'; // 兼容旧版
   static const String serverListKey = 'server_list';

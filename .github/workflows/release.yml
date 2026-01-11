@@ -17,11 +17,11 @@ jobs:
       - run: flutter pub get
       - run: flutter build windows --release
       - name: Archive
-        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath media_player-windows.zip
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath guanying-windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: media_player-windows.zip
+          path: guanying-windows.zip
 
   build-macos:
     runs-on: macos-latest
@@ -67,14 +67,14 @@ jobs:
       - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64
       - name: Rename artifacts
         run: |
-          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk media_player-android-armeabi-v7a.apk
-          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk media_player-android-arm64-v8a.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk guanying-android-armeabi-v7a.apk
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk guanying-android-arm64-v8a.apk
       - uses: actions/upload-artifact@v4
         with:
           name: android-build
           path: |
-            media_player-android-armeabi-v7a.apk
-            media_player-android-arm64-v8a.apk
+            guanying-android-armeabi-v7a.apk
+            guanying-android-arm64-v8a.apk
 
   build-ios:
     runs-on: macos-latest

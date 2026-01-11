@@ -1,13 +1,18 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/services/aria2_manager.dart';
+import '../../data/services/update_service.dart';
 import '../../providers/aria2_provider.dart';
 import '../../providers/providers.dart';
+import '../../providers/update_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -103,9 +108,13 @@ class SettingsScreen extends ConsumerWidget {
                 icon: CupertinoIcons.info,
                 iconColor: Colors.grey,
                 title: '版本',
-                subtitle: '1.0.0',
+                subtitle: AppConstants.appVersion,
                 showChevron: false,
               ),
+              if (Platform.isWindows || Platform.isAndroid) ...[
+                _buildDivider(isDark),
+                _UpdateCheckTile(isDark: isDark),
+              ],
               _buildDivider(isDark),
               _buildListTile(
                 context, theme, isDark,
@@ -114,8 +123,8 @@ class SettingsScreen extends ConsumerWidget {
                 title: '开源许可',
                 onTap: () => showLicensePage(
                   context: context,
-                  applicationName: 'Media Player',
-                  applicationVersion: '1.0.0',
+                  applicationName: AppConstants.appName,
+                  applicationVersion: AppConstants.appVersion,
                 ),
               ),
             ],
@@ -289,5 +298,157 @@ class SettingsScreen extends ConsumerWidget {
         ref.read(themeModeProvider.notifier).setThemeMode(value);
       }
     });
+  }
+}
+
+class _UpdateCheckTile extends ConsumerStatefulWidget {
+  final bool isDark;
+  const _UpdateCheckTile({required this.isDark});
+
+  @override
+  ConsumerState<_UpdateCheckTile> createState() => _UpdateCheckTileState();
+}
+
+class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(updateProvider.notifier).checkForUpdate();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final updateState = ref.watch(updateProvider);
+
+    String subtitle;
+    bool isLoading = false;
+    switch (updateState.status) {
+      case UpdateStatus.checking:
+        subtitle = '检查中...';
+        isLoading = true;
+        break;
+      case UpdateStatus.available:
+        subtitle = '新版本 ${updateState.releaseInfo?.version}';
+        break;
+      case UpdateStatus.downloading:
+        final percent = (updateState.downloadProgress * 100).toStringAsFixed(0);
+        subtitle = '下载中 $percent%';
+        isLoading = true;
+        break;
+      case UpdateStatus.installing:
+        subtitle = '安装中...';
+        isLoading = true;
+        break;
+      case UpdateStatus.upToDate:
+        subtitle = '已是最新版本';
+        break;
+      case UpdateStatus.error:
+        subtitle = '检查失败';
+        break;
+      default:
+        subtitle = '点击检查';
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: isLoading ? null : () => _handleTap(updateState),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: Colors.blue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(6),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(CupertinoIcons.arrow_clockwise, size: 18, color: Colors.blue),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '检查更新',
+                  style: theme.textTheme.bodyLarge?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: updateState.status == UpdateStatus.available
+                      ? Colors.blue
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              if (updateState.status == UpdateStatus.available) ...[
+                const SizedBox(width: 4),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  size: 16,
+                  color: widget.isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _handleTap(UpdateState updateState) {
+    if (updateState.status == UpdateStatus.available) {
+      _showUpdateDialog(updateState.releaseInfo!);
+    } else {
+      ref.read(updateProvider.notifier).checkForUpdate();
+    }
+  }
+
+  void _showUpdateDialog(ReleaseInfo info) {
+    showCupertinoDialog(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text('发现新版本 ${info.version}'),
+        content: Column(
+          children: [
+            const SizedBox(height: 8),
+            if (info.releaseNotes != null && info.releaseNotes!.isNotEmpty)
+              Text(
+                info.releaseNotes!.length > 200
+                    ? '${info.releaseNotes!.substring(0, 200)}...'
+                    : info.releaseNotes!,
+                style: const TextStyle(fontSize: 13),
+              )
+            else
+              const Text('有新版本可用'),
+          ],
+        ),
+        actions: [
+          CupertinoDialogAction(
+            child: const Text('稍后'),
+            onPressed: () => Navigator.pop(context),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            child: const Text('立即更新'),
+            onPressed: () {
+              Navigator.pop(context);
+              ref.read(updateProvider.notifier).downloadAndInstall();
+            },
+          ),
+        ],
+      ),
+    );
   }
 }
