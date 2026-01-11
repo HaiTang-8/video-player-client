@@ -3,7 +3,6 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = '观影';
-  static const String appVersion = '1.0.0';
 
   // GitHub 更新配置
   static const String githubOwner = 'HaiTang-8';

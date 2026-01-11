@@ -14,8 +14,12 @@ jobs:
         with:
           flutter-version: '3.35.7'
           channel: 'stable'
+      - name: Get version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      - run: flutter build windows --release
+      - run: flutter build windows --release --build-name=${{ steps.version.outputs.VERSION }}
       - name: Archive
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath guanying-windows.zip
       - uses: actions/upload-artifact@v4
@@ -31,8 +35,11 @@ jobs:
         with:
           flutter-version: '3.35.7'
           channel: 'stable'
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      - run: flutter build macos --release
+      - run: flutter build macos --release --build-name=${{ steps.version.outputs.VERSION }}
       - name: Create DMG
         run: |
           brew install create-dmg
@@ -60,11 +67,11 @@ jobs:
         with:
           flutter-version: '3.35.7'
           channel: 'stable'
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      # 说明：
-      # 1) 默认 `flutter build apk --release` 会生成「通用 APK」（universal/fat），把多个 ABI（armv7/arm64/x86_64）的 so 一起打进去，体积会非常大。
-      # 2) `--split-per-abi` 会按 ABI 拆分产物；再配合 `--target-platform` 只产出 armv7 + arm64，避免把 x86_64 一起打进发布包。
-      - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64
+      - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-name=${{ steps.version.outputs.VERSION }}
       - name: Rename artifacts
         run: |
           mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk guanying-android-armeabi-v7a.apk
@@ -84,8 +91,11 @@ jobs:
         with:
           flutter-version: '3.35.7'
           channel: 'stable'
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: flutter build ios --release --no-codesign --build-name=${{ steps.version.outputs.VERSION }}
       - name: Create IPA
         run: |
           mkdir -p Payload

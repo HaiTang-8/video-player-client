@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
+import '../../providers/version_provider.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -22,6 +23,7 @@ class SettingsScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final themeMode = ref.watch(themeModeProvider);
+    final versionAsync = ref.watch(versionProvider);
     final serverState = ref.watch(serverListProvider);
     final currentServer = serverState.currentServer;
     final aria2Config = ref.watch(aria2ConfigProvider);
@@ -116,7 +118,11 @@ class SettingsScreen extends ConsumerWidget {
                 icon: CupertinoIcons.info,
                 iconColor: Colors.grey,
                 title: '版本',
-                subtitle: AppConstants.appVersion,
+                subtitle: versionAsync.when(
+                  data: (version) => version,
+                  loading: () => '...',
+                  error: (_, _) => '未知',
+                ),
                 showChevron: false,
               ),
               if (Platform.isWindows || Platform.isAndroid) ...[
@@ -132,7 +138,7 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => showLicensePage(
                   context: context,
                   applicationName: AppConstants.appName,
-                  applicationVersion: AppConstants.appVersion,
+                  applicationVersion: versionAsync.value ?? '',
                 ),
               ),
             ],
