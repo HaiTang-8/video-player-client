@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/widgets/tap_feedback.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
@@ -242,24 +243,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       return const EmptyWidget(message: '未找到相关内容', icon: CupertinoIcons.search);
     }
 
-    return GridView.builder(
+    return DesktopSmoothScroll(
       controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 160,
-        childAspectRatio: 0.48,
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
+      child: GridView.builder(
+        controller: _scrollController,
+        padding: const EdgeInsets.all(16),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 160,
+          childAspectRatio: 0.48,
+          crossAxisSpacing: 16,
+          mainAxisSpacing: 16,
+        ),
+        itemCount: state.items.length,
+        itemBuilder: (context, index) {
+          final item = state.items[index];
+          return LibraryPosterCard(
+            item: item,
+            width: 140,
+            onTap: () => _navigateToDetail(item),
+          );
+        },
       ),
-      itemCount: state.items.length,
-      itemBuilder: (context, index) {
-        final item = state.items[index];
-        return LibraryPosterCard(
-          item: item,
-          width: 140,
-          onTap: () => _navigateToDetail(item),
-        );
-      },
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/poster_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -45,11 +46,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final postersState = ref.watch(postersProvider);
 
     return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: () => ref.read(postersProvider.notifier).refresh(),
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
+      body: DesktopSmoothScroll(
+        controller: _scrollController,
+        child: RefreshIndicator(
+          onRefresh: () => ref.read(postersProvider.notifier).refresh(),
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
             // AppBar
             SliverAppBar(
               floating: true,
@@ -121,6 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 child: GridSkeletonLoader(),
               ),
           ],
+        ),
         ),
       ),
     );

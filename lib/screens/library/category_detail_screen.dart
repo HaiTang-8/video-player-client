@@ -5,6 +5,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -94,35 +95,38 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
     final isDesktop = WindowControls.isDesktop;
 
-    return GridView.builder(
+    return DesktopSmoothScroll(
       controller: _scrollController,
-      clipBehavior: Clip.none,
-      padding: EdgeInsets.all(isDesktop ? 24 : 16),
-      gridDelegate: isDesktop
-          ? const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 160.0,
-              childAspectRatio: 0.48,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            )
-          : const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              childAspectRatio: 0.48,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-      itemCount: state.items.length + (state.isLoading ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index >= state.items.length) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final item = state.items[index];
-        return LibraryPosterCard(
-          item: item,
-          width: isDesktop ? 140.0 : double.infinity,
-          onTap: () => _navigateToDetail(item),
-        );
-      },
+      child: GridView.builder(
+        controller: _scrollController,
+        clipBehavior: Clip.none,
+        padding: EdgeInsets.all(isDesktop ? 24 : 16),
+        gridDelegate: isDesktop
+            ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 160.0,
+                childAspectRatio: 0.48,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+              )
+            : const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                childAspectRatio: 0.48,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+        itemCount: state.items.length + (state.isLoading ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (index >= state.items.length) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final item = state.items[index];
+          return LibraryPosterCard(
+            item: item,
+            width: isDesktop ? 140.0 : double.infinity,
+            onTap: () => _navigateToDetail(item),
+          );
+        },
+      ),
     );
   }
 
