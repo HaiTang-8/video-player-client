@@ -74,23 +74,26 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
                         child: titleInteractive ? title! : IgnorePointer(child: title!),
                       ),
                     ),
-                  Row(
-                    children: [
-                      SizedBox(width: leftInset),
-                      if (leading != null) leading!,
-                      if (!centerTitle && title != null) ...[
-                        const SizedBox(width: 4),
-                        titleInteractive ? title! : IgnorePointer(child: title!),
+                  Positioned.fill(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(width: leftInset),
+                        if (leading != null) leading!,
+                        if (!centerTitle && title != null) ...[
+                          const SizedBox(width: 4),
+                          titleInteractive ? title! : IgnorePointer(child: title!),
+                        ],
+                        const Spacer(),
+                        ...actions,
+                        if (WindowControls.isWindows && actions.isNotEmpty)
+                          const SizedBox(width: 16),
+                        if (WindowControls.isWindows)
+                          _WindowCaptionButtons(height: height, foregroundColor: fg)
+                        else
+                          const SizedBox(width: 12),
                       ],
-                      const Spacer(),
-                      ...actions,
-                      if (WindowControls.isWindows && actions.isNotEmpty)
-                        const SizedBox(width: 16),
-                      if (WindowControls.isWindows)
-                        _WindowCaptionButtons(height: height, foregroundColor: fg)
-                      else
-                        const SizedBox(width: 12),
-                    ],
+                    ),
                   ),
                 ],
               ),

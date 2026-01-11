@@ -9,11 +9,15 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/ios_ui_utils.dart';
 import 'data/services/aria2_manager.dart';
+import 'data/services/log_service.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 初始化日志服务
+  await LogService.instance.init();
 
   // 初始化 MediaKit
   MediaKit.ensureInitialized();

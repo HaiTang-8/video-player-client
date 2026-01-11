@@ -15,6 +15,7 @@ import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/download_service.dart';
+import '../../data/services/log_service.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
 import 'widgets/custom_video_controls.dart';
@@ -133,7 +134,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player.stream.error.listen((error) {
       if (!mounted || _isDisposing) return;
       if (error.isNotEmpty) {
+        LogService.instance.error('PlayerScreen', 'MPV error: $error, url: $_currentStreamUrl');
+        // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
         if (error.contains('Could not open/initialize audio device')) return;
+        if (error.contains('ffurl_write')) return;
+        if (error.contains('ffurl_read')) return;
+        if (error.contains('tcp:')) return;
         setState(() {
           _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
           _isLoading = false;
