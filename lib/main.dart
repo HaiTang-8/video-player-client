@@ -60,13 +60,29 @@ class MediaPlayerApp extends ConsumerStatefulWidget {
   ConsumerState<MediaPlayerApp> createState() => _MediaPlayerAppState();
 }
 
-class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp> {
+class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(serverConnectionProvider.notifier).connectToSavedServer();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    Aria2Manager.instance.stop();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached) {
+      Aria2Manager.instance.stop();
+    }
   }
 
   @override

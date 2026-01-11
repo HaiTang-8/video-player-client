@@ -34,6 +34,25 @@ class Aria2Manager {
     return '${dir.path}/aria2';
   }
 
+  Future<File> get _pidFile async {
+    final dir = await _binDir;
+    return File('$dir/aria2.pid');
+  }
+
+  Future<void> _cleanupStaleProcess() async {
+    final pidFile = await _pidFile;
+    if (!pidFile.existsSync()) return;
+    try {
+      final pid = int.tryParse(await pidFile.readAsString());
+      if (pid != null) {
+        Process.killPid(pid);
+      }
+    } catch (_) {}
+    try {
+      await pidFile.delete();
+    } catch (_) {}
+  }
+
   Future<String> get _binaryPath async {
     final binDir = await _binDir;
     if (Platform.isWindows) return '$binDir/aria2c.exe';
@@ -138,6 +157,9 @@ class Aria2Manager {
   Future<void> start({int? port}) async {
     if (_process != null) return;
 
+    // 清理可能残留的旧进程
+    await _cleanupStaleProcess();
+
     final binary = await _getEffectiveBinaryPath();
     if (!File(binary).existsSync()) {
       throw StateError('aria2 binary not found. Call ensureBinary() first.');
@@ -148,7 +170,7 @@ class Aria2Manager {
 
     final downloadDir = await _getDownloadDir();
 
-    final args = [
+    final aria2Args = [
       '--enable-rpc',
       '--rpc-listen-port=$_rpcPort',
       '--rpc-secret=$_rpcSecret',
@@ -161,16 +183,51 @@ class Aria2Manager {
       '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57',
     ];
 
-    _process = await Process.start(binary, args);
+    if (Platform.isMacOS || Platform.isLinux) {
+      // 使用 wrapper 脚本实现同生共死
+      final parentPid = pid;
+      final script = '''
+"$binary" ${aria2Args.map((a) => '"$a"').join(' ')} &
+ARIA2_PID=\$!
+while kill -0 $parentPid 2>/dev/null && kill -0 \$ARIA2_PID 2>/dev/null; do
+  sleep 1
+done
+kill \$ARIA2_PID 2>/dev/null
+''';
+      _process = await Process.start('/bin/sh', ['-c', script]);
+    } else if (Platform.isWindows) {
+      // Windows: 使用 PowerShell 监控父进程
+      final parentPid = pid;
+      final argsStr = aria2Args.map((a) => '"$a"').join(' ');
+      final script = '''
+\$aria2 = Start-Process -FilePath "$binary" -ArgumentList $argsStr -PassThru -NoNewWindow
+while ((Get-Process -Id $parentPid -ErrorAction SilentlyContinue) -and (Get-Process -Id \$aria2.Id -ErrorAction SilentlyContinue)) {
+  Start-Sleep -Seconds 1
+}
+Stop-Process -Id \$aria2.Id -Force -ErrorAction SilentlyContinue
+''';
+      _process = await Process.start('powershell', ['-Command', script]);
+    } else {
+      _process = await Process.start(binary, aria2Args);
+    }
+
+    // 保存 PID 以便下次启动时清理
+    final pidFile = await _pidFile;
+    await pidFile.writeAsString(_process!.pid.toString());
+
     _process!.stdout.transform(const SystemEncoding().decoder).listen((data) {
       debugPrint('[aria2] $data');
     });
     _process!.stderr.transform(const SystemEncoding().decoder).listen((data) {
       debugPrint('[aria2 err] $data');
     });
-    _process!.exitCode.then((_) {
+    _process!.exitCode.then((_) async {
       _process = null;
       _service = null;
+      try {
+        final pf = await _pidFile;
+        if (await pf.exists()) await pf.delete();
+      } catch (_) {}
     });
 
     _service = Aria2Service(
@@ -216,6 +273,10 @@ class Aria2Manager {
     _process?.kill();
     _process = null;
     _startTime = null;
+    try {
+      final pidFile = await _pidFile;
+      if (await pidFile.exists()) await pidFile.delete();
+    } catch (_) {}
   }
 
   Future<bool> healthCheck() async {
