@@ -665,41 +665,44 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                         onDoubleTap: () => WindowControls.toggleMaximize(),
                       ),
                     ),
-                  Row(
-                    children: [
-                      if (!_isLocked) ...[
-                        AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          widget.title ?? '',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                  Positioned.fill(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (!_isLocked) ...[
+                          AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            widget.title ?? '',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
-                      if (WindowControls.isWindows) ...[
-                        const SizedBox(width: 16),
-                        _WindowCaptionButton(
-                          icon: Icons.remove,
-                          onPressed: () => WindowControls.minimize(),
-                        ),
-                        _WindowCaptionButton(
-                          icon: Icons.crop_square,
-                          onPressed: () => WindowControls.toggleMaximize(),
-                        ),
-                        _WindowCaptionButton(
-                          icon: Icons.close,
-                          hoverColor: const Color(0xFFE81123),
-                          onPressed: () => WindowControls.close(),
-                        ),
+                        if (WindowControls.isWindows) ...[
+                          const SizedBox(width: 16),
+                          _WindowCaptionButton(
+                            icon: Icons.remove,
+                            onPressed: () => WindowControls.minimize(),
+                          ),
+                          _WindowCaptionButton(
+                            icon: Icons.crop_square,
+                            onPressed: () => WindowControls.toggleMaximize(),
+                          ),
+                          _WindowCaptionButton(
+                            icon: Icons.close,
+                            hoverColor: const Color(0xFFE81123),
+                            onPressed: () => WindowControls.close(),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),
