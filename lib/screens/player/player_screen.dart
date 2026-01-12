@@ -62,6 +62,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _hasSeekToInitialPosition = false;
   List<SubtitleInfo> _externalSubtitles = [];
   List<Episode>? _episodes;
+  double? _sessionPlaybackSpeed;
+  int? _pendingSeekPosition;
+  bool _hasAppliedPlaybackSettings = false;
 
   @override
   void initState() {
@@ -76,7 +79,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _player = Player();
     _controller = VideoController(_player);
     _initEpisodeIndex();
-    _applyPlaybackSettings();
     _configurePlayerNetwork();
     _setupPlayerListeners();
     _loadVideo();
@@ -125,8 +127,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _applyPlaybackSettings() {
-    final settings = ref.read(playbackSettingsProvider);
-    _player.setRate(settings.playbackSpeed);
+    final speed = _sessionPlaybackSpeed ?? ref.read(playbackSettingsProvider).playbackSpeed;
+    _player.setRate(speed);
+  }
+
+  void _onSpeedChanged(double speed) {
+    _sessionPlaybackSpeed = speed;
+  }
+
+  Future<void> _loadEpisodeProgress() async {
+    if (widget.type != 'episode' || widget.tvShowId == null) return;
+    final episodeId = _currentEpisode?.id;
+    if (episodeId == null) return;
+
+    try {
+      _mediaService ??= ref.read(mediaServiceProvider);
+      final response = await _mediaService!.getEpisodeProgress(
+        tvShowId: widget.tvShowId!,
+        episodeId: episodeId,
+      );
+      if (response.success && response.data != null && !response.data!.completed) {
+        _pendingSeekPosition = response.data!.position;
+      }
+    } catch (_) {}
   }
 
   void _setupPlayerListeners() {
@@ -153,21 +176,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // 可选：显示缓冲状态
     });
 
-    // 监听视频时长，准备好后 seek 到初始位置
+    // 监听视频时长，准备好后 seek 到初始位置并设置倍速
     _player.stream.duration.listen((duration) {
       if (!mounted || _isDisposing) return;
+      if (duration.inSeconds <= 0) return;
+
+      // 设置倍速（每次视频加载完成后都需要重新设置）
+      if (!_hasAppliedPlaybackSettings) {
+        _hasAppliedPlaybackSettings = true;
+        _applyPlaybackSettings();
+      }
+
+      // 优先使用 _pendingSeekPosition（切换视频时设置），否则使用初始位置
+      final targetPosition = _pendingSeekPosition ?? widget.initialPosition;
       debugPrint(
-        '[PlayerScreen] duration=${duration.inSeconds}s, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition',
+        '[PlayerScreen] duration=${duration.inSeconds}s, pendingSeek=$_pendingSeekPosition, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition',
       );
-      if (!_hasSeekToInitialPosition &&
-          duration.inSeconds > 0 &&
-          widget.initialPosition != null &&
-          widget.initialPosition! > 0) {
+      if (!_hasSeekToInitialPosition && targetPosition != null && targetPosition > 0) {
         _hasSeekToInitialPosition = true;
-        debugPrint(
-          '[PlayerScreen] Seeking to ${widget.initialPosition} seconds',
-        );
-        _player.seek(Duration(seconds: widget.initialPosition!));
+        _pendingSeekPosition = null;
+        debugPrint('[PlayerScreen] Seeking to $targetPosition seconds');
+        _player.seek(Duration(seconds: targetPosition));
       }
     });
 
@@ -273,14 +302,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _loadVideo({int? episodeIndex}) async {
     if (!mounted) return;
-    if (episodeIndex != null) await _player.pause();
+    if (episodeIndex != null) {
+      await _player.pause();
+      await _saveProgress();
+    }
     setState(() {
       _isLoading = true;
       _error = null;
       _currentStreamUrl = null;
       _externalSubtitles = [];
-      if (episodeIndex != null) _currentEpisodeIndex = episodeIndex;
+      if (episodeIndex != null) {
+        _currentEpisodeIndex = episodeIndex;
+        _hasSeekToInitialPosition = false;
+        _hasAppliedPlaybackSettings = false;
+      }
     });
+
+    // 切换视频时获取历史进度
+    if (episodeIndex != null) {
+      await _loadEpisodeProgress();
+    }
 
     try {
       // 等待下载任务加载完成后再检查本地缓存
@@ -766,6 +807,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
             externalSubtitles: _externalSubtitles,
             serverUrl: ref.read(serverUrlProvider),
+            onSpeedChanged: _onSpeedChanged,
           ),
           if (_isExiting)
             Container(

@@ -26,6 +26,7 @@ class CustomVideoControls extends StatefulWidget {
   final void Function(int index)? onSelectEpisode;
   final List<SubtitleInfo> externalSubtitles;
   final String? serverUrl;
+  final void Function(double speed)? onSpeedChanged;
 
   const CustomVideoControls({
     super.key,
@@ -45,6 +46,7 @@ class CustomVideoControls extends StatefulWidget {
     this.onSelectEpisode,
     this.externalSubtitles = const [],
     this.serverUrl,
+    this.onSpeedChanged,
   });
 
   @override
@@ -1041,6 +1043,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                             : null,
                     onTap: () {
                       widget.player.setRate(s);
+                      widget.onSpeedChanged?.call(s);
                       Navigator.pop(ctx);
                       _startHideTimer();
                     },
