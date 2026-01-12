@@ -152,6 +152,7 @@ class UpdateService {
     final archive = ZipDecoder().decodeBytes(bytes);
 
     for (final file in archive) {
+      if (file.name.isEmpty) continue;
       final filePath = p.join(extractDir, file.name);
       if (file.isFile) {
         final outFile = File(filePath);
@@ -164,15 +165,16 @@ class UpdateService {
     final currentDir = p.dirname(currentExe);
 
     final batPath = p.join(tempDir.path, 'update.bat');
-    final batContent = '''
-@echo off
-chcp 65001 >nul
-echo 正在更新，请稍候...
-timeout /t 2 /nobreak >nul
-xcopy /s /y /q "$extractDir\\*" "$currentDir\\"
-start "" "$currentDir\\guanying.exe"
-del "%~f0"
-''';
+    final extractDirWin = extractDir.replaceAll('/', '\\');
+    final currentDirWin = currentDir.replaceAll('/', '\\');
+    final batContent = "@echo off\r\n"
+        "chcp 65001 >nul\r\n"
+        "echo 正在更新，请稍候...\r\n"
+        "timeout /t 2 /nobreak >nul\r\n"
+        "powershell -Command \"Get-ChildItem -Path '$extractDirWin' -Recurse | Unblock-File\" >nul 2>&1\r\n"
+        "xcopy /s /y /q \"$extractDirWin\\*\" \"$currentDirWin\\\"\r\n"
+        "start \"\" \"$currentDirWin\\guanying.exe\"\r\n"
+        "del \"%~f0\"\r\n";
     await File(batPath).writeAsString(batContent);
 
     await Process.start('cmd', ['/c', batPath], mode: ProcessStartMode.detached);
