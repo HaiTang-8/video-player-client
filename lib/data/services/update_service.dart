@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -86,7 +85,7 @@ class UpdateService {
 
   RegExp _getAssetPattern() {
     if (Platform.isWindows) {
-      return RegExp(r'guanying.*windows.*\.zip$', caseSensitive: false);
+      return RegExp(r'guanying.*windows.*-setup\.exe$', caseSensitive: false);
     } else if (Platform.isAndroid) {
       return RegExp(r'guanying.*android.*arm64.*\.apk$', caseSensitive: false);
     }
@@ -142,42 +141,12 @@ class UpdateService {
     }
   }
 
-  Future<void> _installWindows(String zipPath) async {
-    final tempDir = await getTemporaryDirectory();
-    final extractDir = p.join(tempDir.path, 'update_extract');
-
-    await Directory(extractDir).create(recursive: true);
-
-    final bytes = await File(zipPath).readAsBytes();
-    final archive = ZipDecoder().decodeBytes(bytes);
-
-    for (final file in archive) {
-      if (file.name.isEmpty) continue;
-      final filePath = p.join(extractDir, file.name);
-      if (file.isFile) {
-        final outFile = File(filePath);
-        await outFile.parent.create(recursive: true);
-        await outFile.writeAsBytes(file.content as List<int>);
-      }
-    }
-
-    final currentExe = Platform.resolvedExecutable;
-    final currentDir = p.dirname(currentExe);
-
-    final batPath = p.join(tempDir.path, 'update.bat');
-    final extractDirWin = extractDir.replaceAll('/', '\\');
-    final currentDirWin = currentDir.replaceAll('/', '\\');
-    final batContent = "@echo off\r\n"
-        "chcp 65001 >nul\r\n"
-        "echo 正在更新，请稍候...\r\n"
-        "timeout /t 2 /nobreak >nul\r\n"
-        "powershell -Command \"Get-ChildItem -Path '$extractDirWin' -Recurse | Unblock-File\" >nul 2>&1\r\n"
-        "xcopy /s /y /q \"$extractDirWin\\*\" \"$currentDirWin\\\"\r\n"
-        "start \"\" \"$currentDirWin\\guanying.exe\"\r\n"
-        "del \"%~f0\"\r\n";
-    await File(batPath).writeAsString(batContent);
-
-    await Process.start('cmd', ['/c', batPath], mode: ProcessStartMode.detached);
+  Future<void> _installWindows(String exePath) async {
+    await Process.start(
+      exePath,
+      ['/SILENT', '/RESTARTAPPLICATIONS'],
+      mode: ProcessStartMode.detached,
+    );
     exit(0);
   }
 

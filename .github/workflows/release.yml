@@ -20,12 +20,25 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
       - run: flutter build windows --release --build-name=${{ steps.version.outputs.VERSION }}
-      - name: Archive
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+      - name: Build EXE Installer
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version windows\inno_setup.iss
+      - name: Rename installer
+        shell: pwsh
+        run: |
+          Move-Item -Path "dist\guanying-windows-setup.exe" -Destination "guanying-windows-${{ steps.version.outputs.VERSION }}-setup.exe"
+      - name: Create ZIP (backup)
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath guanying-windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: guanying-windows.zip
+          path: |
+            guanying-windows-${{ steps.version.outputs.VERSION }}-setup.exe
+            guanying-windows.zip
 
   build-macos:
     runs-on: macos-latest
@@ -112,10 +125,43 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Generate appcast.xml
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          REPO="HaiTang-8/video-player-client"
+          EXE_URL="https://github.com/${REPO}/releases/download/v${VERSION}/guanying-windows-${VERSION}-setup.exe"
+          EXE_SIZE=$(stat -c%s "artifacts/guanying-windows-${VERSION}-setup.exe" 2>/dev/null || echo "0")
+
+          cat > artifacts/appcast.xml << EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>观影</title>
+              <description>观影应用更新</description>
+              <language>zh-CN</language>
+              <item>
+                <title>版本 ${VERSION}</title>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <pubDate>$(date -R)</pubDate>
+                <enclosure
+                  url="${EXE_URL}"
+                  sparkle:version="${VERSION}"
+                  sparkle:os="windows"
+                  length="${EXE_SIZE}"
+                  type="application/octet-stream"/>
+              </item>
+            </channel>
+          </rss>
+          EOF
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*

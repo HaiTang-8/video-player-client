@@ -1,0 +1,48 @@
+variables:
+  APP_NAME: 观影
+  APP_NAME_EN: guanying
+  PUBLISHER_NAME: HaiTang-8
+
+output: dist/
+
+releases:
+  - name: windows
+    jobs:
+      - name: exe
+        package:
+          platform: windows
+          target: exe
+          build_args:
+            - --release
+
+  - name: android
+    jobs:
+      - name: apk
+        package:
+          platform: android
+          target: apk
+          build_args:
+            - --release
+            - --split-per-abi
+            - --target-platform
+            - android-arm,android-arm64
+
+makers:
+  - name: exe
+    platform: windows
+    config:
+      app_id: com.haitang.guanying
+      display_name: 观影
+      install_dir_name: Guanying
+      setup_icon_file: windows/runner/resources/app_icon.ico
+      executable_name: guanying
+      publisher: ${PUBLISHER_NAME}
+      publisher_url: https://github.com/HaiTang-8/video-player-client
+      create_desktop_icon: true
+      create_start_menu_shortcut: true
+
+publishers:
+  - name: github
+    config:
+      repo: HaiTang-8/video-player-client
+      generate_release_notes: true
