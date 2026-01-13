@@ -116,6 +116,8 @@ class StorageService {
     required String path,
     int maxFiles = 500,
     String? model,
+    bool enableTmdb = false,
+    int? maxTmdbQueries,
   }) async {
     return _client.post<AiTidyPlan>(
       ApiConstants.storageAiTidyPreview(storageId),
@@ -123,8 +125,11 @@ class StorageService {
         'path': path,
         'max_files': maxFiles,
         if (model != null && model.trim().isNotEmpty) 'model': model.trim(),
+        'enable_tmdb': enableTmdb,
+        if (maxTmdbQueries != null && maxTmdbQueries > 0)
+          'max_tmdb_queries': maxTmdbQueries,
       },
-      // LLM 调用 + 目录扫描可能超过默认 30s，这里单独放宽接收超时
+      // LLM 调用 + 目录扫描 + TMDB 查询可能超过默认 30s，这里单独放宽接收超时
       receiveTimeout: const Duration(seconds: 180),
       fromJson: (json) => AiTidyPlan.fromJson(json as Map<String, dynamic>),
     );

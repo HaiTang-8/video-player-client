@@ -205,7 +205,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   }
 
   Future<void> _startAiTidy(String currentPath) async {
-    final selected = await showDialog<int>(
+    final selected = await showDialog<({int maxFiles, bool enableTmdb})>(
       context: context,
       builder: (context) => _AiTidyStartDialog(path: currentPath),
     );
@@ -217,7 +217,8 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
         builder: (_) => AiTidyPreviewScreen(
           storageId: widget.storageId,
           rootPath: currentPath,
-          maxFiles: selected,
+          maxFiles: selected.maxFiles,
+          enableTmdb: selected.enableTmdb,
         ),
       ),
     );
@@ -485,6 +486,7 @@ class _AiTidyStartDialog extends StatefulWidget {
 
 class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
   int _maxFiles = 500;
+  bool _enableTmdb = true;
 
   @override
   Widget build(BuildContext context) {
@@ -542,7 +544,20 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
             ],
             onChanged: (value) => setState(() => _maxFiles = value ?? 500),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          SwitchListTile(
+            title: const Text('使用 TMDB 辅助识别'),
+            subtitle: Text(
+              '从 TMDB 数据库获取准确的影视名称',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            value: _enableTmdb,
+            onChanged: (value) => setState(() => _enableTmdb = value),
+            contentPadding: EdgeInsets.zero,
+          ),
+          const SizedBox(height: 8),
           Text(
             '提示：此步骤只生成预览方案，不会修改任何文件。',
             style: theme.textTheme.bodySmall?.copyWith(
@@ -557,7 +572,10 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, _maxFiles),
+          onPressed: () => Navigator.pop(
+            context,
+            (maxFiles: _maxFiles, enableTmdb: _enableTmdb),
+          ),
           child: const Text('生成预览'),
         ),
       ],
