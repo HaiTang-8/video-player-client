@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/poster_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
+import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -16,11 +17,14 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final _scrollController = ScrollController();
+  late final ScrollController _scrollController;
 
   @override
   void initState() {
     super.initState();
+    _scrollController = WindowControls.isDesktop
+        ? createSmoothScrollController()
+        : ScrollController();
     _scrollController.addListener(_onScroll);
     // 加载数据
     WidgetsBinding.instance.addPostFrameCallback((_) {

@@ -19,7 +19,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
-  final _scrollController = ScrollController();
+  late final ScrollController _scrollController;
   Timer? _debounceTimer;
 
   int _selectedCategory = 0;
@@ -37,6 +37,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController = WindowControls.isDesktop
+        ? createSmoothScrollController()
+        : ScrollController();
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _doSearch());
   }

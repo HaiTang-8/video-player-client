@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:scroll_animator/scroll_animator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants/app_constants.dart';
 import 'core/router/app_router.dart';
@@ -109,6 +110,10 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
       title: 'Media Player',
       debugShowCheckedModeBanner: false,
       scrollBehavior: SmoothScrollBehavior(),
+      actions: {
+        ...WidgetsApp.defaultActions,
+        ScrollIntent: AnimatedScrollAction(),
+      },
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,

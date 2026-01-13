@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:scroll_animator/scroll_animator.dart';
 
 class SmoothScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -24,7 +25,7 @@ class SmoothScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-class DesktopSmoothScroll extends StatefulWidget {
+class DesktopSmoothScroll extends StatelessWidget {
   final Widget child;
   final ScrollController controller;
 
@@ -38,60 +39,22 @@ class DesktopSmoothScroll extends StatefulWidget {
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
   @override
-  State<DesktopSmoothScroll> createState() => _DesktopSmoothScrollState();
-}
-
-class _DesktopSmoothScrollState extends State<DesktopSmoothScroll> {
-  double _targetOffset = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.controller.hasClients) {
-        _targetOffset = widget.controller.offset;
-      }
-    });
-    widget.controller.addListener(_syncOffset);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_syncOffset);
-    super.dispose();
-  }
-
-  void _syncOffset() {
-    if (widget.controller.hasClients &&
-        !widget.controller.position.isScrollingNotifier.value) {
-      _targetOffset = widget.controller.offset;
-    }
-  }
-
-  void _onPointerSignal(PointerSignalEvent event) {
-    if (event is PointerScrollEvent && widget.controller.hasClients) {
-      GestureBinding.instance.pointerSignalResolver.register(event, (event) {
-        final pos = widget.controller.position;
-        _targetOffset = (_targetOffset + (event as PointerScrollEvent).scrollDelta.dy).clamp(
-          pos.minScrollExtent,
-          pos.maxScrollExtent,
-        );
-        widget.controller.animateTo(
-          _targetOffset,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeOutCubic,
-        );
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    if (!DesktopSmoothScroll.enabled) return widget.child;
-
-    return Listener(
-      onPointerSignal: _onPointerSignal,
-      child: widget.child,
+    if (!enabled || controller is! AnimatedScrollController) {
+      return child;
+    }
+    return PrimaryScrollController(
+      controller: controller,
+      child: Focus(
+        autofocus: true,
+        child: child,
+      ),
     );
   }
+}
+
+AnimatedScrollController createSmoothScrollController() {
+  return AnimatedScrollController(
+    animationFactory: const ChromiumEaseInOut(),
+  );
 }
