@@ -205,7 +205,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   }
 
   Future<void> _startAiTidy(String currentPath) async {
-    final selected = await showDialog<({int maxFiles, bool enableTmdb})>(
+    final selected = await showDialog<({int maxFiles, bool enableTmdb, String folderMode})>(
       context: context,
       builder: (context) => _AiTidyStartDialog(path: currentPath),
     );
@@ -219,6 +219,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
           rootPath: currentPath,
           maxFiles: selected.maxFiles,
           enableTmdb: selected.enableTmdb,
+          folderMode: selected.folderMode,
         ),
       ),
     );
@@ -487,6 +488,7 @@ class _AiTidyStartDialog extends StatefulWidget {
 class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
   int _maxFiles = 500;
   bool _enableTmdb = true;
+  String _folderMode = 'subfolder';
 
   @override
   Widget build(BuildContext context) {
@@ -500,71 +502,111 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
           const Text('AI 整理'),
         ],
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '将对以下目录（含子目录）生成整理建议：',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '将对以下目录（含子目录）生成整理建议：',
+              style: theme.textTheme.bodyMedium,
             ),
-            child: Text(
-              widget.path,
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '最大分析文件数：',
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<int>(
-            value: _maxFiles,
-            decoration: InputDecoration(
-              border: OutlineInputBorder(
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(8),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                widget.path,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                ),
+              ),
             ),
-            items: const [
-              DropdownMenuItem(value: 200, child: Text('200')),
-              DropdownMenuItem(value: 500, child: Text('500（推荐）')),
-              DropdownMenuItem(value: 1000, child: Text('1000')),
-              DropdownMenuItem(value: 2000, child: Text('2000（最大）')),
-            ],
-            onChanged: (value) => setState(() => _maxFiles = value ?? 500),
-          ),
-          const SizedBox(height: 16),
-          SwitchListTile(
-            title: const Text('使用 TMDB 辅助识别'),
-            subtitle: Text(
-              '从 TMDB 数据库获取准确的影视名称',
+            const SizedBox(height: 16),
+            Text(
+              '电影整理模式：',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _folderMode,
+              isExpanded: true,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'subfolder',
+                  child: Text('创建子文件夹'),
+                ),
+                DropdownMenuItem(
+                  value: 'rename_file',
+                  child: Text('仅重命名文件'),
+                ),
+                DropdownMenuItem(
+                  value: 'rename_dir',
+                  child: Text('重命名父文件夹'),
+                ),
+              ],
+              onChanged: (value) => setState(() => _folderMode = value ?? 'subfolder'),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _folderModeDescription(_folderMode),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            value: _enableTmdb,
-            onChanged: (value) => setState(() => _enableTmdb = value),
-            contentPadding: EdgeInsets.zero,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '提示：此步骤只生成预览方案，不会修改任何文件。',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+            const SizedBox(height: 16),
+            Text(
+              '最大分析文件数：',
+              style: theme.textTheme.bodyMedium,
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            DropdownButtonFormField<int>(
+              value: _maxFiles,
+              decoration: InputDecoration(
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+              items: const [
+                DropdownMenuItem(value: 200, child: Text('200')),
+                DropdownMenuItem(value: 500, child: Text('500（推荐）')),
+                DropdownMenuItem(value: 1000, child: Text('1000')),
+                DropdownMenuItem(value: 2000, child: Text('2000（最大）')),
+              ],
+              onChanged: (value) => setState(() => _maxFiles = value ?? 500),
+            ),
+            const SizedBox(height: 16),
+            SwitchListTile(
+              title: const Text('使用 TMDB 辅助识别'),
+              subtitle: Text(
+                '从 TMDB 数据库获取准确的影视名称',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              value: _enableTmdb,
+              onChanged: (value) => setState(() => _enableTmdb = value),
+              contentPadding: EdgeInsets.zero,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '提示：此步骤只生成预览方案，不会修改任何文件。',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -574,11 +616,22 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
         FilledButton(
           onPressed: () => Navigator.pop(
             context,
-            (maxFiles: _maxFiles, enableTmdb: _enableTmdb),
+            (maxFiles: _maxFiles, enableTmdb: _enableTmdb, folderMode: _folderMode),
           ),
           child: const Text('生成预览'),
         ),
       ],
     );
+  }
+
+  String _folderModeDescription(String mode) {
+    switch (mode) {
+      case 'rename_file':
+        return '直接重命名文件，不创建子文件夹';
+      case 'rename_dir':
+        return '将父文件夹重命名为正确的影片名称';
+      default:
+        return '在当前目录下创建 "片名 (年份)" 子文件夹';
+    }
   }
 }

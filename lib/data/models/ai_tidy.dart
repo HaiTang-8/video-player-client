@@ -172,10 +172,23 @@ class AiTidyPlan {
 
 class AiTidyApplyResult {
   final int applied;
+  final int dbUpdated;
+  final int dbCreated;
+  final int dbDeleted;
 
-  const AiTidyApplyResult({required this.applied});
+  const AiTidyApplyResult({
+    required this.applied,
+    this.dbUpdated = 0,
+    this.dbCreated = 0,
+    this.dbDeleted = 0,
+  });
 
   factory AiTidyApplyResult.fromJson(Map<String, dynamic> json) {
-    return AiTidyApplyResult(applied: json['applied'] as int? ?? 0);
+    return AiTidyApplyResult(
+      applied: json['applied'] as int? ?? 0,
+      dbUpdated: json['db_updated'] as int? ?? 0,
+      dbCreated: json['db_created'] as int? ?? 0,
+      dbDeleted: json['db_deleted'] as int? ?? 0,
+    );
   }
 }

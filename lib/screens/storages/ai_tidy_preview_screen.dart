@@ -15,6 +15,7 @@ class AiTidyPreviewScreen extends ConsumerStatefulWidget {
   final String rootPath;
   final int maxFiles;
   final bool enableTmdb;
+  final String folderMode;
 
   const AiTidyPreviewScreen({
     super.key,
@@ -22,6 +23,7 @@ class AiTidyPreviewScreen extends ConsumerStatefulWidget {
     required this.rootPath,
     required this.maxFiles,
     this.enableTmdb = false,
+    this.folderMode = 'subfolder',
   });
 
   @override
@@ -48,6 +50,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
       path: widget.rootPath,
       maxFiles: widget.maxFiles,
       enableTmdb: widget.enableTmdb,
+      folderMode: widget.folderMode,
     );
   }
 
@@ -531,7 +534,17 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     if (!context.mounted) return;
 
     if (resp.isSuccess && resp.data != null) {
-      IosUiUtils.showToast(context: context, message: '已应用 ${resp.data!.applied} 条变更');
+      final result = resp.data!;
+      final dbChanges = <String>[];
+      if (result.dbUpdated > 0) dbChanges.add('更新${result.dbUpdated}');
+      if (result.dbCreated > 0) dbChanges.add('新增${result.dbCreated}');
+      if (result.dbDeleted > 0) dbChanges.add('删除${result.dbDeleted}');
+
+      String message = '已应用 ${result.applied} 条变更';
+      if (dbChanges.isNotEmpty) {
+        message += '，媒体库：${dbChanges.join('、')}';
+      }
+      IosUiUtils.showToast(context: context, message: message);
       Navigator.pop(context, true);
     } else {
       IosUiUtils.showToast(context: context, message: resp.error ?? '应用失败', isError: true);

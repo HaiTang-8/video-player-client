@@ -118,6 +118,7 @@ class StorageService {
     String? model,
     bool enableTmdb = false,
     int? maxTmdbQueries,
+    String? folderMode,
   }) async {
     return _client.post<AiTidyPlan>(
       ApiConstants.storageAiTidyPreview(storageId),
@@ -128,6 +129,8 @@ class StorageService {
         'enable_tmdb': enableTmdb,
         if (maxTmdbQueries != null && maxTmdbQueries > 0)
           'max_tmdb_queries': maxTmdbQueries,
+        if (folderMode != null && folderMode.trim().isNotEmpty)
+          'folder_mode': folderMode.trim(),
       },
       // LLM 调用 + 目录扫描 + TMDB 查询可能超过默认 30s，这里单独放宽接收超时
       receiveTimeout: const Duration(seconds: 180),
