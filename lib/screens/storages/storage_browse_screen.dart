@@ -8,6 +8,7 @@ import '../../core/widgets/ios_ui_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
+import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
@@ -142,14 +143,16 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       );
     }
 
-    return Stack(
-      children: [
-        RefreshIndicator(
-      onRefresh: () async {
-        await browseStorage(ref, widget.storageId, state.currentPath);
-      },
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    return DesktopSmoothScroll(
+      child: Stack(
+        children: [
+          RefreshIndicator(
+        onRefresh: () async {
+          await browseStorage(ref, widget.storageId, state.currentPath);
+        },
+        child: ListView.builder(
+          primary: true,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         itemCount: items.length + 1,
         itemBuilder: (context, index) {
           if (index == 0) {
@@ -200,7 +203,8 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
               ),
             ),
           ),
-      ],
+        ],
+      ),
     );
   }
 

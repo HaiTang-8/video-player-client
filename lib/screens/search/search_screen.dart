@@ -19,7 +19,6 @@ class SearchScreen extends ConsumerStatefulWidget {
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _searchController = TextEditingController();
-  late final ScrollController _scrollController;
   Timer? _debounceTimer;
 
   int _selectedCategory = 0;
@@ -37,25 +36,24 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   void initState() {
     super.initState();
-    _scrollController = WindowControls.isDesktop
-        ? createSmoothScrollController()
-        : ScrollController();
-    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _doSearch());
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _scrollController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
 
-  void _onScroll() {
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
-      ref.read(searchProvider.notifier).loadMore();
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      if (notification.metrics.pixels >=
+          notification.metrics.maxScrollExtent - 200) {
+        ref.read(searchProvider.notifier).loadMore();
+      }
     }
+    return false;
   }
 
   void _onSearchChanged(String query) {
@@ -247,25 +245,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     }
 
     return DesktopSmoothScroll(
-      controller: _scrollController,
-      child: GridView.builder(
-        controller: _scrollController,
-        padding: const EdgeInsets.all(16),
-        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-          maxCrossAxisExtent: 160,
-          childAspectRatio: 0.48,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: GridView.builder(
+          primary: true,
+          padding: const EdgeInsets.all(16),
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: 160,
+            childAspectRatio: 0.48,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+          ),
+          itemCount: state.items.length,
+          itemBuilder: (context, index) {
+            final item = state.items[index];
+            return LibraryPosterCard(
+              item: item,
+              width: 140,
+              onTap: () => _navigateToDetail(item),
+            );
+          },
         ),
-        itemCount: state.items.length,
-        itemBuilder: (context, index) {
-          final item = state.items[index];
-          return LibraryPosterCard(
-            item: item,
-            width: 140,
-            onTap: () => _navigateToDetail(item),
-          );
-        },
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_title_bar.dart';
+import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/providers.dart';
@@ -62,14 +63,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ],
             ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await Future.wait([
-            ref.read(categoriesProvider.notifier).refresh(),
-            ref.read(watchHistoryProvider.notifier).refresh(),
-          ]);
-        },
-        child: _buildBody(categoriesState),
+      body: DesktopSmoothScroll(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            await Future.wait([
+              ref.read(categoriesProvider.notifier).refresh(),
+              ref.read(watchHistoryProvider.notifier).refresh(),
+            ]);
+          },
+          child: _buildBody(categoriesState),
+        ),
       ),
     );
   }
@@ -102,6 +105,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     return ListView.builder(
+      primary: true,
       padding: const EdgeInsets.only(top: 8, bottom: 16),
       itemCount: nonEmptyCategories.length + (hasWatchHistory ? 1 : 0),
       itemBuilder: (context, index) {

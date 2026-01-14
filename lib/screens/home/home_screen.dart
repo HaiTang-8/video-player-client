@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/poster_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
-import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 
@@ -17,32 +16,22 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  late final ScrollController _scrollController;
-
   @override
   void initState() {
     super.initState();
-    _scrollController = WindowControls.isDesktop
-        ? createSmoothScrollController()
-        : ScrollController();
-    _scrollController.addListener(_onScroll);
-    // 加载数据
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(postersProvider.notifier).loadPosters();
     });
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      ref.read(postersProvider.notifier).loadMore();
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      if (notification.metrics.pixels >=
+          notification.metrics.maxScrollExtent - 200) {
+        ref.read(postersProvider.notifier).loadMore();
+      }
     }
+    return false;
   }
 
   @override
@@ -51,12 +40,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     return Scaffold(
       body: DesktopSmoothScroll(
-        controller: _scrollController,
-        child: RefreshIndicator(
-          onRefresh: () => ref.read(postersProvider.notifier).refresh(),
-          child: CustomScrollView(
-            controller: _scrollController,
-            slivers: [
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onScrollNotification,
+          child: RefreshIndicator(
+            onRefresh: () => ref.read(postersProvider.notifier).refresh(),
+            child: CustomScrollView(
+              primary: true,
+              slivers: [
             // AppBar
             SliverAppBar(
               floating: true,
@@ -127,8 +117,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SliverFillRemaining(
                 child: GridSkeletonLoader(),
               ),
-          ],
-        ),
+              ],
+            ),
+          ),
         ),
       ),
     );

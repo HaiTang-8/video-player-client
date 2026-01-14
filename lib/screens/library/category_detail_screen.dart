@@ -28,31 +28,22 @@ class CategoryDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
-  late final ScrollController _scrollController;
-
   @override
   void initState() {
     super.initState();
-    _scrollController = WindowControls.isDesktop
-        ? createSmoothScrollController()
-        : ScrollController();
-    _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       refreshCategoryItems(ref, widget.categoryId, pageSize: 30);
     });
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 200) {
-      loadMoreCategoryItems(ref, widget.categoryId, pageSize: 30);
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      if (notification.metrics.pixels >=
+          notification.metrics.maxScrollExtent - 200) {
+        loadMoreCategoryItems(ref, widget.categoryId, pageSize: 30);
+      }
     }
+    return false;
   }
 
   @override
@@ -99,36 +90,38 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
     final isDesktop = WindowControls.isDesktop;
 
     return DesktopSmoothScroll(
-      controller: _scrollController,
-      child: GridView.builder(
-        controller: _scrollController,
-        clipBehavior: Clip.none,
-        padding: EdgeInsets.all(isDesktop ? 24 : 16),
-        gridDelegate: isDesktop
-            ? const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 160.0,
-                childAspectRatio: 0.48,
-                crossAxisSpacing: 16,
-                mainAxisSpacing: 16,
-              )
-            : const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                childAspectRatio: 0.48,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-        itemCount: state.items.length + (state.isLoading ? 1 : 0),
-        itemBuilder: (context, index) {
-          if (index >= state.items.length) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final item = state.items[index];
-          return LibraryPosterCard(
-            item: item,
-            width: isDesktop ? 140.0 : double.infinity,
-            onTap: () => _navigateToDetail(item),
-          );
-        },
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: GridView.builder(
+          primary: true,
+          clipBehavior: Clip.none,
+          padding: EdgeInsets.all(isDesktop ? 24 : 16),
+          gridDelegate: isDesktop
+              ? const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 160.0,
+                  childAspectRatio: 0.48,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                )
+              : const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.48,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+          itemCount: state.items.length + (state.isLoading ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index >= state.items.length) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final item = state.items[index];
+            return LibraryPosterCard(
+              item: item,
+              width: isDesktop ? 140.0 : double.infinity,
+              onTap: () => _navigateToDetail(item),
+            );
+          },
+        ),
       ),
     );
   }

@@ -27,34 +27,26 @@ class SmoothScrollBehavior extends MaterialScrollBehavior {
 
 class DesktopSmoothScroll extends StatelessWidget {
   final Widget child;
-  final ScrollController controller;
 
   const DesktopSmoothScroll({
     super.key,
     required this.child,
-    required this.controller,
   });
 
-  static bool get enabled =>
+  static bool get isDesktop =>
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
   @override
   Widget build(BuildContext context) {
-    if (!enabled || controller is! AnimatedScrollController) {
+    if (!isDesktop) {
       return child;
     }
-    return PrimaryScrollController(
-      controller: controller,
+    return AnimatedPrimaryScrollController(
+      animationFactory: const ChromiumEaseInOut(),
       child: Focus(
         autofocus: true,
         child: child,
       ),
     );
   }
-}
-
-AnimatedScrollController createSmoothScrollController() {
-  return AnimatedScrollController(
-    animationFactory: const ChromiumEaseInOut(),
-  );
 }
