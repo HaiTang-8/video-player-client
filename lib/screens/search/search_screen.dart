@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -86,14 +87,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchProvider);
+    final isDesktop = WindowControls.isDesktop;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return CupertinoPageScaffold(
-      backgroundColor: CupertinoColors.systemGroupedBackground,
-      child: SafeArea(
-        top: false,
+    return Scaffold(
+      backgroundColor: isDark ? null : Colors.white,
+      appBar: isDesktop ? _buildDesktopTitleBar(context) : null,
+      body: SafeArea(
+        top: !isDesktop,
         child: Column(
           children: [
-            _buildSearchBar(context),
+            if (!isDesktop) _buildSearchBar(context),
             _buildFilterSection(),
             Expanded(child: _buildBody(searchState)),
           ],
@@ -102,8 +106,94 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     );
   }
 
+  PreferredSizeWidget _buildDesktopTitleBar(BuildContext context) {
+    final theme = Theme.of(context);
+    final bg = theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface;
+    final fg = theme.appBarTheme.foregroundColor ?? theme.colorScheme.onSurface;
+    final dividerColor = theme.dividerColor.withValues(alpha: 0.2);
+    final leftInset = WindowControls.isMacOS ? 72.0 : 0.0;
+
+    return PreferredSize(
+      preferredSize: const Size.fromHeight(40),
+      child: Material(
+        color: bg,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: dividerColor)),
+          ),
+          child: SizedBox(
+            height: 40,
+            child: Stack(
+              children: [
+                if (WindowControls.isDesktop)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onPanStart: (_) => WindowControls.startDrag(),
+                      onDoubleTap: () => WindowControls.toggleMaximize(),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: Row(
+                    children: [
+                      SizedBox(width: leftInset),
+                      CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(32, 32),
+                        onPressed: () => context.pop(),
+                        child: Icon(CupertinoIcons.back, size: 24, color: fg),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: CupertinoSearchTextField(
+                          controller: _searchController,
+                          placeholder: '输入影片名称搜索',
+                          style: const TextStyle(fontSize: 13, fontFamily: 'HarmonyOS_Sans'),
+                          placeholderStyle: const TextStyle(
+                            fontSize: 13,
+                            fontFamily: 'HarmonyOS_Sans',
+                            color: CupertinoColors.systemGrey,
+                            decoration: TextDecoration.none,
+                          ),
+                          autofocus: true,
+                          onChanged: _onSearchChanged,
+                          onSubmitted: (_) => _doSearch(),
+                        ),
+                      ),
+                      ValueListenableBuilder<TextEditingValue>(
+                        valueListenable: _searchController,
+                        builder: (context, value, _) {
+                          final hasQuery = value.text.trim().isNotEmpty;
+                          final color = hasQuery ? CupertinoColors.activeBlue : CupertinoColors.systemGrey;
+                          return CupertinoButton(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: const Size(32, 32),
+                            onPressed: _doSearch,
+                            child: Text(
+                              '搜索',
+                              style: TextStyle(fontSize: 15, fontFamily: 'HarmonyOS_Sans', color: color),
+                            ),
+                          );
+                        },
+                      ),
+                      if (WindowControls.isWindows)
+                        _SearchWindowCaptionButtons(height: 40, foregroundColor: fg)
+                      else
+                        const SizedBox(width: 12),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildSearchBar(BuildContext context) {
     final leftInset = WindowControls.isMacOS ? 72.0 : 12.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: EdgeInsets.only(
@@ -112,7 +202,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         right: 12,
         bottom: 8,
       ),
-      color: CupertinoColors.systemGroupedBackground,
+      color: isDark ? null : Colors.white,
       child: Row(
         children: [
           CupertinoButton(
@@ -157,8 +247,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Widget _buildFilterSection() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: CupertinoColors.systemGroupedBackground,
+      color: isDark ? null : Colors.white,
       child: Column(
         children: [
           _buildFilterRow(_categories, _selectedCategory, (i) {
@@ -209,6 +300,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 child: Text(
                   items[index],
                   style: TextStyle(
+                    fontFamily: 'HarmonyOS_Sans',
                     color: selected ? CupertinoColors.activeBlue : CupertinoColors.black,
                     fontSize: 13,
                     fontWeight: FontWeight.w400,
@@ -276,5 +368,136 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     } else {
       context.push('/tvshow/${item.id}');
     }
+  }
+}
+
+class _SearchWindowCaptionButtons extends StatefulWidget {
+  final double height;
+  final Color foregroundColor;
+
+  const _SearchWindowCaptionButtons({
+    required this.height,
+    required this.foregroundColor,
+  });
+
+  @override
+  State<_SearchWindowCaptionButtons> createState() => _SearchWindowCaptionButtonsState();
+}
+
+class _SearchWindowCaptionButtonsState extends State<_SearchWindowCaptionButtons>
+    with WidgetsBindingObserver {
+  bool _isMaximized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkMaximized();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    _checkMaximized();
+  }
+
+  Future<void> _checkMaximized() async {
+    final maximized = await WindowControls.isMaximized();
+    if (mounted && maximized != _isMaximized) {
+      setState(() => _isMaximized = maximized);
+    }
+  }
+
+  Future<void> _toggleMaximize() async {
+    await WindowControls.toggleMaximize();
+    _checkMaximized();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hoverBg = widget.foregroundColor.withValues(alpha: 0.08);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _SearchWindowCaptionButton(
+          height: widget.height,
+          icon: Icons.remove,
+          foregroundColor: widget.foregroundColor,
+          hoverBackgroundColor: hoverBg,
+          onPressed: () => WindowControls.minimize(),
+        ),
+        _SearchWindowCaptionButton(
+          height: widget.height,
+          icon: _isMaximized ? Icons.filter_none : Icons.crop_square,
+          foregroundColor: widget.foregroundColor,
+          hoverBackgroundColor: hoverBg,
+          onPressed: _toggleMaximize,
+        ),
+        _SearchWindowCaptionButton(
+          height: widget.height,
+          icon: Icons.close,
+          foregroundColor: widget.foregroundColor,
+          hoverBackgroundColor: const Color(0xFFE81123),
+          hoverForegroundColor: Colors.white,
+          onPressed: () => WindowControls.close(),
+        ),
+      ],
+    );
+  }
+}
+
+class _SearchWindowCaptionButton extends StatefulWidget {
+  final double height;
+  final IconData icon;
+  final Color foregroundColor;
+  final Color hoverBackgroundColor;
+  final Color? hoverForegroundColor;
+  final VoidCallback onPressed;
+
+  const _SearchWindowCaptionButton({
+    required this.height,
+    required this.icon,
+    required this.foregroundColor,
+    required this.hoverBackgroundColor,
+    required this.onPressed,
+    this.hoverForegroundColor,
+  });
+
+  @override
+  State<_SearchWindowCaptionButton> createState() => _SearchWindowCaptionButtonState();
+}
+
+class _SearchWindowCaptionButtonState extends State<_SearchWindowCaptionButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _hovered ? widget.hoverBackgroundColor : Colors.transparent;
+    final fg = _hovered
+        ? (widget.hoverForegroundColor ?? widget.foregroundColor)
+        : widget.foregroundColor;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Material(
+        color: bg,
+        child: InkWell(
+          onTap: widget.onPressed,
+          child: SizedBox(
+            width: 46,
+            height: widget.height,
+            child: Center(child: Icon(widget.icon, size: 16, color: fg)),
+          ),
+        ),
+      ),
+    );
   }
 }
