@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/widgets/app_back_button.dart';
-import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
@@ -659,6 +658,73 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return widget.title ?? '';
   }
 
+  Widget _buildPlayerTopBar(String title) {
+    const horizontalPadding = 12.0;
+    final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
+    const barHeight = 44.0;
+
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: Container(
+        color: Colors.black,
+        padding: EdgeInsets.only(
+          left: leftPadding,
+          right: WindowControls.isWindows ? 0 : horizontalPadding,
+        ),
+        height: barHeight,
+        child: Stack(
+          children: [
+            if (WindowControls.isDesktop)
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onPanStart: (_) => WindowControls.startDrag(),
+                  onDoubleTap: () => WindowControls.toggleMaximize(),
+                ),
+              ),
+            Positioned.fill(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  AppBackButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    color: Colors.white,
+                    leftPadding: 0,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (WindowControls.isWindows) ...[
+                    const SizedBox(width: 16),
+                    _buildCaptionButton(Icons.remove, () => WindowControls.minimize()),
+                    _buildCaptionButton(Icons.crop_square, () => WindowControls.toggleMaximize()),
+                    _buildCaptionButton(Icons.close, () => WindowControls.close(), hoverColor: const Color(0xFFE81123)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCaptionButton(IconData icon, VoidCallback onPressed, {Color? hoverColor}) {
+    return _CaptionButton(icon: icon, onPressed: onPressed, hoverColor: hoverColor);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -666,50 +732,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar: WindowControls.isDesktop
-            ? DesktopTitleBar(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                centerTitle: false,
-                leading: AppBackButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                title: Text(_displayTitle.isNotEmpty ? _displayTitle : '加载中...'),
-              )
-            : AppBar(
-                backgroundColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                toolbarHeight: 44,
-                centerTitle: false,
-                automaticallyImplyLeading: false,
-                leadingWidth: kAppBackButtonWidth,
-                titleSpacing: 1,
-                leading: AppBackButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  color: Colors.white,
-                ),
-                title: Text(
-                  _displayTitle.isNotEmpty ? _displayTitle : '加载中...',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+        body: Stack(
+          children: [
+            Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(color: Colors.white),
+                  const SizedBox(height: 16),
+                  Text(
+                    _currentStreamUrl == null ? '正在获取播放地址...' : '正在加载视频...',
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
                   ),
-                ),
+                ],
               ),
-        body: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(color: Colors.white),
-              const SizedBox(height: 16),
-              Text(
-                _currentStreamUrl == null ? '正在获取播放地址...' : '正在加载视频...',
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-              ),
-            ],
-          ),
+            ),
+            _buildPlayerTopBar(_displayTitle.isNotEmpty ? _displayTitle : '加载中...'),
+          ],
         ),
       );
     }
@@ -717,66 +756,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_error != null) {
       return Scaffold(
         backgroundColor: Colors.black,
-        appBar:
-            WindowControls.isDesktop
-                ? DesktopTitleBar(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  // Desktop 端自绘标题栏：返回按钮使用“<”样式，标题不居中。
-                  centerTitle: false,
-                  leading: AppBackButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                  title: const Text('播放失败'),
-                )
-                : AppBar(
-                  backgroundColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  toolbarHeight: 44,
-                  centerTitle: false,
-                  automaticallyImplyLeading: false,
-                  leadingWidth: kAppBackButtonWidth,
-                  titleSpacing: 1,
-                  leading: AppBackButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    color: Colors.white,
-                  ),
-                  title: const Text(
-                    '播放失败',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+        body: Stack(
+          children: [
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 64,
+                      color: theme.colorScheme.error,
                     ),
-                  ),
+                    const SizedBox(height: 16),
+                    SelectableText(
+                      _error!,
+                      style: const TextStyle(color: Colors.white),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 24),
+                    FilledButton.icon(
+                      onPressed: _loadVideo,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('重试'),
+                    ),
+                  ],
                 ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.error_outline,
-                  size: 64,
-                  color: theme.colorScheme.error,
-                ),
-                const SizedBox(height: 16),
-                SelectableText(
-                  _error!,
-                  style: const TextStyle(color: Colors.white),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 24),
-                FilledButton.icon(
-                  onPressed: _loadVideo,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('重试'),
-                ),
-              ],
+              ),
             ),
-          ),
+            _buildPlayerTopBar('播放失败'),
+          ],
         ),
       );
     }
@@ -817,6 +827,45 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _CaptionButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback onPressed;
+  final Color? hoverColor;
+
+  const _CaptionButton({
+    required this.icon,
+    required this.onPressed,
+    this.hoverColor,
+  });
+
+  @override
+  State<_CaptionButton> createState() => _CaptionButtonState();
+}
+
+class _CaptionButtonState extends State<_CaptionButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _hovered ? (widget.hoverColor ?? Colors.white24) : Colors.transparent;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onPressed,
+        child: Container(
+          width: 46,
+          height: 44,
+          color: bg,
+          child: Center(child: Icon(widget.icon, size: 16, color: Colors.white)),
+        ),
       ),
     );
   }

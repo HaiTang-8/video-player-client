@@ -104,6 +104,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   // 视频填充模式（true: 铺满无黑边, false: 默认保持比例）
   bool _isFillMode = false;
 
+  // 媒体信息面板
+  bool _showMediaInfo = false;
+  Map<String, String> _mediaInfo = {};
+  Timer? _mediaInfoTimer;
+
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
@@ -207,6 +212,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   void dispose() {
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
+    _mediaInfoTimer?.cancel();
     _focusNode.dispose();
     for (final sub in _subscriptions) {
       sub.cancel();
@@ -367,6 +373,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     } else if (key == LogicalKeyboardKey.keyP) {
       if (widget.hasPrevious) widget.onPrevious?.call();
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.tab) {
+      _toggleMediaInfo();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -414,6 +423,165 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     setState(() => _isLongPressSpeed = false);
   }
 
+  Future<void> _fetchMediaInfo() async {
+    final platform = widget.player.platform;
+    if (platform is! NativePlayer) return;
+
+    try {
+      final info = <String, String>{};
+
+      // 视频参数
+      final videoCodec = await platform.getProperty('video-codec');
+      final videoWidth = await platform.getProperty('video-params/w');
+      final videoHeight = await platform.getProperty('video-params/h');
+      final fps = await platform.getProperty('container-fps');
+      final videoBitrate = await platform.getProperty('video-bitrate');
+      final hwdec = await platform.getProperty('hwdec-current');
+
+      if (videoCodec.isNotEmpty) info['视频编码'] = videoCodec;
+      if (videoWidth.isNotEmpty && videoHeight.isNotEmpty) {
+        info['分辨率'] = '${videoWidth}x$videoHeight';
+      }
+      if (fps.isNotEmpty) {
+        final fpsVal = double.tryParse(fps);
+        info['帧率'] = fpsVal != null ? '${fpsVal.toStringAsFixed(2)} fps' : fps;
+      }
+      if (videoBitrate.isNotEmpty) {
+        final br = int.tryParse(videoBitrate);
+        if (br != null && br > 0) {
+          info['视频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
+        }
+      }
+      if (hwdec.isNotEmpty && hwdec != 'no') info['硬解'] = hwdec;
+
+      // 音频参数
+      final audioCodec = await platform.getProperty('audio-codec-name');
+      final channels = await platform.getProperty('audio-params/channel-count');
+      final sampleRate = await platform.getProperty('audio-params/samplerate');
+      final audioBitrate = await platform.getProperty('audio-bitrate');
+
+      if (audioCodec.isNotEmpty) info['音频编码'] = audioCodec;
+      if (channels.isNotEmpty) {
+        final ch = int.tryParse(channels);
+        info['声道'] = ch == 2 ? '立体声' : (ch == 1 ? '单声道' : '$ch 声道');
+      }
+      if (sampleRate.isNotEmpty) {
+        final sr = int.tryParse(sampleRate);
+        info['采样率'] = sr != null ? '${(sr / 1000).toStringAsFixed(1)} kHz' : sampleRate;
+      }
+      if (audioBitrate.isNotEmpty) {
+        final br = int.tryParse(audioBitrate);
+        if (br != null && br > 0) {
+          info['音频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
+        }
+      }
+
+      // 播放信息
+      info['倍速'] = '${_playbackSpeed}x';
+      info['音量'] = '${(_volume * 100).toInt()}%';
+
+      if (mounted) setState(() => _mediaInfo = info);
+    } catch (_) {}
+  }
+
+  void _toggleMediaInfo() {
+    setState(() => _showMediaInfo = !_showMediaInfo);
+    if (_showMediaInfo) {
+      _fetchMediaInfo();
+      _mediaInfoTimer?.cancel();
+      _mediaInfoTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        if (_showMediaInfo && mounted) _fetchMediaInfo();
+      });
+    } else {
+      _mediaInfoTimer?.cancel();
+    }
+  }
+
+  Widget _buildMediaInfoPanel() {
+    final padding = MediaQuery.of(context).padding;
+    return Positioned(
+      top: padding.top + 16,
+      left: padding.left + 16,
+      child: GestureDetector(
+        onTap: () => setState(() => _showMediaInfo = false),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          constraints: const BoxConstraints(maxWidth: 280),
+          decoration: BoxDecoration(
+            color: Colors.black87,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.info_outline, color: Colors.white70, size: 16),
+                  const SizedBox(width: 6),
+                  const Text(
+                    '媒体信息',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => setState(() => _showMediaInfo = false),
+                    child: const Icon(Icons.close, color: Colors.white54, size: 16),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Divider(color: Colors.white24, height: 1),
+              const SizedBox(height: 8),
+              if (_mediaInfo.isEmpty)
+                const Text(
+                  '加载中...',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                )
+              else
+                ..._mediaInfo.entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            e.key,
+                            style: const TextStyle(
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ),
+                        Flexible(
+                          child: Text(
+                            e.value,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontFamily: 'monospace',
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   String _formatDuration(Duration d) {
     final h = d.inHours;
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
@@ -446,7 +614,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 }
               },
               onLongPressStart:
-                  WindowControls.isDesktop || _isLocked ? null : (_) => _startLongPressSpeed(),
+                  WindowControls.isDesktop || _isLocked
+                      ? null
+                      : (details) {
+                          final screenWidth = MediaQuery.of(context).size.width;
+                          if (details.globalPosition.dx < screenWidth / 2) {
+                            _toggleMediaInfo();
+                          } else {
+                            _startLongPressSpeed();
+                          }
+                        },
               onLongPressEnd:
                   WindowControls.isDesktop || _isLocked ? null : (_) => _endLongPressSpeed(),
               onPanStart: WindowControls.isDesktop || _isLocked ? null : _onPanStart,
@@ -465,6 +642,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           if (_showVolumeOverlay) _buildVolumeOverlay(),
           // 进度指示器
           if (_showSeekOverlay) _buildSeekOverlay(),
+          // 媒体信息面板
+          if (_showMediaInfo) _buildMediaInfoPanel(),
           // 控制栏
           if (_visible) ...[
             _buildTopBar(),
@@ -629,7 +808,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           Navigator.of(context).maybePop();
         };
     final padding = MediaQuery.of(context).padding;
-    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
+    const horizontalPadding = 12.0;
+    final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
     const barHeight = 44.0;
 
     return Positioned(
@@ -646,15 +826,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         ),
         child: Padding(
           padding: EdgeInsets.only(
-            top: padding.top + 10,
-            left: padding.left + horizontalPadding,
+            top: WindowControls.isDesktop ? 0 : (padding.top + 10),
+            left: padding.left + leftPadding,
             right: padding.right + (WindowControls.isWindows ? 0 : horizontalPadding),
-            bottom: 10,
+            bottom: WindowControls.isDesktop ? 0 : 10,
           ),
           child: Material(
             color: Colors.transparent,
             child: SizedBox(
-              height: WindowControls.isMacOS ? 52 : barHeight,
+              height: barHeight,
               child: Stack(
                 children: [
                   if (WindowControls.isDesktop)
@@ -716,7 +896,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildProgressBar() {
     final padding = MediaQuery.of(context).padding;
     final bottomPadding = WindowControls.isDesktop ? 0.0 : padding.bottom;
-    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
+    const horizontalPadding = 12.0;
     return Positioned(
       left: horizontalPadding + padding.left,
       right: horizontalPadding + padding.right,
@@ -780,7 +960,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   Widget _buildBottomBar() {
     final padding = MediaQuery.of(context).padding;
-    final horizontalPadding = WindowControls.isMacOS ? 72.0 : 12.0;
+    const horizontalPadding = 12.0;
     return Positioned(
       left: 0,
       right: 0,
