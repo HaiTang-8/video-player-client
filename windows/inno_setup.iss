@@ -16,6 +16,8 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
+CloseApplications=yes
+RestartApplications=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Languages]
@@ -34,4 +36,4 @@ Name: "{group}\{cm:UninstallProgram,观影}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\观影"; Filename: "{app}\guanying.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\guanying.exe"; Description: "{cm:LaunchProgram,观影}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\guanying.exe"; Description: "{cm:LaunchProgram,观影}"; Flags: nowait postinstall
