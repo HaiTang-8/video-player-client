@@ -32,7 +32,19 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   static const _sorts = ['最新更新', '最新上映', '影片评分'];
   static const _types = ['类型', '剧情', '喜剧', '动作', '爱情', '惊悚', '犯罪', '悬疑', '战争', '科幻', '动画', '恐怖', '家庭', '冒险', '动作冒险', '奇幻', '历史', '音乐', '记录', '儿童', '真人秀', '脱口秀', '肥皂剧', '新闻', '西部'];
   static const _regions = ['地区', '中国大陆', '中国香港', '中国台湾', '新加坡', '欧美', '美国', '日本', '韩国', '泰国', '英国', '法国', '德国', '意大利', '西班牙', '印度', '俄罗斯', '加拿大', '澳大利亚', '爱尔兰', '瑞典', '巴西', '丹麦'];
-  static const _years = ['年份', '2020年代', '2025', '2024', '2023', '2022', '2021', '2020', '2010年代', '2000年代', '90年代', '80年代', '70年代', '60年代', '更早'];
+  static List<String> get _years {
+    final currentYear = DateTime.now().year;
+    final decadeStart = (currentYear ~/ 10) * 10;
+    final years = <String>['年份', '$decadeStart年代'];
+    for (var y = currentYear; y >= decadeStart; y--) {
+      years.add('$y');
+    }
+    for (var d = decadeStart - 10; d >= 1960; d -= 10) {
+      years.add(d >= 2000 ? '$d年代' : '${d % 100}年代');
+    }
+    years.add('更早');
+    return years;
+  }
 
   @override
   void initState() {
