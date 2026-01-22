@@ -88,6 +88,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   double _originalSpeed = 1.0;
   Timer? _longPressTimer;
 
+  // D键二倍速锁定
+  bool _isDoubleSpeedLocked = false;
+  double _speedBeforeDoubleLock = 1.0;
+
   /// 剧集列表的滚动位置缓存：
   /// - 关闭列表前记录当前 offset
   /// - 再次打开时使用该 offset 初始化，从而避免"每次打开都自动滚动到当前播放项"
@@ -376,6 +380,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     } else if (key == LogicalKeyboardKey.tab) {
       _toggleMediaInfo();
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyD) {
+      _toggleDoubleSpeedLock();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
   }
@@ -421,6 +428,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     if (!_isLongPressSpeed) return;
     widget.player.setRate(_originalSpeed);
     setState(() => _isLongPressSpeed = false);
+  }
+
+  void _toggleDoubleSpeedLock() {
+    if (_isDoubleSpeedLocked) {
+      widget.player.setRate(_speedBeforeDoubleLock);
+      setState(() => _isDoubleSpeedLocked = false);
+    } else {
+      _speedBeforeDoubleLock = _playbackSpeed;
+      widget.player.setRate(2.0);
+      setState(() => _isDoubleSpeedLocked = true);
+    }
   }
 
   Future<void> _fetchMediaInfo() async {
