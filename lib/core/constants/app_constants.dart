@@ -27,6 +27,9 @@ class AppConstants {
   static const String downloadMultiThreadEnabledKey = 'download_multi_thread_enabled';
   static const String downloadEngineKey = 'download_engine';
 
+  // 桌面端平滑滚动
+  static const String smoothScrollEnabledKey = 'smooth_scroll_enabled';
+
   // 分页
   static const int defaultPageSize = 20;
 

@@ -28,6 +28,7 @@ class SettingsScreen extends ConsumerWidget {
     final currentServer = serverState.currentServer;
     final aria2Config = ref.watch(aria2ConfigProvider);
     final isDesktop = WindowControls.isDesktop;
+    final smoothScrollEnabled = isDesktop ? ref.watch(smoothScrollEnabledProvider) : false;
 
     return Scaffold(
       appBar: isDesktop
@@ -69,6 +70,17 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: _getThemeModeText(themeMode),
                 onTap: () => _showThemeDialog(context, ref, themeMode),
               ),
+              if (isDesktop) ...[
+                _buildDivider(isDark),
+                _buildSwitchTile(
+                  theme, isDark,
+                  icon: CupertinoIcons.rectangle_on_rectangle_angled,
+                  iconColor: Colors.indigo,
+                  title: '平滑滚动',
+                  value: smoothScrollEnabled,
+                  onChanged: (_) => ref.read(smoothScrollEnabledProvider.notifier).toggle(),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 24),
@@ -237,6 +249,46 @@ class SettingsScreen extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile(
+    ThemeData theme,
+    bool isDark, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 18, color: iconColor),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          CupertinoSwitch(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
       ),
     );
   }

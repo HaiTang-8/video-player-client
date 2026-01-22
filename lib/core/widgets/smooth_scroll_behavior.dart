@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scroll_animator/scroll_animator.dart';
+import '../../providers/smooth_scroll_provider.dart';
 
 class SmoothScrollBehavior extends MaterialScrollBehavior {
   @override
@@ -25,7 +27,7 @@ class SmoothScrollBehavior extends MaterialScrollBehavior {
   }
 }
 
-class DesktopSmoothScroll extends StatelessWidget {
+class DesktopSmoothScroll extends ConsumerWidget {
   final Widget child;
 
   const DesktopSmoothScroll({
@@ -37,8 +39,12 @@ class DesktopSmoothScroll extends StatelessWidget {
       Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     if (!isDesktop) {
+      return child;
+    }
+    final enabled = ref.watch(smoothScrollEnabledProvider);
+    if (!enabled) {
       return child;
     }
     return AnimatedPrimaryScrollController(
@@ -50,3 +56,4 @@ class DesktopSmoothScroll extends StatelessWidget {
     );
   }
 }
+
