@@ -1,0 +1,38 @@
+{
+  "categories": [
+    {
+      "title": "## 🚀 Features",
+      "labels": ["feat", "feature"]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": ["fix", "bug"]
+    },
+    {
+      "title": "## ♻️ Refactoring",
+      "labels": ["refactor"]
+    },
+    {
+      "title": "## ⚡ Performance",
+      "labels": ["perf"]
+    },
+    {
+      "title": "## 🧪 Tests",
+      "labels": ["test"]
+    },
+    {
+      "title": "## 📦 Build & CI",
+      "labels": ["build", "ci", "chore"]
+    }
+  ],
+  "ignore_labels": [
+    "ignore"
+  ],
+  "sort": {
+    "order": "ASC",
+    "on_property": "date"
+  },
+  "template": "${{CHANGELOG}}",
+  "pr_template": "- ${{TITLE}} @${{AUTHOR}}",
+  "empty_template": "- No changes found"
+}
