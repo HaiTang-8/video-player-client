@@ -32,10 +32,10 @@ class DesktopTitleBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final bg =
         backgroundColor ??
-        theme.appBarTheme.backgroundColor ??
-        theme.colorScheme.surface;
+        (isDark ? const Color(0xFF1A1A1A) : const Color(0xFFFAFAFA));
     final fg =
         foregroundColor ??
         theme.appBarTheme.foregroundColor ??

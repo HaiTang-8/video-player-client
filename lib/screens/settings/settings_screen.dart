@@ -489,7 +489,13 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
     showCupertinoDialog(
       context: context,
       builder: (context) => CupertinoAlertDialog(
-        title: Text('发现新版本 ${info.version}'),
+        title: Text(
+          '发现新版本 ${info.version}',
+          style: const TextStyle(
+            fontFamily: 'HarmonyOS_Sans',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         content: Column(
           children: [
             const SizedBox(height: 8),
@@ -498,10 +504,18 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
                 info.releaseNotes!.length > 200
                     ? '${info.releaseNotes!.substring(0, 200)}...'
                     : info.releaseNotes!,
-                style: const TextStyle(fontSize: 13),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontFamily: 'HarmonyOS_Sans',
+                ),
               )
             else
-              const Text('有新版本可用'),
+              const Text(
+                '有新版本可用',
+                style: TextStyle(
+                  fontFamily: 'HarmonyOS_Sans',
+                ),
+              ),
           ],
         ),
         actions: [

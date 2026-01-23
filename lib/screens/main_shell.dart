@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/window/window_controls.dart';
 import '../providers/providers.dart';
 
 class MainShell extends ConsumerStatefulWidget {
@@ -70,6 +71,9 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final navBgColor = isDark
+        ? const Color(0xFF1A1A1A)
+        : (WindowControls.isDesktop ? const Color(0xFFFAFAFA) : Colors.white);
 
     return Scaffold(
       body: widget.child,
@@ -82,7 +86,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             color: isDark ? Colors.grey[800] : Colors.grey[300],
           ),
           Container(
-            color: isDark ? const Color(0xFF1A1A1A) : Colors.white,
+            color: navBgColor,
             child: SafeArea(
               top: false,
               child: Padding(

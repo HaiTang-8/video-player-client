@@ -9,6 +9,7 @@ import 'core/constants/app_constants.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/smooth_scroll_behavior.dart';
+import 'core/widgets/window_border.dart';
 import 'core/widgets/ios_ui_utils.dart';
 import 'data/services/aria2_manager.dart';
 import 'data/services/log_service.dart';
@@ -110,18 +111,20 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
       }
     });
 
-    return MaterialApp.router(
-      title: 'Media Player',
-      debugShowCheckedModeBanner: false,
-      scrollBehavior: SmoothScrollBehavior(),
-      actions: {
-        ...WidgetsApp.defaultActions,
-        ScrollIntent: AnimatedScrollAction(),
-      },
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
-      routerConfig: router,
+    return WindowBorder(
+      child: MaterialApp.router(
+        title: 'Media Player',
+        debugShowCheckedModeBanner: false,
+        scrollBehavior: SmoothScrollBehavior(),
+        actions: {
+          ...WidgetsApp.defaultActions,
+          ScrollIntent: AnimatedScrollAction(),
+        },
+        theme: AppTheme.lightTheme,
+        darkTheme: AppTheme.darkTheme,
+        themeMode: themeMode,
+        routerConfig: router,
+      ),
     );
   }
 }
