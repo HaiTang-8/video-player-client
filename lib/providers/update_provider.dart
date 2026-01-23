@@ -66,6 +66,11 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 
   Future<void> downloadAndInstall() async {
+    if (Platform.isMacOS) {
+      await UpdateService.instance.triggerUpdate();
+      return;
+    }
+
     final info = state.releaseInfo;
     if (info == null) return;
 

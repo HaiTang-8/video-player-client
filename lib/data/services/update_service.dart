@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -29,6 +30,16 @@ class ReleaseInfo {
 class UpdateService {
   UpdateService._();
   static final instance = UpdateService._();
+
+  Future<void> init() async {
+    if (Platform.isMacOS) {
+      await autoUpdater.setFeedURL(
+        'https://github.com/${AppConstants.githubOwner}/${AppConstants.githubRepo}/releases/latest/download/appcast.xml',
+      );
+      await autoUpdater.setScheduledCheckInterval(3600);
+      await autoUpdater.checkForUpdates(inBackground: true);
+    }
+  }
 
   Future<String> getCurrentVersion() async {
     final info = await PackageInfo.fromPlatform();
@@ -88,6 +99,8 @@ class UpdateService {
       return RegExp(r'guanying.*windows.*-setup\.exe$', caseSensitive: false);
     } else if (Platform.isAndroid) {
       return RegExp(r'guanying.*android.*arm64.*\.apk$', caseSensitive: false);
+    } else if (Platform.isMacOS) {
+      return RegExp(r'guanying.*macos.*\.dmg$', caseSensitive: false);
     }
     throw UnsupportedError('Unsupported platform for update');
   }
@@ -138,6 +151,14 @@ class UpdateService {
       await _installWindows(filePath);
     } else if (Platform.isAndroid) {
       await _installAndroid(filePath);
+    } else if (Platform.isMacOS) {
+      throw UnsupportedError('macOS uses Sparkle for updates, call triggerUpdate() instead');
+    }
+  }
+
+  Future<void> triggerUpdate() async {
+    if (Platform.isMacOS) {
+      await autoUpdater.checkForUpdates();
     }
   }
 

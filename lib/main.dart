@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -13,6 +12,7 @@ import 'core/widgets/smooth_scroll_behavior.dart';
 import 'core/widgets/ios_ui_utils.dart';
 import 'data/services/aria2_manager.dart';
 import 'data/services/log_service.dart';
+import 'data/services/update_service.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
 
@@ -36,14 +36,8 @@ void main() async {
     }
   }
 
-  // macOS 初始化 Sparkle 自动更新
-  if (Platform.isMacOS) {
-    await autoUpdater.setFeedURL(
-      'https://github.com/${AppConstants.githubOwner}/${AppConstants.githubRepo}/releases/latest/download/appcast.xml',
-    );
-    await autoUpdater.setScheduledCheckInterval(3600);
-    await autoUpdater.checkForUpdates(inBackground: true);
-  }
+  // 初始化更新服务（macOS Sparkle）
+  await UpdateService.instance.init();
 
   runApp(
     ProviderScope(

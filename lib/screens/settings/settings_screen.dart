@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -475,12 +474,12 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
   }
 
   void _handleTap(UpdateState updateState) {
-    if (Platform.isMacOS) {
-      autoUpdater.checkForUpdates();
-      return;
-    }
     if (updateState.status == UpdateStatus.available) {
-      _showUpdateDialog(updateState.releaseInfo!);
+      if (Platform.isMacOS) {
+        ref.read(updateProvider.notifier).downloadAndInstall();
+      } else {
+        _showUpdateDialog(updateState.releaseInfo!);
+      }
     } else {
       ref.read(updateProvider.notifier).checkForUpdate();
     }
