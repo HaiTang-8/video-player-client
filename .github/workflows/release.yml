@@ -55,18 +55,31 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
       - run: flutter build macos --release --build-name=${{ steps.version.outputs.VERSION }}
-      - name: Create DMG
+      - name: Download Sparkle tools
+        run: |
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz" -o Sparkle.tar.xz
+          tar -xf Sparkle.tar.xz
+      - name: Create and Sign DMG
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           brew install create-dmg
           create-dmg \
             --volname "观影" \
             --no-internet-enable \
-            "media_player-macos.dmg" \
+            "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" \
             "build/macos/Build/Products/Release/观影.app"
+
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key
+            SIGNATURE=$(./bin/sign_update "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" -f /tmp/sparkle_private_key | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
+            echo "SPARKLE_SIGNATURE=$SIGNATURE" >> $GITHUB_ENV
+            rm /tmp/sparkle_private_key
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: media_player-macos.dmg
+          path: guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
 
   build-android:
     runs-on: ubuntu-latest
@@ -136,19 +149,51 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Generate appcast.xml
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           REPO="HaiTang-8/video-player-client"
+
+          # Windows EXE info
           EXE_URL="https://github.com/${REPO}/releases/download/v${VERSION}/guanying-windows-${VERSION}-setup.exe"
           EXE_SIZE=$(stat -c%s "artifacts/guanying-windows-${VERSION}-setup.exe" 2>/dev/null || echo "0")
 
+          # macOS DMG info
+          DMG_URL="https://github.com/${REPO}/releases/download/v${VERSION}/guanying-macos-${VERSION}.dmg"
+          DMG_SIZE=$(stat -c%s "artifacts/guanying-macos-${VERSION}.dmg" 2>/dev/null || echo "0")
+
+          # Sign macOS DMG if key is available
+          MACOS_SIGNATURE=""
+          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
+            curl -L "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-for-Swift-Package-Manager.zip" -o Sparkle.zip
+            unzip -q Sparkle.zip
+            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key
+            MACOS_SIGNATURE=$(./bin/sign_update "artifacts/guanying-macos-${VERSION}.dmg" -f /tmp/sparkle_private_key 2>/dev/null | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2 || echo "")
+            rm -f /tmp/sparkle_private_key
+          fi
+
           cat > artifacts/appcast.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
-          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
             <channel>
               <title>观影</title>
               <description>观影应用更新</description>
               <language>zh-CN</language>
+              <item>
+                <title>版本 ${VERSION}</title>
+                <sparkle:version>${VERSION}</sparkle:version>
+                <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
+                <pubDate>$(date -R)</pubDate>
+                <enclosure
+                  url="${DMG_URL}"
+                  sparkle:version="${VERSION}"
+                  sparkle:shortVersionString="${VERSION}"
+                  sparkle:edSignature="${MACOS_SIGNATURE}"
+                  length="${DMG_SIZE}"
+                  type="application/x-apple-diskimage"
+                  sparkle:os="macos"/>
+              </item>
               <item>
                 <title>版本 ${VERSION}</title>
                 <sparkle:version>${VERSION}</sparkle:version>

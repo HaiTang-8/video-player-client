@@ -46,7 +46,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
   @override
   UpdateState build() => const UpdateState();
 
-  bool get supportsUpdate => Platform.isWindows || Platform.isAndroid;
+  bool get supportsUpdate => Platform.isWindows || Platform.isAndroid || Platform.isMacOS;
 
   Future<void> checkForUpdate() async {
     if (!supportsUpdate) return;

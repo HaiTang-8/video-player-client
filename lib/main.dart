@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:auto_updater/auto_updater.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
@@ -33,6 +34,15 @@ void main() async {
     if (engine == 'aria2Builtin') {
       _initAria2();
     }
+  }
+
+  // macOS 初始化 Sparkle 自动更新
+  if (Platform.isMacOS) {
+    await autoUpdater.setFeedURL(
+      'https://github.com/${AppConstants.githubOwner}/${AppConstants.githubRepo}/releases/latest/download/appcast.xml',
+    );
+    await autoUpdater.setScheduledCheckInterval(3600);
+    await autoUpdater.checkForUpdates(inBackground: true);
   }
 
   runApp(
