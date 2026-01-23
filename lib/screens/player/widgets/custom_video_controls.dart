@@ -279,7 +279,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
     if (_panDirection == 'horizontal') {
       final screenWidth = MediaQuery.of(context).size.width;
-      final delta = details.delta.dx / screenWidth * _duration.inMilliseconds;
+      final delta = details.delta.dx / screenWidth * _duration.inMilliseconds * 0.3;
       setState(() {
         _seekPosition = Duration(
           milliseconds: (_seekPosition.inMilliseconds + delta.toInt()).clamp(
@@ -688,7 +688,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           // 长按倍速提示
           if (_isLongPressSpeed)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 60,
+              top: MediaQuery.of(context).padding.top + 20,
               left: 0,
               right: 0,
               child: Center(
