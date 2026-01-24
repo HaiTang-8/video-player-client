@@ -1019,6 +1019,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildAudioTrackButton(),
+                    const SizedBox(width: 12),
                     _buildSubtitleButton(
                         isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
