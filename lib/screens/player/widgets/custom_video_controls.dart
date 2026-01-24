@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -543,7 +544,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 13,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   const Spacer(),
@@ -923,7 +924,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         children: [
           Text(
             _formatDuration(_position),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -969,7 +970,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           const SizedBox(width: 8),
           Text(
             _formatDuration(_duration),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ],
       ),
@@ -1017,8 +1018,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet()),
-                    _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet(),
+                    _buildAudioTrackButton(),
+                    _buildSubtitleButton(
                         isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
                       _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu,
@@ -1093,15 +1094,136 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   Widget _buildSpeedButton() {
+    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
     final isDesktop = WindowControls.isDesktop;
-    return GestureDetector(
-      onTap: _showSpeedSheet,
-      child: Container(
-        constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
-        alignment: Alignment.center,
-        child: Text(
-          '${_playbackSpeed}x',
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+    return PullDownButton(
+      routeTheme: isDesktop ? null : const PullDownMenuRouteTheme(width: 100),
+      itemBuilder: (context) => speeds
+          .map(
+            (s) => PullDownMenuItem.selectable(
+              title: '${s}x',
+              selected: (_playbackSpeed - s).abs() < 0.01,
+              onTap: () {
+                widget.player.setRate(s);
+                widget.onSpeedChanged?.call(s);
+                _startHideTimer();
+              },
+            ),
+          )
+          .toList(),
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          _hideTimer?.cancel();
+          showMenu();
+        },
+        child: Container(
+          constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
+          alignment: Alignment.center,
+          child: Text(
+            '${_playbackSpeed}x',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAudioTrackButton({bool isLast = false}) {
+    final isDesktop = WindowControls.isDesktop;
+    if (isDesktop) {
+      return _buildIconButton(Icons.graphic_eq, () => _showAudioTrackSheet(), isLast: isLast);
+    }
+    final tracks = _audioTracks.where((t) => t.id != 'no').toList();
+    return PullDownButton(
+      routeTheme: const PullDownMenuRouteTheme(width: 150),
+      itemBuilder: (context) => [
+        if (tracks.isEmpty)
+          PullDownMenuItem(title: '无可用音轨', enabled: false, onTap: () {}),
+        ...tracks.map(
+          (t) => PullDownMenuItem.selectable(
+            title: t.title ?? t.language ?? t.id,
+            selected: _currentAudioTrack?.id == t.id,
+            onTap: () {
+              widget.player.setAudioTrack(t);
+              _startHideTimer();
+            },
+          ),
+        ),
+      ],
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          _hideTimer?.cancel();
+          showMenu();
+        },
+        child: Padding(
+          padding: EdgeInsets.only(left: isLast ? 6 : 0),
+          child: const Icon(Icons.graphic_eq, color: Colors.white, size: 28),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubtitleButton({bool isLast = false}) {
+    final isDesktop = WindowControls.isDesktop;
+    if (isDesktop) {
+      return _buildIconButton(Icons.subtitles_outlined, () => _showSubtitleSheet(), isLast: isLast);
+    }
+    final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
+    final externalSubs = widget.externalSubtitles;
+    final currentId = _currentSubtitleTrack?.id;
+    return PullDownButton(
+      routeTheme: const PullDownMenuRouteTheme(width: 150),
+      itemBuilder: (context) => [
+        PullDownMenuItem.selectable(
+          title: '关闭',
+          selected: currentId == 'no' || currentId == null,
+          onTap: () {
+            widget.player.setSubtitleTrack(SubtitleTrack.no());
+            _startHideTimer();
+          },
+        ),
+        if (embeddedTracks.isNotEmpty) const PullDownMenuDivider.large(),
+        ...embeddedTracks.map(
+          (t) => PullDownMenuItem.selectable(
+            title: t.title ?? t.language ?? t.id,
+            selected: currentId == t.id,
+            onTap: () {
+              widget.player.setSubtitleTrack(t);
+              _startHideTimer();
+            },
+          ),
+        ),
+        if (externalSubs.isNotEmpty) const PullDownMenuDivider.large(),
+        ...externalSubs.map(
+          (sub) => PullDownMenuItem.selectable(
+            title: sub.displayName,
+            selected: currentId == 'external_${sub.path}',
+            onTap: () {
+              final subUrl = sub.url.startsWith('http')
+                  ? sub.url
+                  : '${widget.serverUrl ?? ''}${sub.url}';
+              widget.player.setSubtitleTrack(
+                SubtitleTrack.uri(subUrl, title: sub.displayName),
+              );
+              _startHideTimer();
+            },
+          ),
+        ),
+        if (embeddedTracks.isEmpty && externalSubs.isEmpty)
+          PullDownMenuItem(title: '无可用字幕', enabled: false, onTap: () {}),
+      ],
+      buttonBuilder: (context, showMenu) => GestureDetector(
+        onTap: () {
+          _hideTimer?.cancel();
+          showMenu();
+        },
+        child: Padding(
+          padding: EdgeInsets.only(left: isLast ? 6 : 0),
+          child: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 28),
         ),
       ),
     );
@@ -1212,47 +1334,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showSpeedSheet() {
-    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      builder:
-          (ctx) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(
-                    '倍速',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-                ...speeds.map(
-                  (s) => ListTile(
-                    title: Text(
-                      '${s}x',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    trailing:
-                        (_playbackSpeed - s).abs() < 0.01
-                            ? const Icon(Icons.check, color: Colors.red)
-                            : null,
-                    onTap: () {
-                      widget.player.setRate(s);
-                      widget.onSpeedChanged?.call(s);
-                      Navigator.pop(ctx);
-                      _startHideTimer();
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
     );
   }
 

@@ -198,7 +198,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                     Text(
                       '快进/快退时长',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                     CupertinoButton(
@@ -206,7 +206,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                         '完成',
                         style: TextStyle(
                           color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       onPressed: () {
@@ -268,7 +268,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
               child: Text(
                 '播放速度',
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
@@ -318,7 +318,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                 child: Text(
                   '${speed}x',
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
                     color: isSelected ? theme.colorScheme.primary : null,
                   ),
                 ),

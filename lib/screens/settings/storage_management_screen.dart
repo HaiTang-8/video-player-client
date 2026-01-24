@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/services/storage_management_service.dart';
@@ -38,28 +39,14 @@ class _StorageManagementScreenState extends State<StorageManagementScreen> {
   }
 
   Future<void> _clearCategory(StorageCategory category) async {
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text('清除${category.name}'),
-        content: Text(
-          category.id == 'downloads'
-              ? '确定要删除所有已下载的视频文件吗？此操作不可恢复。'
-              : '确定要清除${category.name}吗？',
-        ),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('清除'),
-          ),
-        ],
-      ),
+      title: '清除${category.name}',
+      content: category.id == 'downloads'
+          ? '确定要删除所有已下载的视频文件吗？此操作不可恢复。'
+          : '确定要清除${category.name}吗？',
+      confirmText: '清除',
+      isDestructive: true,
     );
 
     if (confirmed == true && mounted) {
@@ -73,24 +60,12 @@ class _StorageManagementScreenState extends State<StorageManagementScreen> {
   }
 
   Future<void> _clearAllCache() async {
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('清除所有缓存'),
-        content: const Text('将清除图片缓存、日志文件和临时文件。下载的视频文件不会被删除。'),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('清除'),
-          ),
-        ],
-      ),
+      title: '清除所有缓存',
+      content: '将清除图片缓存、日志文件和临时文件。下载的视频文件不会被删除。',
+      confirmText: '清除',
+      isDestructive: true,
     );
 
     if (confirmed == true && mounted) {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../providers/version_provider.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -308,62 +309,20 @@ class SettingsScreen extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     ThemeMode current,
-  ) {
-    showCupertinoModalPopup<ThemeMode>(
+  ) async {
+    final selected = await DialogUtils.showSelectionDialog<ThemeMode>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        title: const Text('选择主题'),
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context, ThemeMode.system),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('跟随系统'),
-                if (current == ThemeMode.system) ...[
-                  const SizedBox(width: 8),
-                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
-                ],
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context, ThemeMode.light),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('浅色'),
-                if (current == ThemeMode.light) ...[
-                  const SizedBox(width: 8),
-                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
-                ],
-              ],
-            ),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(context, ThemeMode.dark),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text('深色'),
-                if (current == ThemeMode.dark) ...[
-                  const SizedBox(width: 8),
-                  const Icon(CupertinoIcons.checkmark_alt, size: 18),
-                ],
-              ],
-            ),
-          ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-      ),
-    ).then((value) {
-      if (value != null) {
-        ref.read(themeModeProvider.notifier).setThemeMode(value);
-      }
-    });
+      title: '选择主题',
+      options: [
+        SelectionOption(value: ThemeMode.system, label: '跟随系统'),
+        SelectionOption(value: ThemeMode.light, label: '浅色'),
+        SelectionOption(value: ThemeMode.dark, label: '深色'),
+      ],
+      currentValue: current,
+    );
+    if (selected != null) {
+      ref.read(themeModeProvider.notifier).setThemeMode(selected);
+    }
   }
 }
 
@@ -485,54 +444,22 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
     }
   }
 
-  void _showUpdateDialog(ReleaseInfo info) {
-    showCupertinoDialog(
+  void _showUpdateDialog(ReleaseInfo info) async {
+    final content = info.releaseNotes != null && info.releaseNotes!.isNotEmpty
+        ? (info.releaseNotes!.length > 200
+            ? '${info.releaseNotes!.substring(0, 200)}...'
+            : info.releaseNotes!)
+        : '有新版本可用';
+
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(
-          '发现新版本 ${info.version}',
-          style: const TextStyle(
-            fontFamily: 'HarmonyOS_Sans',
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        content: Column(
-          children: [
-            const SizedBox(height: 8),
-            if (info.releaseNotes != null && info.releaseNotes!.isNotEmpty)
-              Text(
-                info.releaseNotes!.length > 200
-                    ? '${info.releaseNotes!.substring(0, 200)}...'
-                    : info.releaseNotes!,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontFamily: 'HarmonyOS_Sans',
-                ),
-              )
-            else
-              const Text(
-                '有新版本可用',
-                style: TextStyle(
-                  fontFamily: 'HarmonyOS_Sans',
-                ),
-              ),
-          ],
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('稍后'),
-            onPressed: () => Navigator.pop(context),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            child: const Text('立即更新'),
-            onPressed: () {
-              Navigator.pop(context);
-              ref.read(updateProvider.notifier).downloadAndInstall();
-            },
-          ),
-        ],
-      ),
+      title: '发现新版本 ${info.version}',
+      content: content,
+      cancelText: '稍后',
+      confirmText: '立即更新',
     );
+    if (confirmed == true) {
+      ref.read(updateProvider.notifier).downloadAndInstall();
+    }
   }
 }

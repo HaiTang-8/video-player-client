@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/window/window_controls.dart';
@@ -262,7 +262,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
         await ref.read(databaseBackupsProvider.notifier).createBackup();
     if (mounted) {
       setState(() => _isCreating = false);
-      IosUiUtils.showToast(
+      DialogUtils.showToast(
         context: context,
         message: success ? '备份创建成功' : '备份创建失败',
         isError: !success,
@@ -303,7 +303,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
   }
 
   Future<void> _confirmDelete(dynamic backup) async {
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '确认删除',
       content: '确定要删除备份 ${backup.name} 吗？此操作不可恢复。',
@@ -315,7 +315,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
           .read(databaseBackupsProvider.notifier)
           .deleteBackup(backup.name);
       if (mounted) {
-        IosUiUtils.showToast(
+        DialogUtils.showToast(
           context: context,
           message: success ? '备份已删除' : '删除失败',
           isError: !success,
@@ -325,7 +325,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
   }
 
   Future<void> _confirmRollback(dynamic backup) async {
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '确认回滚',
       content: '回滚将替换当前数据库，服务器会自动重启。确定要回滚到 ${backup.name} 吗？',
@@ -337,7 +337,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
           .read(databaseBackupsProvider.notifier)
           .rollback(backup.name);
       if (mounted) {
-        IosUiUtils.showToast(
+        DialogUtils.showToast(
           context: context,
           message: success ? '回滚成功，服务器即将重启' : '回滚失败',
           isError: !success,

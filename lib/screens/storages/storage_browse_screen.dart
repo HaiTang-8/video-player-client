@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -267,7 +267,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     child: Text(
                       file.name,
                       style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -329,7 +329,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
 
   void _copyToClipboard(BuildContext context, String text) {
     Clipboard.setData(ClipboardData(text: text));
-    IosUiUtils.showToast(context: context, message: '已复制');
+    DialogUtils.showToast(context: context, message: '已复制');
   }
 }
 

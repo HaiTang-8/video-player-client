@@ -59,7 +59,7 @@ class _ImageSelectorSheetState extends State<ImageSelectorSheet> {
                   title,
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 CupertinoButton(

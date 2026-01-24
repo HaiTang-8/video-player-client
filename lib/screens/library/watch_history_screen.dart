@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -55,24 +56,12 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   }
 
   Future<void> _deleteAll() async {
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('确认清空'),
-        content: const Text('确定要清空所有观看记录吗？'),
-        actions: [
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确定'),
-          ),
-        ],
-      ),
+      title: '确认清空',
+      content: '确定要清空所有观看记录吗？',
+      confirmText: '确定',
+      isDestructive: true,
     );
     if (confirmed == true) {
       await ref.read(watchHistoryProvider.notifier).deleteAll();

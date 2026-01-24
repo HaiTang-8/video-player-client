@@ -9,7 +9,7 @@ import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/image_selector_sheet.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/overview_preview_text.dart';
@@ -567,7 +567,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Future<void> _downloadMovie(BuildContext context, Movie movie) async {
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '下载电影',
       content: '确定要下载「${movie.title}」吗？',
@@ -577,7 +577,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     final downloadManager = ref.read(downloadManagerProvider.notifier);
     downloadManager.addMovieDownload(movie: movie);
-    IosUiUtils.showToast(context: context, message: '已添加到下载队列');
+    DialogUtils.showToast(context: context, message: '已添加到下载队列');
   }
 
   List<Widget> _buildDesktopActions(Movie? movie) {
@@ -882,16 +882,16 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final service = ref.read(mediaServiceProvider);
     final serverBaseUrl = ref.read(serverUrlProvider);
     if (service == null) {
-      IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
       return;
     }
 
     if (movie.tmdbId == null) {
-      IosUiUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
+      DialogUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
       return;
     }
 
-    IosUiUtils.showLoadingDialog(context: context, message: '加载图片中...');
+    DialogUtils.showLoadingDialog(context: context, message: '加载图片中...');
 
     final resp = await service.getMovieImages(movie.id);
 
@@ -901,7 +901,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     if (!context.mounted) return;
 
     if (!resp.isSuccess || resp.data == null) {
-      IosUiUtils.showToast(
+      DialogUtils.showToast(
         context: context,
         message: resp.error ?? '获取图片失败',
         isError: true,
@@ -923,7 +923,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       currentUrl: currentUrl,
       serverBaseUrl: serverBaseUrl,
       onSelect: (url) async {
-        IosUiUtils.showLoadingDialog(context: context, message: '更新中...');
+        DialogUtils.showLoadingDialog(context: context, message: '更新中...');
 
         final updateResp = type == ImageSelectorType.poster
             ? await service.updateMoviePoster(movie.id, posterPath: url)
@@ -937,9 +937,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         if (updateResp.isSuccess) {
           ref.invalidate(movieDetailProvider(widget.movieId));
           ref.read(postersProvider.notifier).refresh();
-          IosUiUtils.showToast(context: context, message: '更新成功');
+          DialogUtils.showToast(context: context, message: '更新成功');
         } else {
-          IosUiUtils.showToast(
+          DialogUtils.showToast(
             context: context,
             message: updateResp.error ?? '更新失败',
             isError: true,
@@ -952,11 +952,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Future<void> _scrapeMovie(BuildContext context, int id) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
-      IosUiUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
       return;
     }
 
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '重新刮削',
       content: '将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？',
@@ -965,7 +965,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (confirmed != true || !context.mounted) return;
 
-    IosUiUtils.showLoadingDialog(context: context, message: '正在刮削...');
+    DialogUtils.showLoadingDialog(context: context, message: '正在刮削...');
 
     final resp = await service.scrapeMovie(id);
 
@@ -976,11 +976,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (resp.isSuccess) {
       ref.invalidate(movieDetailProvider(id));
-      IosUiUtils.showToast(context: context, message: '刮削完成');
+      DialogUtils.showToast(context: context, message: '刮削完成');
       return;
     }
 
-    IosUiUtils.showToast(
+    DialogUtils.showToast(
       context: context,
       message: resp.error ?? '刮削失败',
       isError: true,

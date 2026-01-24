@@ -8,7 +8,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../core/widgets/download_indicators.dart';
@@ -448,7 +448,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
               onPressed: isTesting ? null : () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
-                  IosUiUtils.showToast(context: context, message: '请输入名称', isError: true);
+                  DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
                   return;
                 }
 
@@ -466,7 +466,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                 } else {
                   if (streamMode == 'redirect' &&
                       publicBaseUrlController.text.trim().isEmpty) {
-                    IosUiUtils.showToast(
+                    DialogUtils.showToast(
                       context: context,
                       message: '直连模式需要填写直连基地址',
                       isError: true,
@@ -496,7 +496,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                 if (!success) {
                   setState(() => isTesting = false);
                   if (context.mounted) {
-                    IosUiUtils.showToast(context: context, message: '保存失败', isError: true);
+                    DialogUtils.showToast(context: context, message: '保存失败', isError: true);
                   }
                   return;
                 }
@@ -508,9 +508,9 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                   Navigator.pop(context);
                   final browseState = ref.read(browseProvider(storage.id));
                   if (browseState.error != null) {
-                    IosUiUtils.showToast(context: context, message: '已保存，但连接测试失败', isError: true);
+                    DialogUtils.showToast(context: context, message: '已保存，但连接测试失败', isError: true);
                   } else {
-                    IosUiUtils.showToast(context: context, message: '保存成功');
+                    DialogUtils.showToast(context: context, message: '保存成功');
                   }
                 }
               },
@@ -525,7 +525,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   }
 
   Future<void> _confirmDeleteStorage(Storage storage) async {
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '删除存储源',
       content: '确定要删除「${storage.name}」吗？\n\n删除后相关的媒体信息也会被移除。',
@@ -536,7 +536,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     if (confirmed == true && mounted) {
       final success = await ref.read(storagesProvider.notifier).deleteStorage(storage.id);
       if (mounted) {
-        IosUiUtils.showToast(
+        DialogUtils.showToast(
           context: context,
           message: success ? '已删除' : '删除失败',
           isError: !success,

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -95,12 +95,12 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
         .read(scanStateProvider.notifier)
         .startScan(storageId, forceScrape: forceScrape);
     if (!success && mounted) {
-      IosUiUtils.showToast(context: context, message: '启动扫描失败', isError: true);
+      DialogUtils.showToast(context: context, message: '启动扫描失败', isError: true);
     }
   }
 
   Future<void> _deleteStorage(Storage storage) async {
-    final confirmed = await IosUiUtils.showConfirmDialog(
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '删除存储源',
       content: '确定要删除 "${storage.name}" 吗？',
@@ -113,7 +113,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
           .read(storagesProvider.notifier)
           .deleteStorage(storage.id);
       if (!success && mounted) {
-        IosUiUtils.showToast(context: context, message: '删除失败', isError: true);
+        DialogUtils.showToast(context: context, message: '删除失败', isError: true);
       }
     }
   }
@@ -284,7 +284,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
               onPressed: () async {
                 final name = nameController.text.trim();
                 if (name.isEmpty) {
-                  IosUiUtils.showToast(context: context, message: '请输入名称', isError: true);
+                  DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
                   return;
                 }
 
@@ -304,7 +304,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                 } else {
                   if (streamMode == 'redirect' &&
                       publicBaseUrlController.text.trim().isEmpty) {
-                    IosUiUtils.showToast(
+                    DialogUtils.showToast(
                       context: context,
                       message: '直连模式需要填写直连基地址',
                       isError: true,
@@ -332,7 +332,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
 
                 if (context.mounted) {
                   Navigator.pop(context);
-                  IosUiUtils.showToast(
+                  DialogUtils.showToast(
                     context: context,
                     message: success ? '添加成功' : '添加失败',
                     isError: !success,

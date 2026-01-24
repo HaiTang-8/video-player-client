@@ -8,7 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/services/aria2_manager.dart';
@@ -189,7 +189,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
                 const SizedBox(height: 16),
                 Text(
                   '配置外部 aria2',
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(height: 20),
                 Text('RPC 地址', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500)),
@@ -243,7 +243,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
                               Navigator.pop(context);
                               setState(() => _builtinVersion = null);
                               ref.read(aria2ConfigProvider.notifier).setEnabled(true);
-                              IosUiUtils.showToast(context: context, message: '已切换到外部 aria2');
+                              DialogUtils.showToast(context: context, message: '已切换到外部 aria2');
                             } else {
                               setDialogState(() {
                                 isConnecting = false;
@@ -287,7 +287,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
       final aria2 = Aria2Manager.instance;
       if (!await aria2.isAvailable()) {
         if (mounted) {
-          IosUiUtils.showToast(context: context, message: 'aria2 不可用', isError: true);
+          DialogUtils.showToast(context: context, message: 'aria2 不可用', isError: true);
         }
         setState(() => _isStarting = false);
         return;
@@ -300,11 +300,11 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
           _isStarting = false;
         });
         _startRefreshTimer();
-        IosUiUtils.showToast(context: context, message: 'aria2 已启动 (v$version)');
+        DialogUtils.showToast(context: context, message: 'aria2 已启动 (v$version)');
       }
     } catch (e) {
       if (mounted) {
-        IosUiUtils.showToast(context: context, message: '启动失败: $e', isError: true);
+        DialogUtils.showToast(context: context, message: '启动失败: $e', isError: true);
         setState(() => _isStarting = false);
       }
     }
@@ -475,7 +475,7 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text(name, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w500)),
                 Text(status, style: theme.textTheme.bodySmall?.copyWith(color: color)),
               ],
             ),

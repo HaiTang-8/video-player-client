@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../widgets/ios_page_transition.dart';
 
 /// 应用主题配置
@@ -90,7 +91,7 @@ class AppTheme {
       titleTextStyle: TextStyle(
         color: Colors.black,
         fontSize: 16,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       ),
     ),
     cardTheme: CardThemeData(
@@ -156,7 +157,7 @@ class AppTheme {
       titleTextStyle: TextStyle(
         color: Colors.white,
         fontSize: 16,
-        fontWeight: FontWeight.w600,
+        fontWeight: FontWeight.w500,
       ),
     ),
     cardTheme: CardThemeData(
@@ -201,5 +202,16 @@ class AppTheme {
         TargetPlatform.linux: IosPageTransitionsBuilder(),
       },
     ),
+  );
+
+  // shadcn_flutter 主题配置
+  static shadcn.ThemeData shadcnLightTheme = shadcn.ThemeData(
+    colorScheme: shadcn.ColorSchemes.lightDefaultColor,
+    radius: 0.5,
+  );
+
+  static shadcn.ThemeData shadcnDarkTheme = shadcn.ThemeData(
+    colorScheme: shadcn.ColorSchemes.darkDefaultColor,
+    radius: 0.5,
   );
 }

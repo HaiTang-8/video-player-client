@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -129,7 +129,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
           Text(
             plan.summary,
             style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 12),
@@ -170,7 +170,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
                         '注意事项',
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: Colors.orange,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
@@ -399,7 +399,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
           Text(
             title,
             style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
               color: color,
             ),
           ),
@@ -513,7 +513,7 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
     final service = ref.read(storageServiceProvider);
     if (service == null) {
       if (context.mounted) {
-        IosUiUtils.showToast(context: context, message: '未连接服务器', isError: true);
+        DialogUtils.showToast(context: context, message: '未连接服务器', isError: true);
       }
       return;
     }
@@ -544,10 +544,10 @@ class _AiTidyPreviewScreenState extends ConsumerState<AiTidyPreviewScreen> {
       if (dbChanges.isNotEmpty) {
         message += '，媒体库：${dbChanges.join('、')}';
       }
-      IosUiUtils.showToast(context: context, message: message);
+      DialogUtils.showToast(context: context, message: message);
       Navigator.pop(context, true);
     } else {
-      IosUiUtils.showToast(context: context, message: resp.error ?? '应用失败', isError: true);
+      DialogUtils.showToast(context: context, message: resp.error ?? '应用失败', isError: true);
     }
   }
 }

@@ -4,13 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:scroll_animator/scroll_animator.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants/app_constants.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/smooth_scroll_behavior.dart';
 import 'core/widgets/window_border.dart';
-import 'core/widgets/ios_ui_utils.dart';
+import 'core/widgets/dialog_utils.dart';
 import 'data/services/aria2_manager.dart';
 import 'data/services/log_service.dart';
 import 'data/services/update_service.dart';
@@ -101,7 +102,7 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
         WidgetsBinding.instance.addPostFrameCallback((_) {
           final navigatorState = router.routerDelegate.navigatorKey.currentState;
           if (navigatorState?.overlay != null) {
-            IosUiUtils.showToastWithOverlay(
+            DialogUtils.showToastWithOverlay(
               overlay: navigatorState!.overlay!,
               message: error,
               isError: true,
@@ -111,20 +112,24 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
       }
     });
 
-    return WindowBorder(
-      child: MaterialApp.router(
-        title: 'Media Player',
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: SmoothScrollBehavior(),
-        actions: {
-          ...WidgetsApp.defaultActions,
-          ScrollIntent: AnimatedScrollAction(),
-        },
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: themeMode,
-        routerConfig: router,
-      ),
+    return shadcn.ShadcnApp.router(
+      title: 'Media Player',
+      debugShowCheckedModeBanner: false,
+      scrollBehavior: SmoothScrollBehavior(),
+      theme: AppTheme.shadcnLightTheme,
+      darkTheme: AppTheme.shadcnDarkTheme,
+      themeMode: themeMode == ThemeMode.system
+          ? shadcn.ThemeMode.system
+          : (themeMode == ThemeMode.dark
+              ? shadcn.ThemeMode.dark
+              : shadcn.ThemeMode.light),
+      materialTheme: AppTheme.lightTheme,
+      routerConfig: router,
+      actions: {
+        ...WidgetsApp.defaultActions,
+        ScrollIntent: AnimatedScrollAction(),
+      },
+      builder: (context, child) => WindowBorder(child: child ?? const SizedBox()),
     );
   }
 }

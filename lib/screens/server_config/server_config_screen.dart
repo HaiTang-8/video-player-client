@@ -2,9 +2,10 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/desktop_title_bar.dart';
-import '../../core/widgets/ios_ui_utils.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/server_config.dart';
 import '../../providers/providers.dart';
@@ -34,7 +35,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     if (success) {
       await ref.read(serverListProvider.notifier).setCurrentServer(server.id);
     } else {
-      IosUiUtils.showToast(context: context, message: '无法连接到服务器', isError: true);
+      DialogUtils.showToast(context: context, message: '无法连接到服务器', isError: true);
     }
 
     setState(() {
@@ -48,62 +49,66 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     final hostController = TextEditingController();
     String protocol = 'http';
 
-    showCupertinoDialog(
+    shadcn.showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => CupertinoAlertDialog(
+        builder: (context, setDialogState) => shadcn.AlertDialog(
           title: const Text('添加服务器'),
           content: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 160),
+            constraints: const BoxConstraints(minHeight: 160, minWidth: 300),
             child: Padding(
               padding: const EdgeInsets.only(top: 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CupertinoTextField(
+                  shadcn.TextField(
                     controller: nameController,
-                    placeholder: '名称（如：家里、公司）',
-                    padding: const EdgeInsets.all(12),
+                    placeholder: const Text('名称（如：家里、公司）'),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: CupertinoSlidingSegmentedControl<String>(
-                      groupValue: protocol,
-                      children: const {
-                        'http': Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('HTTP'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: shadcn.OutlineButton(
+                          onPressed: () => setDialogState(() => protocol = 'http'),
+                          child: Text(
+                            'HTTP',
+                            style: TextStyle(
+                              fontWeight: protocol == 'http' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
                         ),
-                        'https': Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 12),
-                          child: Text('HTTPS'),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: shadcn.OutlineButton(
+                          onPressed: () => setDialogState(() => protocol = 'https'),
+                          child: Text(
+                            'HTTPS',
+                            style: TextStyle(
+                              fontWeight: protocol == 'https' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
                         ),
-                      },
-                      onValueChanged: (value) {
-                        if (value != null) {
-                          setDialogState(() => protocol = value);
-                        }
-                      },
-                    ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
-                  CupertinoTextField(
+                  shadcn.TextField(
                     controller: hostController,
-                    placeholder: '192.168.1.100:8080',
+                    placeholder: const Text('192.168.1.100:8080'),
                     keyboardType: TextInputType.url,
-                    padding: const EdgeInsets.all(12),
                   ),
                 ],
               ),
             ),
           ),
           actions: [
-            CupertinoDialogAction(
+            shadcn.OutlineButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('取消'),
             ),
-            CupertinoDialogAction(
+            shadcn.PrimaryButton(
               onPressed: () async {
                 final name = nameController.text.trim();
                 final host = hostController.text.trim();
@@ -134,59 +139,66 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
     String protocol = uri?.scheme ?? 'http';
 
-    showCupertinoDialog(
+    shadcn.showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => CupertinoAlertDialog(
+        builder: (context, setDialogState) => shadcn.AlertDialog(
           title: const Text('编辑服务器'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CupertinoTextField(
-                  controller: nameController,
-                  placeholder: '名称（如：家里、公司）',
-                  padding: const EdgeInsets.all(12),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: CupertinoSlidingSegmentedControl<String>(
-                    groupValue: protocol,
-                    children: const {
-                      'http': Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('HTTP'),
-                      ),
-                      'https': Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('HTTPS'),
-                      ),
-                    },
-                    onValueChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() => protocol = value);
-                      }
-                    },
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 300),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  shadcn.TextField(
+                    controller: nameController,
+                    placeholder: const Text('名称（如：家里、公司）'),
                   ),
-                ),
-                const SizedBox(height: 12),
-                CupertinoTextField(
-                  controller: hostController,
-                  placeholder: '192.168.1.100:8080',
-                  keyboardType: TextInputType.url,
-                  padding: const EdgeInsets.all(12),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: shadcn.OutlineButton(
+                          onPressed: () => setDialogState(() => protocol = 'http'),
+                          child: Text(
+                            'HTTP',
+                            style: TextStyle(
+                              fontWeight: protocol == 'http' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: shadcn.OutlineButton(
+                          onPressed: () => setDialogState(() => protocol = 'https'),
+                          child: Text(
+                            'HTTPS',
+                            style: TextStyle(
+                              fontWeight: protocol == 'https' ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  shadcn.TextField(
+                    controller: hostController,
+                    placeholder: const Text('192.168.1.100:8080'),
+                    keyboardType: TextInputType.url,
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            CupertinoDialogAction(
+            shadcn.OutlineButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('取消'),
             ),
-            CupertinoDialogAction(
+            shadcn.PrimaryButton(
               onPressed: () async {
                 final name = nameController.text.trim();
                 final host = hostController.text.trim();
@@ -213,28 +225,17 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     );
   }
 
-  void _showDeleteConfirm(ServerConfig server) {
-    showCupertinoDialog(
+  void _showDeleteConfirm(ServerConfig server) async {
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('删除服务器'),
-        content: Text('确定要删除「${server.name}」吗？'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () async {
-              await ref.read(serverListProvider.notifier).removeServer(server.id);
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('删除'),
-          ),
-        ],
-      ),
+      title: '删除服务器',
+      content: '确定要删除「${server.name}」吗？',
+      confirmText: '删除',
+      isDestructive: true,
     );
+    if (confirmed == true) {
+      await ref.read(serverListProvider.notifier).removeServer(server.id);
+    }
   }
 
   @override
@@ -605,7 +606,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
             '暂无服务器',
             style: TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w500,
               color: isDark ? CupertinoColors.white : CupertinoColors.black,
             ),
           ),

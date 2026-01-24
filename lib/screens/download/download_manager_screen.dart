@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/download_task.dart';
@@ -172,55 +173,33 @@ class DownloadManagerScreen extends ConsumerWidget {
     }
   }
 
-  void _confirmDelete(BuildContext context, WidgetRef ref, DownloadTask task) {
-    showCupertinoDialog(
+  void _confirmDelete(BuildContext context, WidgetRef ref, DownloadTask task) async {
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('删除下载'),
-        content: Text('确定要删除「${task.fileName ?? task.episodeName}」吗？'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('删除'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(downloadManagerProvider.notifier).deleteDownload(task.id);
-            },
-          ),
-        ],
-      ),
+      title: '删除下载',
+      content: '确定要删除「${task.fileName ?? task.episodeName}」吗？',
+      confirmText: '删除',
+      isDestructive: true,
     );
+    if (confirmed == true) {
+      ref.read(downloadManagerProvider.notifier).deleteDownload(task.id);
+    }
   }
 
-  void _confirmCancelAll(BuildContext context, WidgetRef ref) {
-    showCupertinoDialog(
+  void _confirmCancelAll(BuildContext context, WidgetRef ref) async {
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('取消全部下载'),
-        content: const Text('确定要取消所有正在下载的任务吗？'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('确定'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              final state = ref.read(downloadManagerProvider);
-              for (final task in state.downloadingTasks) {
-                ref.read(downloadManagerProvider.notifier).deleteDownload(task.id);
-              }
-            },
-          ),
-        ],
-      ),
+      title: '取消全部下载',
+      content: '确定要取消所有正在下载的任务吗？',
+      confirmText: '确定',
+      isDestructive: true,
     );
+    if (confirmed == true) {
+      final state = ref.read(downloadManagerProvider);
+      for (final task in state.downloadingTasks) {
+        ref.read(downloadManagerProvider.notifier).deleteDownload(task.id);
+      }
+    }
   }
 
   Future<void> _playCompletedTask(BuildContext context, WidgetRef ref, DownloadTask task) async {
@@ -257,28 +236,17 @@ class DownloadManagerScreen extends ConsumerWidget {
     }
   }
 
-  void _confirmClearCompleted(BuildContext context, WidgetRef ref) {
-    showCupertinoDialog(
+  void _confirmClearCompleted(BuildContext context, WidgetRef ref) async {
+    final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
-      builder: (ctx) => CupertinoAlertDialog(
-        title: const Text('删除全部已完成'),
-        content: const Text('确定要删除所有已完成的下载吗？\n文件也会被删除。'),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('取消'),
-            onPressed: () => Navigator.pop(ctx),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            child: const Text('删除'),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(downloadManagerProvider.notifier).deleteAllCompleted();
-            },
-          ),
-        ],
-      ),
+      title: '删除全部已完成',
+      content: '确定要删除所有已完成的下载吗？\n文件也会被删除。',
+      confirmText: '删除',
+      isDestructive: true,
     );
+    if (confirmed == true) {
+      ref.read(downloadManagerProvider.notifier).deleteAllCompleted();
+    }
   }
 }
 
@@ -324,7 +292,7 @@ class _DownloadSection extends StatelessWidget {
               '$title ($count)',
               style: const TextStyle(
                 fontSize: 15,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 color: Colors.black,
               ),
             ),
@@ -348,7 +316,7 @@ class _DownloadSection extends StatelessWidget {
                           action.label,
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                            fontWeight: FontWeight.w500,
                             color: action.isDestructive
                                 ? CupertinoColors.systemRed
                                 : CupertinoColors.systemBlue,
@@ -595,24 +563,12 @@ class _FailedItem extends StatelessWidget {
   });
 
   void _showErrorDetail(BuildContext context) {
-    showCupertinoDialog(
+    DialogUtils.showConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('错误详情'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: SelectableText(
-            task.errorMessage ?? '下载失败',
-            style: const TextStyle(fontSize: 14),
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            child: const Text('关闭'),
-            onPressed: () => Navigator.pop(context),
-          ),
-        ],
-      ),
+      title: '错误详情',
+      content: task.errorMessage ?? '下载失败',
+      cancelText: '关闭',
+      confirmText: '确定',
     );
   }
 

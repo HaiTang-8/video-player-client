@@ -79,6 +79,9 @@ dependencies:
   # iOS风格下拉菜单
   pull_down_button: ^0.10.1
 
+  # shadcn UI 组件库
+  shadcn_flutter: ^0.0.47
+
   # 桌面端平滑滚动
   scroll_animator: ^0.3.0
 
@@ -150,7 +153,12 @@ flutter:
   fonts:
     - family: HarmonyOS_Sans
       fonts:
-        - asset: assets/fonts/HarmonyOS_SansSC_Regular.ttf
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Regular.ttf
+          weight: 400
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Medium.ttf
+          weight: 500
+        - asset: assets/fonts/HarmonyOS_Sans_SC_Bold.ttf
+          weight: 700
 
 flutter_launcher_icons:
   android: true
