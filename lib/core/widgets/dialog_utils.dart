@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../providers/window_border_provider.dart';
 
 /// 弹窗工具类 - 使用 shadcn_flutter 组件
 class DialogUtils {
@@ -13,51 +15,63 @@ class DialogUtils {
     String cancelText = '取消',
     String confirmText = '确定',
     bool isDestructive = false,
-  }) {
-    return shadcn.showDialog<bool>(
-      context: context,
-      builder: (context) => shadcn.AlertDialog(
-        title: Text(title),
-        content: Text(content),
-        actions: [
-          shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(cancelText),
-          ),
-          if (isDestructive)
-            shadcn.DestructiveButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(confirmText),
-            )
-          else
-            shadcn.PrimaryButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(confirmText),
+  }) async {
+    final container = ProviderScope.containerOf(context);
+    container.read(windowBorderVisibleProvider.notifier).hide();
+    try {
+      return await shadcn.showDialog<bool>(
+        context: context,
+        builder: (context) => shadcn.AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(cancelText),
             ),
-        ],
-      ),
-    );
+            if (isDestructive)
+              shadcn.DestructiveButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(confirmText),
+              )
+            else
+              shadcn.PrimaryButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(confirmText),
+              ),
+          ],
+        ),
+      );
+    } finally {
+      container.read(windowBorderVisibleProvider.notifier).show();
+    }
   }
 
   /// 显示加载对话框
   static Future<void> showLoadingDialog({
     required BuildContext context,
     required String message,
-  }) {
-    return shadcn.showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => shadcn.AlertDialog(
-        content: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const shadcn.CircularProgressIndicator(),
-            const SizedBox(width: 16),
-            Flexible(child: Text(message)),
-          ],
+  }) async {
+    final container = ProviderScope.containerOf(context);
+    container.read(windowBorderVisibleProvider.notifier).hide();
+    try {
+      return await shadcn.showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => shadcn.AlertDialog(
+          content: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const shadcn.CircularProgressIndicator(),
+              const SizedBox(width: 16),
+              Flexible(child: Text(message)),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      container.read(windowBorderVisibleProvider.notifier).show();
+    }
   }
 
   /// 显示 Toast 提示
@@ -98,38 +112,44 @@ class DialogUtils {
     required String title,
     required List<SelectionOption<T>> options,
     T? currentValue,
-  }) {
-    return shadcn.showDialog<T>(
-      context: context,
-      builder: (context) => shadcn.AlertDialog(
-        title: Text(title),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: options.map((option) {
-            final isSelected = option.value == currentValue;
-            return InkWell(
-              onTap: () => Navigator.pop(context, option.value),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                child: Row(
-                  children: [
-                    Expanded(child: Text(option.label)),
-                    if (isSelected)
-                      const Icon(Icons.check, size: 18),
-                  ],
+  }) async {
+    final container = ProviderScope.containerOf(context);
+    container.read(windowBorderVisibleProvider.notifier).hide();
+    try {
+      return await shadcn.showDialog<T>(
+        context: context,
+        builder: (context) => shadcn.AlertDialog(
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: options.map((option) {
+              final isSelected = option.value == currentValue;
+              return InkWell(
+                onTap: () => Navigator.pop(context, option.value),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  child: Row(
+                    children: [
+                      Expanded(child: Text(option.label)),
+                      if (isSelected)
+                        const Icon(Icons.check, size: 18),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          }).toList(),
-        ),
-        actions: [
-          shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
+              );
+            }).toList(),
           ),
-        ],
-      ),
-    );
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      container.read(windowBorderVisibleProvider.notifier).show();
+    }
   }
 
   /// 显示输入对话框
@@ -141,33 +161,39 @@ class DialogUtils {
     TextInputType? keyboardType,
     String cancelText = '取消',
     String confirmText = '确定',
-  }) {
+  }) async {
+    final container = ProviderScope.containerOf(context);
+    container.read(windowBorderVisibleProvider.notifier).hide();
     final controller = TextEditingController(text: initialValue);
-    return shadcn.showDialog<String>(
-      context: context,
-      builder: (context) => shadcn.AlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 16),
-          child: shadcn.TextField(
-            controller: controller,
-            placeholder: placeholder != null ? Text(placeholder) : null,
-            keyboardType: keyboardType,
-            autofocus: true,
+    try {
+      return await shadcn.showDialog<String>(
+        context: context,
+        builder: (context) => shadcn.AlertDialog(
+          title: Text(title),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: shadcn.TextField(
+              controller: controller,
+              placeholder: placeholder != null ? Text(placeholder) : null,
+              keyboardType: keyboardType,
+              autofocus: true,
+            ),
           ),
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(cancelText),
+            ),
+            shadcn.PrimaryButton(
+              onPressed: () => Navigator.pop(context, controller.text),
+              child: Text(confirmText),
+            ),
+          ],
         ),
-        actions: [
-          shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(cancelText),
-          ),
-          shadcn.PrimaryButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: Text(confirmText),
-          ),
-        ],
-      ),
-    );
+      );
+    } finally {
+      container.read(windowBorderVisibleProvider.notifier).show();
+    }
   }
 }
 

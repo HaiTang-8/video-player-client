@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/window_border_provider.dart';
 import '../window/window_controls.dart';
 
-class WindowBorder extends StatefulWidget {
+class WindowBorder extends ConsumerStatefulWidget {
   final Widget child;
   const WindowBorder({required this.child, super.key});
 
   @override
-  State<WindowBorder> createState() => _WindowBorderState();
+  ConsumerState<WindowBorder> createState() => _WindowBorderState();
 }
 
-class _WindowBorderState extends State<WindowBorder> with WidgetsBindingObserver {
+class _WindowBorderState extends ConsumerState<WindowBorder> with WidgetsBindingObserver {
   bool _isFullscreen = false;
 
   @override
@@ -41,7 +43,9 @@ class _WindowBorderState extends State<WindowBorder> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
-    if (!WindowControls.isDesktop || _isFullscreen) {
+    final isVisible = ref.watch(windowBorderVisibleProvider);
+
+    if (!WindowControls.isDesktop || _isFullscreen || !isVisible) {
       return widget.child;
     }
 
@@ -50,7 +54,7 @@ class _WindowBorderState extends State<WindowBorder> with WidgetsBindingObserver
         ? const Color(0xFF3A3A3A)
         : const Color(0xFFD0D0D0);
 
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: borderColor, width: 1),
       ),
