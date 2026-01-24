@@ -2,27 +2,49 @@
   "categories": [
     {
       "title": "## 🚀 Features",
-      "labels": ["feat", "feature"]
+      "labels": ["feat", "feature"],
+      "rules": [
+        {"pattern": "^feat(\\(.+\\))?(!)?:"}
+      ]
     },
     {
       "title": "## 🐛 Bug Fixes",
-      "labels": ["fix", "bug"]
+      "labels": ["fix", "bug"],
+      "rules": [
+        {"pattern": "^fix(\\(.+\\))?(!)?:"}
+      ]
     },
     {
       "title": "## ♻️ Refactoring",
-      "labels": ["refactor"]
+      "labels": ["refactor"],
+      "rules": [
+        {"pattern": "^refactor(\\(.+\\))?(!)?:"}
+      ]
     },
     {
       "title": "## ⚡ Performance",
-      "labels": ["perf"]
+      "labels": ["perf"],
+      "rules": [
+        {"pattern": "^perf(\\(.+\\))?(!)?:"}
+      ]
     },
     {
       "title": "## 🧪 Tests",
-      "labels": ["test"]
+      "labels": ["test"],
+      "rules": [
+        {"pattern": "^test(\\(.+\\))?(!)?:"}
+      ]
     },
     {
       "title": "## 📦 Build & CI",
-      "labels": ["build", "ci", "chore"]
+      "labels": ["build", "ci", "chore"],
+      "rules": [
+        {"pattern": "^(build|ci|chore)(\\(.+\\))?(!)?:"}
+      ]
+    },
+    {
+      "title": "## 📝 Other Changes",
+      "labels": []
     }
   ],
   "ignore_labels": [
@@ -34,5 +56,12 @@
   },
   "template": "${{CHANGELOG}}",
   "pr_template": "- ${{TITLE}} @${{AUTHOR}}",
-  "empty_template": "- No changes found"
+  "commit_template": "- ${{COMMIT_MESSAGE_BODY}} @${{COMMIT_AUTHOR}}",
+  "empty_template": "- No changes found",
+  "transformers": [
+    {
+      "pattern": "^(feat|fix|refactor|perf|test|build|ci|chore)(\\(.+\\))?(!)?:\\s*",
+      "target": ""
+    }
+  ]
 }
