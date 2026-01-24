@@ -160,6 +160,10 @@ class Aria2Manager {
     // 清理可能残留的旧进程
     await _cleanupStaleProcess();
 
+    // pid 文件位于 _binDir 下；如果使用 bundle 内置二进制文件，ensureBinary() 可能不会创建该目录。
+    final binDir = await _binDir;
+    await Directory(binDir).create(recursive: true);
+
     final binary = await _getEffectiveBinaryPath();
     if (!File(binary).existsSync()) {
       throw StateError('aria2 binary not found. Call ensureBinary() first.');
@@ -183,63 +187,133 @@ class Aria2Manager {
       '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57',
     ];
 
-    if (Platform.isMacOS || Platform.isLinux) {
-      // 使用 wrapper 脚本实现同生共死
-      final parentPid = pid;
-      final script = '''
+    // 记录启动阶段的输出，便于定位启动失败原因（尤其是 Windows）。
+    final recentOutput = <String>[];
+    void addOutput(String data, {required bool isError}) {
+      for (final rawLine in data.split(RegExp(r'[\r\n]+'))) {
+        final line = rawLine.trimRight();
+        if (line.isEmpty) continue;
+        final prefix = isError ? '[stderr] ' : '';
+        recentOutput.add('$prefix$line');
+        if (recentOutput.length > 30) {
+          recentOutput.removeAt(0);
+        }
+      }
+    }
+
+    final pidFile = await _pidFile;
+
+    Process process;
+    try {
+      if (Platform.isMacOS || Platform.isLinux) {
+        // 使用 wrapper 脚本实现同生共死，并把 aria2 PID 写入 pid 文件，便于 stop/cleanup。
+        final parentPid = pid;
+        final pidPath = pidFile.path.replaceAll('"', r'\"');
+        final script = '''
 "$binary" ${aria2Args.map((a) => '"$a"').join(' ')} &
 ARIA2_PID=\$!
+echo \$ARIA2_PID > "$pidPath"
+trap "kill \$ARIA2_PID 2>/dev/null; exit" TERM INT
 while kill -0 $parentPid 2>/dev/null && kill -0 \$ARIA2_PID 2>/dev/null; do
   sleep 1
 done
 kill \$ARIA2_PID 2>/dev/null
 ''';
-      _process = await Process.start('/bin/sh', ['-c', script]);
-    } else if (Platform.isWindows) {
-      // Windows: 使用 PowerShell 监控父进程
-      final parentPid = pid;
-      final argsStr = aria2Args.map((a) => '"$a"').join(' ');
-      final script = '''
-\$aria2 = Start-Process -FilePath "$binary" -ArgumentList $argsStr -PassThru -NoNewWindow
-while ((Get-Process -Id $parentPid -ErrorAction SilentlyContinue) -and (Get-Process -Id \$aria2.Id -ErrorAction SilentlyContinue)) {
-  Start-Sleep -Seconds 1
+        process = await Process.start('/bin/sh', ['-c', script]);
+      } else if (Platform.isWindows) {
+        // Windows: 使用 PowerShell 监控父进程，并把 aria2 PID 写入 pid 文件，便于 stop/cleanup。
+        final parentPid = pid;
+        String escPsSingle(String s) => s.replaceAll("'", "''");
+
+        final normalizedBinary = binary.replaceAll('/', '\\');
+        final normalizedPidPath = pidFile.path.replaceAll('/', '\\');
+        final psBinary = escPsSingle(normalizedBinary);
+        final psPidPath = escPsSingle(normalizedPidPath);
+        final psArgs = aria2Args.map((a) => "'${escPsSingle(a)}'").join(', ');
+        final script = '''
+\$ErrorActionPreference = 'Stop'
+try {
+  \$args = @($psArgs)
+  # Start-Process 不会自动为包含空格的参数加引号；这里手动为每个参数加双引号，
+  # 避免像 user-agent / dir 等参数被拆分，导致 aria2 把多余 token 当成 URI。
+  \$q = [char]34
+  \$argLine = (\$args | ForEach-Object { \$q + \$_ + \$q }) -join ' '
+  \$aria2 = Start-Process -FilePath '$psBinary' -ArgumentList \$argLine -PassThru -NoNewWindow
+  Set-Content -Path '$psPidPath' -Value \$aria2.Id -NoNewline
+  while ((Get-Process -Id $parentPid -ErrorAction SilentlyContinue) -and (Get-Process -Id \$aria2.Id -ErrorAction SilentlyContinue)) {
+    Start-Sleep -Seconds 1
+  }
+  Stop-Process -Id \$aria2.Id -Force -ErrorAction SilentlyContinue
+} catch {
+  Write-Error \$_
+  exit 1
 }
-Stop-Process -Id \$aria2.Id -Force -ErrorAction SilentlyContinue
 ''';
-      _process = await Process.start('powershell', ['-Command', script]);
-    } else {
-      _process = await Process.start(binary, aria2Args);
-    }
-
-    // 保存 PID 以便下次启动时清理
-    final pidFile = await _pidFile;
-    await pidFile.writeAsString(_process!.pid.toString());
-
-    _process!.stdout.transform(const SystemEncoding().decoder).listen((data) {
-      debugPrint('[aria2] $data');
-    });
-    _process!.stderr.transform(const SystemEncoding().decoder).listen((data) {
-      debugPrint('[aria2 err] $data');
-    });
-    _process!.exitCode.then((_) async {
+        final systemRoot = Platform.environment['SystemRoot'];
+        final powershellExe = systemRoot != null && systemRoot.isNotEmpty
+            ? '$systemRoot\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+            : 'powershell';
+        process = await Process.start(powershellExe, [
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          script,
+        ]);
+      } else {
+        process = await Process.start(binary, aria2Args);
+        await pidFile.writeAsString(process.pid.toString());
+      }
+    } catch (e) {
+      // 启动阶段失败：确保状态干净，向上抛错。
       _process = null;
       _service = null;
-      try {
-        final pf = await _pidFile;
-        if (await pf.exists()) await pf.delete();
-      } catch (_) {}
+      _startTime = null;
+      rethrow;
+    }
+
+    _process = process;
+
+    process.stdout.transform(const SystemEncoding().decoder).listen((data) {
+      addOutput(data, isError: false);
+      debugPrint('[aria2] $data');
+    });
+    process.stderr.transform(const SystemEncoding().decoder).listen((data) {
+      addOutput(data, isError: true);
+      debugPrint('[aria2 err] $data');
     });
 
-    _service = Aria2Service(
+    final exitCompleter = Completer<int>();
+    unawaited(process.exitCode.then((code) async {
+      if (!exitCompleter.isCompleted) exitCompleter.complete(code);
+      if (_process == process) {
+        _process = null;
+        _service?.dispose();
+        _service = null;
+        _startTime = null;
+      }
+    }, onError: (Object e, StackTrace st) {
+      if (!exitCompleter.isCompleted) exitCompleter.completeError(e, st);
+    }));
+
+    final service = Aria2Service(
       rpcUrl: 'http://127.0.0.1:$_rpcPort/jsonrpc',
       secret: _rpcSecret,
     );
+    _service = service;
 
     // 等待 RPC 服务就绪
     for (var i = 0; i < 10; i++) {
       await Future.delayed(const Duration(milliseconds: 300));
+      if (exitCompleter.isCompleted) {
+        final exitCode = await exitCompleter.future;
+        final logs = recentOutput.isEmpty ? '' : '\nRecent output:\n${recentOutput.join('\n')}';
+        await stop();
+        throw StateError('aria2 exited early (exitCode=$exitCode).$logs');
+      }
       try {
-        final version = await _service!.getVersion();
+        final version = await service.getVersion();
         debugPrint('[Aria2Manager] Started aria2 $version on port $_rpcPort');
         _startTime = DateTime.now();
         return;
@@ -247,8 +321,9 @@ Stop-Process -Id \$aria2.Id -Force -ErrorAction SilentlyContinue
         debugPrint('[Aria2Manager] Waiting for aria2 RPC... ($i)');
       }
     }
+    final logs = recentOutput.isEmpty ? '' : '\nRecent output:\n${recentOutput.join('\n')}';
     await stop();
-    throw StateError('aria2 RPC failed to start');
+    throw StateError('aria2 RPC failed to start.$logs');
   }
 
   Future<int> _findAvailablePort() async {
@@ -268,15 +343,38 @@ Stop-Process -Id \$aria2.Id -Force -ErrorAction SilentlyContinue
   }
 
   Future<void> stop() async {
-    _service?.dispose();
+    final service = _service;
     _service = null;
-    _process?.kill();
-    _process = null;
     _startTime = null;
+
+    int? aria2Pid;
+    final pidFile = await _pidFile;
     try {
-      final pidFile = await _pidFile;
+      if (await pidFile.exists()) {
+        aria2Pid = int.tryParse(await pidFile.readAsString());
+      }
+    } catch (_) {}
+
+    // 尝试优雅关闭 aria2（避免 wrapper 被 kill 后残留子进程）。
+    if (service != null) {
+      try {
+        await service.shutdown();
+      } catch (_) {}
+      service.dispose();
+    }
+
+    // 兜底：读取 pid 文件尝试杀掉 aria2（pid 文件记录的是 aria2 PID）。
+    try {
+      if (aria2Pid != null) {
+        try {
+          Process.killPid(aria2Pid!);
+        } catch (_) {}
+      }
       if (await pidFile.exists()) await pidFile.delete();
     } catch (_) {}
+
+    _process?.kill();
+    _process = null;
   }
 
   Future<bool> healthCheck() async {

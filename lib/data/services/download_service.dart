@@ -499,7 +499,11 @@ class DownloadService {
     required void Function(DownloadTask) onComplete,
     required void Function(DownloadTask, String) onError,
   }) async {
-    final aria2 = Aria2Manager.instance.service!;
+    final aria2 = Aria2Manager.instance.service;
+    if (aria2 == null) {
+      onError(task, 'aria2 service is not available (not running)');
+      return;
+    }
     var updatedTask = task.copyWith(status: DownloadStatus.downloading);
     onProgress(updatedTask);
 

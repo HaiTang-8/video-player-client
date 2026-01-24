@@ -48,9 +48,10 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
   Future<void> _checkBuiltinAria2() async {
     if (!_isDesktopPlatform) return;
     final aria2 = Aria2Manager.instance;
-    if (aria2.isRunning && aria2.service != null) {
+    final service = aria2.service;
+    if (aria2.isRunning && service != null) {
       try {
-        final version = await aria2.service!.getVersion();
+        final version = await service.getVersion();
         if (mounted) {
           setState(() => _builtinVersion = version);
           _startRefreshTimer();
@@ -72,12 +73,13 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
 
   Future<void> _refreshAria2Status() async {
     final aria2 = Aria2Manager.instance;
-    if (!aria2.isRunning || aria2.service == null) return;
+    final service = aria2.service;
+    if (!aria2.isRunning || service == null) return;
     try {
-      final stat = await aria2.service!.getGlobalStat();
-      final active = await aria2.service!.tellActive();
-      final waiting = await aria2.service!.tellWaiting(0, 100);
-      final stopped = await aria2.service!.tellStopped(0, 100);
+      final stat = await service.getGlobalStat();
+      final active = await service.tellActive();
+      final waiting = await service.tellWaiting(0, 100);
+      final stopped = await service.tellStopped(0, 100);
       if (mounted) {
         setState(() {
           _globalStat = stat;
@@ -293,7 +295,11 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
         return;
       }
       await aria2.start();
-      final version = await aria2.service!.getVersion();
+      final service = aria2.service;
+      if (service == null) {
+        throw StateError('aria2 service is not available (start may have failed)');
+      }
+      final version = await service.getVersion();
       if (mounted) {
         setState(() {
           _builtinVersion = version;

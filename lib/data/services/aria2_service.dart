@@ -46,6 +46,10 @@ class Aria2Service {
     return result['result']['version'] as String;
   }
 
+  Future<void> shutdown({bool force = false}) async {
+    await _call(force ? 'aria2.forceShutdown' : 'aria2.shutdown');
+  }
+
   Future<String> addUri(
     String url, {
     String? dir,
