@@ -31,13 +31,23 @@ class UpdateService {
   UpdateService._();
   static final instance = UpdateService._();
 
-  Future<void> init() async {
-    if (Platform.isMacOS) {
-      await autoUpdater.setFeedURL(
-        'https://github.com/${AppConstants.githubOwner}/${AppConstants.githubRepo}/releases/latest/download/appcast.xml',
-      );
+  String? _serverUrl;
+
+  Future<void> init(String? serverUrl) async {
+    _serverUrl = serverUrl;
+    if (Platform.isMacOS && serverUrl != null && serverUrl.isNotEmpty) {
+      final feedURL = '$serverUrl${AppConstants.updateAppcastPath}';
+      await autoUpdater.setFeedURL(feedURL);
       await autoUpdater.setScheduledCheckInterval(3600);
       await autoUpdater.checkForUpdates(inBackground: true);
+    }
+  }
+
+  void updateServerUrl(String? serverUrl) {
+    _serverUrl = serverUrl;
+    if (Platform.isMacOS && serverUrl != null && serverUrl.isNotEmpty) {
+      final feedURL = '$serverUrl${AppConstants.updateAppcastPath}';
+      autoUpdater.setFeedURL(feedURL);
     }
   }
 
@@ -47,26 +57,35 @@ class UpdateService {
   }
 
   Future<ReleaseInfo?> checkForUpdate() async {
+    if (_serverUrl == null || _serverUrl!.isEmpty) {
+      debugPrint('[UpdateService] No server URL configured');
+      return null;
+    }
+
     try {
-      final url = Uri.parse(
-        'https://api.github.com/repos/${AppConstants.githubOwner}/${AppConstants.githubRepo}/releases/latest',
-      );
+      final url = Uri.parse('$_serverUrl${AppConstants.updateCheckPath}');
       final response = await http.get(url, headers: {
-        'Accept': 'application/vnd.github+json',
+        'Accept': 'application/json',
       });
 
       if (response.statusCode != 200) {
-        debugPrint('[UpdateService] GitHub API error: ${response.statusCode}');
+        debugPrint('[UpdateService] API error: ${response.statusCode}');
         return null;
       }
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final tagName = data['tag_name'] as String?;
-      if (tagName == null) return null;
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] != true) {
+        debugPrint('[UpdateService] API returned error: ${json['error']}');
+        return null;
+      }
 
-      final latestVersion = tagName.replaceFirst(RegExp(r'^v'), '');
+      final data = json['data'] as Map<String, dynamic>;
+      final latestVersion = (data['version'] as String?) ??
+          (data['tag_name'] as String?)?.replaceFirst(RegExp(r'^v'), '');
+
+      if (latestVersion == null) return null;
+
       final currentVersion = await getCurrentVersion();
-
       if (!_isNewerVersion(latestVersion, currentVersion)) {
         return null;
       }
@@ -77,10 +96,15 @@ class UpdateService {
       for (final asset in assets) {
         final name = asset['name'] as String? ?? '';
         if (assetPattern.hasMatch(name)) {
+          final downloadPath = asset['download_url'] as String;
+          final downloadUrl = downloadPath.startsWith('http')
+              ? downloadPath
+              : '$_serverUrl$downloadPath';
+
           return ReleaseInfo(
             version: latestVersion,
             releaseNotes: data['body'] as String?,
-            downloadUrl: asset['browser_download_url'] as String,
+            downloadUrl: downloadUrl,
             fileName: name,
             fileSize: asset['size'] as int?,
           );

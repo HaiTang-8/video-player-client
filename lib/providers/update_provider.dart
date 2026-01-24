@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/services/update_service.dart';
+import 'server_provider.dart';
 
 enum UpdateStatus {
   idle,
@@ -44,7 +45,12 @@ class UpdateState {
 
 class UpdateNotifier extends Notifier<UpdateState> {
   @override
-  UpdateState build() => const UpdateState();
+  UpdateState build() {
+    ref.listen(serverUrlProvider, (previous, next) {
+      UpdateService.instance.updateServerUrl(next);
+    });
+    return const UpdateState();
+  }
 
   bool get supportsUpdate => Platform.isWindows || Platform.isAndroid || Platform.isMacOS;
 

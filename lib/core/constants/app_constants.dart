@@ -8,6 +8,11 @@ class AppConstants {
   static const String githubOwner = 'HaiTang-8';
   static const String githubRepo = 'video-player-client';
 
+  // 更新代理 API 路径
+  static const String updateCheckPath = '/api/v1/update/check';
+  static const String updateDownloadPath = '/api/v1/update/download';
+  static const String updateAppcastPath = '/api/v1/update/appcast.xml';
+
   // 本地存储 Key
   static const String serverUrlKey = 'server_url'; // 兼容旧版
   static const String serverListKey = 'server_list';

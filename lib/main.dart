@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,7 +40,8 @@ void main() async {
   }
 
   // 初始化更新服务（macOS Sparkle）
-  await UpdateService.instance.init();
+  final serverUrl = _getCurrentServerUrl(prefs);
+  await UpdateService.instance.init(serverUrl);
 
   runApp(
     ProviderScope(
@@ -58,6 +60,27 @@ Future<void> _initAria2() async {
     await aria2.ensureBinary();
     await aria2.start();
   } catch (_) {}
+}
+
+String? _getCurrentServerUrl(SharedPreferences prefs) {
+  final listJson = prefs.getString(AppConstants.serverListKey);
+  final currentId = prefs.getString(AppConstants.currentServerIdKey);
+
+  if (listJson != null && currentId != null) {
+    try {
+      final List<dynamic> list = jsonDecode(listJson);
+      for (final item in list) {
+        if (item['id'] == currentId) {
+          return item['url'] as String?;
+        }
+      }
+      if (list.isNotEmpty) {
+        return list.first['url'] as String?;
+      }
+    } catch (_) {}
+  }
+
+  return prefs.getString(AppConstants.serverUrlKey);
 }
 
 class MediaPlayerApp extends ConsumerStatefulWidget {
