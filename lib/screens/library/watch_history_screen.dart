@@ -38,14 +38,38 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     });
   }
 
-  void _toggleSelection(int id) {
+  /// 切换合并/不合并展示模式
+  Future<void> _toggleMergeMode() async {
+    await ref.read(watchHistoryMergeEnabledProvider.notifier).toggle();
+    if (!mounted) return;
     setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
+      _isEditMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  /// 切换某个“合并卡片”的选中状态（实际操作所有包含的记录 ID）
+  void _toggleSelection(WatchHistoryGroup group) {
+    final ids = _groupIds(group);
+    final isSelected = ids.every(_selectedIds.contains);
+    setState(() {
+      if (isSelected) {
+        _selectedIds.removeAll(ids);
       } else {
-        _selectedIds.add(id);
+        _selectedIds.addAll(ids);
       }
     });
+  }
+
+  /// 判断当前分组是否整体选中
+  bool _isGroupSelected(WatchHistoryGroup group) {
+    final ids = _groupIds(group);
+    return ids.isNotEmpty && ids.every(_selectedIds.contains);
+  }
+
+  /// 获取分组内全部记录 ID（用于批量删除/选择）
+  List<int> _groupIds(WatchHistoryGroup group) {
+    return group.items.map((item) => item.id).toList();
   }
 
   Future<void> _deleteSelected() async {
@@ -76,9 +100,12 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(watchHistoryProvider);
     final isDesktop = WindowControls.isDesktop;
-    final hasItems = state.items.isNotEmpty;
+    final mergeEnabled = ref.watch(watchHistoryMergeEnabledProvider);
+    // 合并后的观看历史列表（同一剧集多集合并展示）
+    final groups = state.groupedItems(mergeEpisodes: mergeEnabled);
+    final hasItems = groups.isNotEmpty;
 
-    final editAction = hasItems
+    final editAction = (!mergeEnabled && hasItems)
         ? CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             onPressed: _toggleEditMode,
@@ -86,27 +113,38 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
           )
         : null;
 
+    final toggleAction = CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      onPressed: _toggleMergeMode,
+      child: Text(mergeEnabled ? '列表' : '合并'),
+    );
+
+    final actions = <Widget>[
+      toggleAction,
+      if (editAction != null) editAction,
+    ];
+
     return Scaffold(
       appBar: isDesktop
           ? DesktopAppBar(
               title: const Text('最近观看'),
               onBack: () => context.pop(),
-              actions: editAction != null ? [editAction] : [],
+              actions: actions,
             )
           : MobileAppBar(
               title: const Text('最近观看'),
               onBack: () => context.pop(),
-              actions: editAction != null ? [editAction] : null,
+              actions: actions,
             ),
       body: Column(
         children: [
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),
-              child: _buildBody(state),
+              child: _buildBody(state, groups),
             ),
           ),
-          if (_isEditMode && hasItems) _buildBottomBar(),
+          if (!mergeEnabled && _isEditMode && hasItems) _buildBottomBar(),
         ],
       ),
     );
@@ -147,7 +185,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     );
   }
 
-  Widget _buildBody(WatchHistoryState state) {
+  Widget _buildBody(WatchHistoryState state, List<WatchHistoryGroup> groups) {
     if (state.isLoading && state.items.isEmpty) {
       return const GridSkeletonLoader();
     }
@@ -159,7 +197,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       );
     }
 
-    if (state.items.isEmpty) {
+    if (groups.isEmpty) {
       return const EmptyWidget(
         message: '暂无观看记录',
         icon: Icons.history,
@@ -174,14 +212,16 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         crossAxisSpacing: 16,
         mainAxisSpacing: 16,
       ),
-      itemCount: state.items.length,
+      itemCount: groups.length,
       itemBuilder: (context, index) {
-        final item = state.items[index];
+        final group = groups[index];
         return _WatchHistoryGridItem(
-          item: item,
+          group: group,
           isEditMode: _isEditMode,
-          isSelected: _selectedIds.contains(item.id),
-          onTap: _isEditMode ? () => _toggleSelection(item.id) : () => _navigateToDetail(item),
+          isSelected: _isGroupSelected(group),
+          onTap: _isEditMode
+              ? () => _toggleSelection(group)
+              : () => _navigateToDetail(group.primaryItem),
         );
       },
     );
@@ -231,13 +271,14 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
 }
 
 class _WatchHistoryGridItem extends ConsumerWidget {
-  final WatchHistoryItem item;
+  /// 合并后的观看历史分组
+  final WatchHistoryGroup group;
   final VoidCallback? onTap;
   final bool isEditMode;
   final bool isSelected;
 
   const _WatchHistoryGridItem({
-    required this.item,
+    required this.group,
     this.onTap,
     this.isEditMode = false,
     this.isSelected = false,
@@ -247,6 +288,12 @@ class _WatchHistoryGridItem extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    // 主展示记录（默认最新观看的一集）
+    final primaryItem = group.primaryItem;
+    // 是否显示多集叠卡与角标
+    final showMultiBadge = group.isMultiEpisode;
+    // 叠卡偏移量（仅多集时生效）
+    final stackOffset = showMultiBadge ? 6.0 : 0.0;
 
     return GestureDetector(
       onTap: onTap,
@@ -257,40 +304,72 @@ class _WatchHistoryGridItem extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      _buildImage(serverBaseUrl),
+                child: Stack(
+                  children: [
+                    if (showMultiBadge) ...[
                       Positioned(
-                        left: 0,
+                        left: stackOffset * 2,
+                        top: stackOffset * 2,
                         right: 0,
                         bottom: 0,
-                        child: Container(
-                          height: 4,
-                          color: Colors.black45,
-                          child: FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: item.progress.clamp(0.0, 1.0),
-                            child: Container(color: const Color(0xFF3D5BF6)),
-                          ),
-                        ),
+                        child: _buildStackedCardShadow(theme),
+                      ),
+                      Positioned(
+                        left: stackOffset,
+                        top: stackOffset,
+                        right: stackOffset,
+                        bottom: stackOffset,
+                        child: _buildStackedCardShadow(theme),
                       ),
                     ],
-                  ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      right: showMultiBadge ? stackOffset * 2 : 0,
+                      bottom: showMultiBadge ? stackOffset * 2 : 0,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            _buildImage(serverBaseUrl, primaryItem),
+                            Positioned(
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                height: 4,
+                                color: Colors.black45,
+                                child: FractionallySizedBox(
+                                  alignment: Alignment.centerLeft,
+                                  widthFactor: primaryItem.progress.clamp(0.0, 1.0),
+                                  child: Container(color: const Color(0xFF3D5BF6)),
+                                ),
+                              ),
+                            ),
+                            if (showMultiBadge)
+                              Positioned(
+                                top: 6,
+                                right: 6,
+                                child: _buildCountBadge(theme),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _displayTitle,
+                _displayTitle(primaryItem),
                 style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Text(
-                '已观看 ${(item.progress * 100).toInt()}%',
+                '已观看 ${(primaryItem.progress * 100).toInt()}%',
                 style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.outline),
                 maxLines: 1,
               ),
@@ -311,7 +390,8 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     );
   }
 
-  String get _displayTitle {
+  /// 构建标题（主展示记录）
+  String _displayTitle(WatchHistoryItem item) {
     final mediaInfo = item.mediaInfo;
     if (mediaInfo == null) return '未知';
     final episodeInfo = mediaInfo.episodeInfo;
@@ -324,7 +404,8 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     return mediaInfo.title;
   }
 
-  String? get _imagePath {
+  /// 获取主展示记录的图片路径
+  String? _imagePath(WatchHistoryItem item) {
     final mediaInfo = item.mediaInfo;
     final episodeInfo = mediaInfo?.episodeInfo;
     if (item.mediaType == 'tv' && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
@@ -333,8 +414,8 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
   }
 
-  Widget _buildImage(String? serverBaseUrl) {
-    final imagePath = _imagePath;
+  Widget _buildImage(String? serverBaseUrl, WatchHistoryItem item) {
+    final imagePath = _imagePath(item);
     if (imagePath != null && imagePath.isNotEmpty) {
       final imageUrl = ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl);
       return CachedNetworkImage(
@@ -351,6 +432,44 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     return Container(
       color: Colors.grey[300],
       child: const Center(child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey)),
+    );
+  }
+
+  /// 叠卡背景：用浅色卡片模拟“多张卡片”的层次感
+  Widget _buildStackedCardShadow(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+    );
+  }
+
+  /// 多集数量角标
+  Widget _buildCountBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        '${group.count}集',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 }

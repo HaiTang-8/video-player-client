@@ -139,3 +139,88 @@ class WatchHistoryItem {
         'watched_at': watchedAt.toIso8601String(),
       };
 }
+
+/// 观看历史合并分组（按剧集媒体合并）
+class WatchHistoryGroup {
+  /// 媒体类型（movie/tv）
+  final String mediaType;
+
+  /// 媒体 ID（电影或电视剧的本地 ID）
+  final int mediaId;
+
+  /// 同一媒体下的所有观看记录（已按 watchedAt 倒序）
+  final List<WatchHistoryItem> items;
+
+  /// 组内主展示记录（默认最新观看的一集/一条）
+  final WatchHistoryItem primaryItem;
+
+  /// 组内最新观看时间（用于外部排序）
+  final DateTime latestWatchedAt;
+
+  WatchHistoryGroup({
+    required this.mediaType,
+    required this.mediaId,
+    required this.items,
+    required this.primaryItem,
+    required this.latestWatchedAt,
+  });
+
+  /// 该组包含的记录数量
+  int get count => items.length;
+
+  /// 是否为多集剧集（只有剧集且数量>1才认为多集）
+  bool get isMultiEpisode => mediaType == 'tv' && items.length > 1;
+
+  /// 将观看历史列表按剧集合并为分组
+  static List<WatchHistoryGroup> groupItems(
+    List<WatchHistoryItem> items, {
+    bool mergeEpisodes = true,
+  }) {
+    if (items.isEmpty) {
+      return const [];
+    }
+
+    // 先按观看时间倒序，保证分组后的顺序与“最新观看”一致
+    final sortedItems = List<WatchHistoryItem>.from(items)
+      ..sort((a, b) => b.watchedAt.compareTo(a.watchedAt));
+
+    // 分组容器：key -> items，且记录首次出现顺序
+    final Map<String, List<WatchHistoryItem>> groupedMap = {};
+    final List<String> orderedKeys = [];
+
+    for (final item in sortedItems) {
+      // 只对“有剧集信息的电视剧”做合并，其它记录保持单条
+      final bool canMergeAsShow = mergeEpisodes &&
+          item.mediaType == 'tv' &&
+          item.mediaInfo?.episodeInfo != null;
+      final String groupKey = canMergeAsShow
+          ? 'tv_${item.mediaId}'
+          : '${item.mediaType}_${item.mediaId}_${item.episodeId ?? 0}_${item.id}';
+
+      if (!groupedMap.containsKey(groupKey)) {
+        groupedMap[groupKey] = [];
+        orderedKeys.add(groupKey);
+      }
+      groupedMap[groupKey]!.add(item);
+    }
+
+    // 组装分组列表，并确保每组内部仍按最新观看优先
+    final List<WatchHistoryGroup> groups = [];
+    for (final key in orderedKeys) {
+      final groupItems = groupedMap[key]!;
+      groupItems.sort((a, b) => b.watchedAt.compareTo(a.watchedAt));
+      final primaryItem = groupItems.first;
+      groups.add(
+        WatchHistoryGroup(
+          mediaType: primaryItem.mediaType,
+          mediaId: primaryItem.mediaId,
+          items: groupItems,
+          primaryItem: primaryItem,
+          latestWatchedAt: primaryItem.watchedAt,
+        ),
+      );
+    }
+
+    return groups;
+  }
+}

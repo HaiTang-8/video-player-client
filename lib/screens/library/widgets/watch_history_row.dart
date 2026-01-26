@@ -34,9 +34,11 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(watchHistoryProvider);
+    // 客户端「最近观看」不需要合并模式：按记录逐条展示
+    final groups = state.groupedItems(mergeEpisodes: false);
 
     // 无数据时不显示
-    if (!state.isLoading && state.items.isEmpty) {
+    if (!state.isLoading && groups.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -66,7 +68,8 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '${state.items.length}',
+                  // 显示卡片数量（不合并时等于观看记录条数）
+                  '${groups.length}',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.outline,
                   ),
@@ -80,13 +83,17 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             ),
           ),
         ),
-        _buildContent(theme, state),
+        _buildContent(theme, state, groups),
         const SizedBox(height: 16),
       ],
     );
   }
 
-  Widget _buildContent(ThemeData theme, WatchHistoryState state) {
+  Widget _buildContent(
+    ThemeData theme,
+    WatchHistoryState state,
+    List<WatchHistoryGroup> groups,
+  ) {
     if (state.isLoading && state.items.isEmpty) {
       return const SizedBox(
         height: 190,
@@ -103,26 +110,26 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     }
 
     if (!WindowControls.isDesktop) {
-      return _buildMobileList(state.items);
+      return _buildMobileList(groups);
     }
-    return _buildDesktopList(state.items);
+    return _buildDesktopList(groups);
   }
 
-  Widget _buildMobileList(List<WatchHistoryItem> items) {
+  Widget _buildMobileList(List<WatchHistoryGroup> groups) {
     return SizedBox(
       height: 190,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-        itemCount: items.length,
+        itemCount: groups.length,
         itemBuilder: (context, index) {
-          final item = items[index];
+          final group = groups[index];
           return Padding(
             padding: const EdgeInsets.only(right: _itemSpacing),
             child: _WatchHistoryCard(
-              item: item,
+              group: group,
               width: _mobileItemWidth,
-              onTap: () => _navigateToDetail(item),
+              onTap: () => _navigateToDetail(group.primaryItem),
             ),
           );
         },
@@ -130,16 +137,23 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     );
   }
 
-  Widget _buildDesktopList(List<WatchHistoryItem> items) {
+  Widget _buildDesktopList(List<WatchHistoryGroup> groups) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth - _horizontalPadding * 2;
-        final itemCount = ((availableWidth + _itemSpacing) /
+        final maxItemCount = ((availableWidth + _itemSpacing) /
                 (_desktopMinItemWidth + _itemSpacing))
             .floor();
-        final itemWidth = itemCount > 0
-            ? (availableWidth - (itemCount - 1) * _itemSpacing) / itemCount
+        // 当卡片数量较少时保持最小宽度，并居中展示避免留出大空白
+        final bool shouldShrink = groups.length > maxItemCount && maxItemCount > 0;
+        final itemWidth = shouldShrink
+            ? (availableWidth - (maxItemCount - 1) * _itemSpacing) / maxItemCount
             : _desktopMinItemWidth;
+        final contentWidth =
+            groups.length * itemWidth + (groups.length - 1) * _itemSpacing;
+        final extraPadding = (!shouldShrink && contentWidth < availableWidth)
+            ? (availableWidth - contentWidth) / 2
+            : 0.0;
         // 图片高度 + 间距 + 文字区域
         final imageHeight = itemWidth * 9 / 16;
         final listHeight = imageHeight + 8 + 40 + 2 + 16;
@@ -150,15 +164,16 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             height: listHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
-              itemCount: items.length,
+              padding:
+                  EdgeInsets.symmetric(horizontal: _horizontalPadding + extraPadding),
+              itemCount: groups.length,
               separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
               itemBuilder: (context, index) {
-                final item = items[index];
+                final group = groups[index];
                 return _WatchHistoryCard(
-                  item: item,
+                  group: group,
                   width: itemWidth,
-                  onTap: () => _navigateToDetail(item),
+                  onTap: () => _navigateToDetail(group.primaryItem),
                 );
               },
             ),
@@ -215,12 +230,13 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
 
 /// 观看历史卡片（带进度条）
 class _WatchHistoryCard extends ConsumerStatefulWidget {
-  final WatchHistoryItem item;
+  /// 合并后的观看历史分组
+  final WatchHistoryGroup group;
   final VoidCallback? onTap;
   final double width;
 
   const _WatchHistoryCard({
-    required this.item,
+    required this.group,
     this.onTap,
     this.width = 140,
   });
@@ -232,14 +248,20 @@ class _WatchHistoryCard extends ConsumerStatefulWidget {
 class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   bool _isHovered = false;
 
+  // 主展示记录（默认最新观看的一集）
+  WatchHistoryItem get _primaryItem => widget.group.primaryItem;
+
   // 判断是否为剧集
   bool get _isEpisode =>
-      widget.item.mediaType == 'tv' &&
-      widget.item.mediaInfo?.episodeInfo != null;
+      _primaryItem.mediaType == 'tv' &&
+      _primaryItem.mediaInfo?.episodeInfo != null;
+
+  // 是否需要显示“多集”叠卡与角标
+  bool get _showMultiBadge => widget.group.isMultiEpisode;
 
   // 获取显示图片路径：剧集用剧照，电影用背景图
   String? get _imagePath {
-    final mediaInfo = widget.item.mediaInfo;
+    final mediaInfo = _primaryItem.mediaInfo;
     final episodeInfo = mediaInfo?.episodeInfo;
     if (_isEpisode && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
       return episodeInfo.stillPath;
@@ -249,7 +271,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
 
   // 获取显示标题
   String get _displayTitle {
-    final mediaInfo = widget.item.mediaInfo;
+    final mediaInfo = _primaryItem.mediaInfo;
     if (mediaInfo == null) return '未知';
 
     final episodeInfo = mediaInfo.episodeInfo;
@@ -274,6 +296,8 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
     final serverBaseUrl = ref.watch(serverUrlProvider);
     // 统一使用 16:9 比例
     final imageHeight = widget.width * 9 / 16;
+    // 叠卡偏移量（仅多集时生效）
+    final stackOffset = _showMultiBadge ? 6.0 : 0.0;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -311,31 +335,64 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                         ),
                       ],
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _buildImage(serverBaseUrl),
-                          // 进度条
+                    // 使用 Stack 叠加“多集”视觉效果
+                    child: Stack(
+                      children: [
+                        if (_showMultiBadge) ...[
                           Positioned(
-                            left: 0,
+                            left: stackOffset * 2,
+                            top: stackOffset * 2,
                             right: 0,
                             bottom: 0,
-                            child: Container(
-                              height: 4,
-                              color: Colors.black45,
-                              child: FractionallySizedBox(
-                                alignment: Alignment.centerLeft,
-                                widthFactor: widget.item.progress.clamp(0.0, 1.0),
-                                child: Container(
-                                  color: const Color(0xFF3D5BF6),
-                                ),
-                              ),
-                            ),
+                            child: _buildStackedCardShadow(theme),
+                          ),
+                          Positioned(
+                            left: stackOffset,
+                            top: stackOffset,
+                            right: stackOffset,
+                            bottom: stackOffset,
+                            child: _buildStackedCardShadow(theme),
                           ),
                         ],
-                      ),
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          right: _showMultiBadge ? stackOffset * 2 : 0,
+                          bottom: _showMultiBadge ? stackOffset * 2 : 0,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                _buildImage(serverBaseUrl),
+                                // 进度条
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    height: 4,
+                                    color: Colors.black45,
+                                    child: FractionallySizedBox(
+                                      alignment: Alignment.centerLeft,
+                                      widthFactor: _primaryItem.progress.clamp(0.0, 1.0),
+                                      child: Container(
+                                        color: const Color(0xFF3D5BF6),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                if (_showMultiBadge)
+                                  Positioned(
+                                    top: 6,
+                                    right: 6,
+                                    child: _buildCountBadge(theme),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -366,7 +423,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   }
 
   String _getSubtitle() {
-    final progress = (widget.item.progress * 100).toInt();
+    final progress = (_primaryItem.progress * 100).toInt();
     return '已观看 $progress%';
   }
 
@@ -389,6 +446,44 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
       color: Colors.grey[300],
       child: const Center(
         child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey),
+      ),
+    );
+  }
+
+  /// 叠卡背景：用浅色卡片模拟“多张卡片”的层次感
+  Widget _buildStackedCardShadow(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.2),
+        ),
+      ),
+    );
+  }
+
+  /// 多集数量角标
+  Widget _buildCountBadge(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Text(
+        '${widget.group.count}集',
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

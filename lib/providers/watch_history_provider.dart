@@ -106,3 +106,15 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
     return false;
   }
 }
+
+/// 观看历史分组扩展：将原始记录合并为“剧集卡片”
+extension WatchHistoryStateGrouping on WatchHistoryState {
+  /// 按剧集媒体合并后的列表（用于 UI 展示）
+  List<WatchHistoryGroup> groupedItems({bool mergeEpisodes = true}) {
+    // 这里集中处理合并逻辑，避免各页面重复实现
+    return WatchHistoryGroup.groupItems(
+      items,
+      mergeEpisodes: mergeEpisodes,
+    );
+  }
+}

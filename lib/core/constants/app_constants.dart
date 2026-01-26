@@ -21,6 +21,7 @@ class AppConstants {
   static const String localeKey = 'locale';
   static const String seekDurationKey = 'playback_seek_duration';
   static const String playbackSpeedKey = 'playback_speed';
+  static const String watchHistoryMergeEnabledKey = 'watch_history_merge_enabled';
 
   // aria2 配置
   static const String aria2EnabledKey = 'aria2_enabled';
