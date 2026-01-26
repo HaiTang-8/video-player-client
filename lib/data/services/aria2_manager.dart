@@ -367,7 +367,7 @@ try {
     try {
       if (aria2Pid != null) {
         try {
-          Process.killPid(aria2Pid!);
+          Process.killPid(aria2Pid);
         } catch (_) {}
       }
       if (await pidFile.exists()) await pidFile.delete();
