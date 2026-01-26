@@ -9,7 +9,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/widgets/app_back_button.dart';
+import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
+import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/subtitle_info.dart';
@@ -64,6 +66,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   double? _sessionPlaybackSpeed;
   int? _pendingSeekPosition;
   bool _hasAppliedPlaybackSettings = false;
+  bool _initialLoadStarted = false;
 
   @override
   void initState() {
@@ -80,8 +83,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _initEpisodeIndex();
     _configurePlayerNetwork();
     _setupPlayerListeners();
-    _loadVideo();
-    _loadEpisodesIfNeeded();
+    _prepareInitialPlayback();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
       _enterFullscreen();
@@ -149,6 +151,133 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         _pendingSeekPosition = response.data!.position;
       }
     } catch (_) {}
+  }
+
+  Future<void> _prepareInitialPlayback() async {
+    if (_initialLoadStarted) return;
+    _initialLoadStarted = true;
+
+    // 非剧集场景直接走原加载逻辑
+    if (widget.type != 'episode') {
+      await _loadVideo();
+      return;
+    }
+
+    // 剧集场景统一走“播放前判断”流程
+    await _prepareEpisodePlayback();
+  }
+
+  Future<WatchHistoryItem?> _fetchEpisodeProgressById(int episodeId) async {
+    // 仅在剧集场景下获取指定剧集的播放进度，用于“>90%”提示判断
+    if (widget.type != 'episode' || widget.tvShowId == null) return null;
+    try {
+      // 通过 MediaService 拉取指定剧集的观看历史
+      _mediaService ??= ref.read(mediaServiceProvider);
+      final response = await _mediaService!.getEpisodeProgress(
+        tvShowId: widget.tvShowId!,
+        episodeId: episodeId,
+      );
+      if (response.success && response.data != null) {
+        // 返回服务端最新记录（包含 position/duration/completed）
+        return response.data;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Episode? _episodeAtIndex(int index) {
+    // 根据下标安全读取剧集，避免越界导致异常
+    final episodes = _episodes;
+    if (episodes == null || episodes.isEmpty) return null;
+    if (index < 0 || index >= episodes.length) return null;
+    return episodes[index];
+  }
+
+  bool _hasNextForIndex(int index) {
+    // 独立判断指定下标是否存在下一集，用于多次“跳下一集”确认
+    final episodes = _episodes;
+    if (episodes == null || episodes.isEmpty) return false;
+    return index >= 0 && index < episodes.length - 1;
+  }
+
+  Future<void> _prepareEpisodePlayback({int? episodeIndex}) async {
+    // 统一处理“播放当前/下一集”前的进度判断与确认逻辑
+    if (episodeIndex != null) {
+      // 切换剧集触发确认弹窗前先暂停当前播放，避免继续播放干扰选择
+      await _player.pause();
+    }
+    await _loadEpisodesIfNeeded();
+    if (!mounted || _isDisposing) return;
+
+    if (widget.type != 'episode') {
+      await _loadVideo();
+      return;
+    }
+
+    if (_episodes == null || _episodes!.isEmpty) {
+      // 剧集列表为空时直接按默认逻辑播放
+      await _loadVideo();
+      return;
+    }
+
+    final originalIndex = _currentEpisodeIndex;
+    var targetIndex = episodeIndex ?? _currentEpisodeIndex;
+    if (targetIndex < 0 || targetIndex >= _episodes!.length) {
+      // 目标下标非法，回退到默认加载
+      await _loadVideo();
+      return;
+    }
+
+    // 使用循环处理“下一集仍>90%”的情况，确保每次跳过都会再次提示
+    while (true) {
+      final episode = _episodeAtIndex(targetIndex);
+      if (episode == null) {
+        // 下标无法解析到剧集，回退到默认加载
+        await _loadVideo();
+        return;
+      }
+
+      final progressItem = await _fetchEpisodeProgressById(episode.id);
+      if (!mounted || _isDisposing) return;
+
+      // 仅当存在下一集且当前集进度>90%时才提示
+      final shouldPrompt =
+          _hasNextForIndex(targetIndex) &&
+          progressItem != null &&
+          progressItem.duration > 0 &&
+          progressItem.progress > 0.9;
+      if (shouldPrompt) {
+        // 在用户确认之前不加载视频，必须做出选择
+        final goNext = await DialogUtils.showConfirmDialog(
+          context: context,
+          title: '提示',
+          // 使用真实剧集名称替换“当前集”提示，便于用户识别
+          content: '${episode.displayTitle} 已观看超过 90%，是否直接播放下一集？',
+          cancelText: '继续本集',
+          confirmText: '播放下一集',
+          barrierDismissible: false,
+        );
+        if (!mounted || _isDisposing) return;
+        if (goNext == true) {
+          // 用户确认跳下一集：清理待 seek 信息并继续判断下一集
+          _pendingSeekPosition = null;
+          targetIndex += 1;
+          continue;
+        }
+        // 用户选择继续本集：使用历史进度继续播放
+        if (progressItem.position > 0) {
+          _pendingSeekPosition = progressItem.position;
+        }
+      }
+
+      // 未触发提示或用户选择继续本集，开始加载目标剧集
+      if (episodeIndex == null && targetIndex == originalIndex) {
+        await _loadVideo();
+      } else {
+        await _loadVideo(episodeIndex: targetIndex);
+      }
+      return;
+    }
   }
 
   void _setupPlayerListeners() {
@@ -648,7 +777,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _playNext() {
-    if (_hasNext) _loadVideo(episodeIndex: _currentEpisodeIndex + 1);
+    if (_hasNext) {
+      // 点击“下一集”也需要走进度判断与确认逻辑
+      unawaited(_prepareEpisodePlayback(
+        episodeIndex: _currentEpisodeIndex + 1,
+      ));
+    }
   }
 
   String get _displayTitle {

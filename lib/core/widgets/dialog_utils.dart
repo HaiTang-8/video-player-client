@@ -15,12 +15,15 @@ class DialogUtils {
     String cancelText = '取消',
     String confirmText = '确定',
     bool isDestructive = false,
+    bool barrierDismissible = true,
   }) async {
     final container = ProviderScope.containerOf(context);
     container.read(windowBorderVisibleProvider.notifier).hide();
     try {
       return await shadcn.showDialog<bool>(
         context: context,
+        // 控制是否允许点击遮罩层关闭，用于必须做出选择的场景
+        barrierDismissible: barrierDismissible,
         builder: (context) => shadcn.AlertDialog(
           title: Text(title),
           content: Text(content),
