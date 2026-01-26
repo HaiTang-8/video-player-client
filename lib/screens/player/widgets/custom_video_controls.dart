@@ -93,16 +93,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   bool _isDoubleSpeedLocked = false;
   double _speedBeforeDoubleLock = 1.0;
 
-  /// 剧集列表的滚动位置缓存：
-  /// - 关闭列表前记录当前 offset
-  /// - 再次打开时使用该 offset 初始化，从而避免"每次打开都自动滚动到当前播放项"
-  /// - 首次打开默认 0.0，即从顶部显示（仍然会高亮当前播放项）
-  double _playlistScrollOffset = 0.0;
-
-  /// 用于判断当前剧集列表是否发生了"换剧/换季/集数变化"等结构性变化：
-  /// - 变化后重置 [_playlistScrollOffset]，避免把旧列表的滚动位置带到新列表导致定位错乱
-  int? _playlistEpisodesKey;
-
   // 屏幕锁定状态（仅移动端）
   bool _isLocked = false;
 
@@ -121,28 +111,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   void initState() {
     super.initState();
-    _playlistEpisodesKey = _buildEpisodesKey(widget.episodes);
     _initBrightness();
     _initCurrentTracks();
     _setupListeners();
     _startHideTimer();
-  }
-
-  @override
-  void didUpdateWidget(covariant CustomVideoControls oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final newKey = _buildEpisodesKey(widget.episodes);
-    if (newKey != _playlistEpisodesKey) {
-      _playlistEpisodesKey = newKey;
-      _playlistScrollOffset = 0.0;
-    }
-  }
-
-  int? _buildEpisodesKey(List<Episode>? episodes) {
-    if (episodes == null || episodes.isEmpty) return null;
-    final first = episodes.first;
-    // 这里用「剧 + 季 + 集数」粗粒度区分列表内容，避免频繁误判。
-    return Object.hash(first.tvShowId, first.seasonId, episodes.length);
   }
 
   Future<void> _initBrightness() async {
@@ -1327,17 +1299,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final currentIndex = widget.currentEpisodeIndex;
 
     const itemSpacing = 8.0;
-    final scrollController = ScrollController(
-      initialScrollOffset: _playlistScrollOffset,
-    );
-
-    void saveScrollOffset() {
-      if (scrollController.hasClients) {
-        _playlistScrollOffset = scrollController.offset;
-      }
-    }
-
-    scrollController.addListener(saveScrollOffset);
+    final scrollController = ScrollController();
+    final firstItemKey = GlobalKey();
+    var didAutoScroll = false;
 
     final panelWidth =
         WindowControls.isDesktop
@@ -1350,6 +1314,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       barrierColor: Colors.transparent,
       transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (ctx, anim, secondaryAnim) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (didAutoScroll) return;
+          didAutoScroll = true;
+          if (!scrollController.hasClients) return;
+          final itemExtent = firstItemKey.currentContext?.size?.height ?? 0.0;
+          if (itemExtent <= 0) return;
+          final viewport = scrollController.position.viewportDimension;
+          final target =
+              itemExtent * currentIndex - (viewport - itemExtent) / 2;
+          final clamped = target.clamp(
+            scrollController.position.minScrollExtent,
+            scrollController.position.maxScrollExtent,
+          );
+          scrollController.jumpTo(clamped);
+        });
         return SlideTransition(
           position: Tween<Offset>(
             begin: const Offset(1, 0),
@@ -1385,6 +1364,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                             final ep = episodes[index];
                             final isCurrent = index == currentIndex;
                             return Padding(
+                              key: index == 0 ? firstItemKey : null,
                               padding: const EdgeInsets.only(
                                 bottom: itemSpacing,
                               ),
@@ -1450,7 +1430,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         );
       },
     );
-    saveScrollOffset();
     scrollController.dispose();
     if (result != null && result != widget.currentEpisodeIndex) {
       widget.onSelectEpisode?.call(result);
