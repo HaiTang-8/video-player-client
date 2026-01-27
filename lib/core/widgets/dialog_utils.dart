@@ -12,6 +12,8 @@ class DialogUtils {
     required BuildContext context,
     required String title,
     required String content,
+    // 允许调用方传入自定义内容（例如带滚动区域的文本），以满足长内容展示需求
+    Widget? contentWidget,
     String cancelText = '取消',
     String confirmText = '确定',
     bool isDestructive = false,
@@ -26,7 +28,8 @@ class DialogUtils {
         barrierDismissible: barrierDismissible,
         builder: (context) => shadcn.AlertDialog(
           title: Text(title),
-          content: Text(content),
+          // 优先使用自定义内容组件，未提供时回退为纯文本
+          content: contentWidget ?? Text(content),
           actions: [
             shadcn.OutlineButton(
               onPressed: () => Navigator.pop(context, false),

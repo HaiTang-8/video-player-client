@@ -190,12 +190,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
+    // 确保长按倍速状态被重置
+    if (_isLongPressSpeed) {
+      widget.player.setRate(_originalSpeed);
+    }
     _focusNode.dispose();
     for (final sub in _subscriptions) {
       sub.cancel();
     }
     if (_brightnessChanged && !WindowControls.isDesktop) {
-      ScreenBrightness().resetApplicationScreenBrightness();
+      try {
+        ScreenBrightness().resetApplicationScreenBrightness();
+      } catch (_) {}
     }
     super.dispose();
   }
@@ -268,7 +274,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           _brightness = (_brightness + delta).clamp(0.0, 1.0);
           _showBrightnessOverlay = true;
           _brightnessChanged = true;
-          ScreenBrightness().setApplicationScreenBrightness(_brightness);
+          try {
+            ScreenBrightness().setApplicationScreenBrightness(_brightness);
+          } catch (_) {}
         } else {
           _volume = (_volume + delta).clamp(0.0, 1.0);
           _showVolumeOverlay = true;
@@ -911,7 +919,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 child: Slider(
                   value:
                       _duration.inMilliseconds > 0
-                          ? _position.inMilliseconds / _duration.inMilliseconds
+                          ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
                           : 0,
                   onChangeStart: (_) {
                     _dragging = true;
@@ -1166,13 +1174,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         ...externalSubs.map(
           (sub) => PullDownMenuItem.selectable(
             title: sub.displayName,
-            selected: currentId == 'external_${sub.path}',
+            // 通过 title 匹配选中状态（SubtitleTrack.uri 不支持自定义 id）
+            selected: _currentSubtitleTrack?.title == sub.displayName,
             onTap: () {
               final subUrl = sub.url.startsWith('http')
                   ? sub.url
                   : '${widget.serverUrl ?? ''}${sub.url}';
               widget.player.setSubtitleTrack(
-                SubtitleTrack.uri(subUrl, title: sub.displayName),
+                SubtitleTrack.uri(
+                  subUrl,
+                  title: sub.displayName,
+                ),
               );
               _startHideTimer();
             },

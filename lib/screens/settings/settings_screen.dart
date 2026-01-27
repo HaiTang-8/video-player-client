@@ -445,16 +445,32 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
   }
 
   void _showUpdateDialog(ReleaseInfo info) async {
+    // 更新内容不做截断，确保 Windows/Android 弹窗可以完整展示
     final content = info.releaseNotes != null && info.releaseNotes!.isNotEmpty
-        ? (info.releaseNotes!.length > 200
-            ? '${info.releaseNotes!.substring(0, 200)}...'
-            : info.releaseNotes!)
+        ? info.releaseNotes!
         : '有新版本可用';
+    // 仅在 Windows/Android 使用可滚动内容区域，避免过长文本撑爆弹窗
+    final bool useScrollableContent = Platform.isWindows || Platform.isAndroid;
+    // 限制弹窗内容最大高度，并启用内部滚动，保证长文本可读且布局稳定
+    final Widget? contentWidget = useScrollableContent
+        ? ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.65,
+            ),
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text(content),
+              ),
+            ),
+          )
+        : null;
 
     final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '发现新版本 ${info.version}',
       content: content,
+      contentWidget: contentWidget,
       cancelText: '稍后',
       confirmText: '立即更新',
     );

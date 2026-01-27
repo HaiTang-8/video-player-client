@@ -67,6 +67,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   int? _pendingSeekPosition;
   bool _hasAppliedPlaybackSettings = false;
   bool _initialLoadStarted = false;
+  final List<StreamSubscription> _subscriptions = [];
 
   @override
   void initState() {
@@ -282,7 +283,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _setupPlayerListeners() {
     // 监听播放器错误
-    _player.stream.error.listen((error) {
+    _subscriptions.add(_player.stream.error.listen((error) {
       if (!mounted || _isDisposing) return;
       if (error.isNotEmpty) {
         LogService.instance.error('PlayerScreen', 'MPV error: $error, url: $_currentStreamUrl');
@@ -290,22 +291,27 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         if (error.contains('Could not open/initialize audio device')) return;
         if (error.contains('ffurl_write')) return;
         if (error.contains('ffurl_read')) return;
-        if (error.contains('tcp:')) return;
+        // 使用更精确的 tcp 错误匹配
+        if (error.contains('tcp: Connection refused') ||
+            error.contains('tcp: Connection reset') ||
+            error.contains('tcp: Connection timed out')) {
+          return;
+        }
         setState(() {
           _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
           _isLoading = false;
         });
       }
-    });
+    }));
 
     // 监听缓冲状态
-    _player.stream.buffering.listen((buffering) {
+    _subscriptions.add(_player.stream.buffering.listen((buffering) {
       if (!mounted || _isDisposing) return;
       // 可选：显示缓冲状态
-    });
+    }));
 
     // 监听视频时长，准备好后 seek 到初始位置并设置倍速
-    _player.stream.duration.listen((duration) {
+    _subscriptions.add(_player.stream.duration.listen((duration) {
       if (!mounted || _isDisposing) return;
       if (duration.inSeconds <= 0) return;
 
@@ -326,51 +332,55 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         debugPrint('[PlayerScreen] Seeking to $targetPosition seconds');
         _player.seek(Duration(seconds: targetPosition));
       }
-    });
+    }));
 
     // 监听播放完成
-    _player.stream.completed.listen((completed) {
+    _subscriptions.add(_player.stream.completed.listen((completed) {
       if (!mounted || _isDisposing) return;
       if (completed) {
-        _saveProgress(); // 播放完成时保存进度
+        unawaited(_saveProgress()); // 播放完成时保存进度
       }
-    });
+    }));
   }
 
   void _startProgressTimer() {
     _progressTimer?.cancel();
     _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      _saveProgress();
+      unawaited(_saveProgress());
     });
   }
 
   Future<void> _saveProgress() async {
-    final position = _player.state.position;
-    final duration = _player.state.duration;
+    try {
+      final position = _player.state.position;
+      final duration = _player.state.duration;
 
-    // 跳过无效数据或位置未变化
-    if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
-    _lastSavedPosition = position;
+      // 跳过无效数据或位置未变化
+      if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
+      _lastSavedPosition = position;
 
-    final service = _mediaService;
-    if (service == null) return;
+      final service = _mediaService;
+      if (service == null) return;
 
-    if (widget.type == 'movie') {
-      await service.updateWatchProgress(
-        mediaType: 'movie',
-        mediaId: widget.id,
-        position: position.inSeconds,
-        duration: duration.inSeconds,
-      );
-    } else if (widget.type == 'episode' && widget.tvShowId != null) {
-      final episodeId = _currentEpisode?.id ?? widget.id;
-      await service.updateWatchProgress(
-        mediaType: 'tv',
-        mediaId: widget.tvShowId!,
-        episodeId: episodeId,
-        position: position.inSeconds,
-        duration: duration.inSeconds,
-      );
+      if (widget.type == 'movie') {
+        await service.updateWatchProgress(
+          mediaType: 'movie',
+          mediaId: widget.id,
+          position: position.inSeconds,
+          duration: duration.inSeconds,
+        );
+      } else if (widget.type == 'episode' && widget.tvShowId != null) {
+        final episodeId = _currentEpisode?.id ?? widget.id;
+        await service.updateWatchProgress(
+          mediaType: 'tv',
+          mediaId: widget.tvShowId!,
+          episodeId: episodeId,
+          position: position.inSeconds,
+          duration: duration.inSeconds,
+        );
+      }
+    } catch (e) {
+      debugPrint('[PlayerScreen] Failed to save progress: $e');
     }
   }
 
@@ -378,10 +388,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void dispose() {
     _isDisposing = true;
     _progressTimer?.cancel();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
     try {
       _toastOverlay?.remove();
     } catch (_) {}
-    _saveProgress(); // 退出时保存最终进度
+    unawaited(_saveProgress()); // 退出时保存最终进度
     if (_isFullscreen) {
       _exitFullscreen();
     }
@@ -439,10 +452,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _error = null;
       _currentStreamUrl = null;
       _externalSubtitles = [];
+      // 无条件重置，确保重试时也能正确 seek 和设置倍速
+      _hasSeekToInitialPosition = false;
+      _hasAppliedPlaybackSettings = false;
       if (episodeIndex != null) {
         _currentEpisodeIndex = episodeIndex;
-        _hasSeekToInitialPosition = false;
-        _hasAppliedPlaybackSettings = false;
       }
     });
 
@@ -452,12 +466,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     try {
-      // 等待下载任务加载完成后再检查本地缓存
+      // 等待下载任务加载完成后再检查本地缓存（最多等待 5 秒）
       var downloadState = ref.read(downloadManagerProvider);
       if (downloadState.isLoading) {
+        var waitCount = 0;
+        const maxWait = 100; // 100 * 50ms = 5 秒超时
         await Future.doWhile(() async {
           await Future.delayed(const Duration(milliseconds: 50));
-          if (!mounted) return false;
+          if (!mounted || ++waitCount >= maxWait) return false;
           downloadState = ref.read(downloadManagerProvider);
           return downloadState.isLoading;
         });
@@ -577,16 +593,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<String?> _resolveRedirectTarget(String url) async {
     try {
-      final response = await _dio.get<List<int>>(
+      // 使用 HEAD 请求避免下载大文件
+      final response = await _dio.head(
         url,
         options: Options(
           followRedirects: false,
           validateStatus:
               (status) => status != null && status >= 200 && status < 400,
-          responseType: ResponseType.bytes,
-          // 保险起见：即便服务端没重定向（走代理），也只拉取 1 字节避免误触发大流量。
           headers: const {
-            'Range': 'bytes=0-0',
             'User-Agent': DownloadService.aria2UserAgent,
           },
         ),
@@ -690,19 +704,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       });
 
       // 自动加载最佳匹配字幕（score >= 85）
-      if (subtitles.isNotEmpty && subtitles.first.score >= 85) {
-        final serverUrl = ref.read(serverUrlProvider);
-        final subUrl =
-            subtitles.first.url.startsWith('http')
-                ? subtitles.first.url
-                : '$serverUrl${subtitles.first.url}';
-        await _player.setSubtitleTrack(
-          SubtitleTrack.uri(subUrl, title: subtitles.first.displayName),
-        );
+      if (subtitles.isNotEmpty) {
+        // 找到最高分的字幕
+        final bestSub = subtitles.reduce((a, b) => a.score >= b.score ? a : b);
+        if (bestSub.score >= 85) {
+          final serverUrl = ref.read(serverUrlProvider);
+          final subUrl =
+              bestSub.url.startsWith('http')
+                  ? bestSub.url
+                  : '$serverUrl${bestSub.url}';
+          await _player.setSubtitleTrack(
+            SubtitleTrack.uri(
+              subUrl,
+              title: bestSub.displayName,
+            ),
+          );
 
-        // 显示提示
-        if (mounted) {
-          _showToast('已自动加载字幕: ${subtitles.first.displayName}');
+          // 显示提示
+          if (mounted) {
+            _showToast('已自动加载字幕: ${bestSub.displayName}');
+          }
         }
       }
     } catch (e) {
