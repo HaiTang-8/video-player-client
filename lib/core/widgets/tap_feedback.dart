@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class TapFeedback extends StatefulWidget {
   final Widget child;
@@ -6,6 +7,7 @@ class TapFeedback extends StatefulWidget {
   final VoidCallback? onLongPress;
   final Color overlayColor;
   final BorderRadius? borderRadius;
+  final String? semanticLabel;
 
   const TapFeedback({
     super.key,
@@ -14,6 +16,7 @@ class TapFeedback extends StatefulWidget {
     this.onLongPress,
     this.overlayColor = Colors.black12,
     this.borderRadius,
+    this.semanticLabel,
   });
 
   @override
@@ -22,6 +25,7 @@ class TapFeedback extends StatefulWidget {
 
 class _TapFeedbackState extends State<TapFeedback> {
   bool _isPressed = false;
+  bool _isFocused = false;
 
   void _handleTapDown(TapDownDetails details) {
     setState(() => _isPressed = true);
@@ -35,9 +39,21 @@ class _TapFeedbackState extends State<TapFeedback> {
     setState(() => _isPressed = false);
   }
 
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    final isActivateKey = event.logicalKey == LogicalKeyboardKey.enter ||
+        event.logicalKey == LogicalKeyboardKey.space;
+    if (!isActivateKey) return KeyEventResult.ignored;
+
+    // Trigger once on key-up to avoid key repeat spamming.
+    if (event is KeyUpEvent) {
+      widget.onTap?.call();
+    }
+    return KeyEventResult.handled;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    Widget content = GestureDetector(
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
       onTapDown: _handleTapDown,
@@ -47,7 +63,7 @@ class _TapFeedbackState extends State<TapFeedback> {
       child: Stack(
         children: [
           widget.child,
-          if (_isPressed)
+          if (_isPressed || _isFocused)
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
@@ -59,5 +75,23 @@ class _TapFeedbackState extends State<TapFeedback> {
         ],
       ),
     );
+
+    if (widget.onTap != null) {
+      content = Focus(
+        onKeyEvent: _handleKeyEvent,
+        onFocusChange: (focused) => setState(() => _isFocused = focused),
+        child: content,
+      );
+    }
+
+    if (widget.semanticLabel != null) {
+      content = Semantics(
+        label: widget.semanticLabel,
+        button: widget.onTap != null,
+        child: content,
+      );
+    }
+
+    return content;
   }
 }

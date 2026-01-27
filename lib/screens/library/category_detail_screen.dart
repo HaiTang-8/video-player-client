@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
-import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
@@ -31,10 +32,8 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      refreshCategoryItems(ref, widget.categoryId, pageSize: 30);
-    });
+    // Kick off initial load early to avoid a first-frame "empty" flash.
+    unawaited(refreshCategoryItems(ref, widget.categoryId, pageSize: 30));
   }
 
   bool _onScrollNotification(ScrollNotification notification) {
@@ -49,6 +48,15 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<String?>(serverUrlProvider, (previous, next) {
+      if (previous == next) return;
+      if (next == null || next.isEmpty) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(refreshCategoryItems(ref, widget.categoryId, pageSize: 30));
+      });
+    });
+
     final itemsState = ref.watch(categoryItemsProvider(widget.categoryId));
     final isDesktop = WindowControls.isDesktop;
 
@@ -119,6 +127,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
             }
             final item = state.items[index];
             return LibraryPosterCard(
+              key: ValueKey('poster_${item.type.name}_${item.id}'),
               item: item,
               width: isDesktop ? 140.0 : double.infinity,
               onTap: () => _navigateToDetail(item),

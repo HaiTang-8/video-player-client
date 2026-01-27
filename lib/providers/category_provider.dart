@@ -62,7 +62,7 @@ class CategoriesNotifier extends Notifier<CategoriesState> {
   }
 
   Future<void> refresh() async {
-    clearAllCategoryCache();
+    clearAllCategoryCache(ref.container);
     state = CategoriesState();
     await load();
   }
@@ -106,6 +106,9 @@ int _requestVersion = 0;
 final _categoryRequestVersions = <String, int>{};
 
 final categoryItemsProvider = Provider.family<CategoryItemsState, String>((ref, categoryId) {
+  // Ensure CategoryItems cache is scoped to the current server.
+  final serverUrl = ref.watch(serverUrlProvider);
+  _validateCacheForServer(serverUrl);
   return _categoryItemsCache[categoryId] ?? CategoryItemsState();
 });
 
@@ -121,9 +124,15 @@ void _validateCacheForServer(String? serverUrl) {
   }
 }
 
-void clearAllCategoryCache() {
+void clearAllCategoryCache([ProviderContainer? container]) {
+  final categoryIds = _categoryItemsCache.keys.toList();
   _categoryItemsCache.clear();
   _categoryRequestVersions.clear();
+  if (container != null) {
+    for (final categoryId in categoryIds) {
+      container.invalidate(categoryItemsProvider(categoryId));
+    }
+  }
 }
 
 Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
@@ -152,6 +161,7 @@ Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize =
 
   final response = await service.getCategoryItems(categoryId, page: 1, pageSize: pageSize);
 
+  if (container.read(serverUrlProvider) != serverUrl) return;
   if (_categoryRequestVersions[categoryId] != requestVersion) return;
 
   if (response.isSuccess && response.data != null) {
@@ -188,6 +198,7 @@ Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSi
   final nextPage = currentState.currentPage + 1;
   final response = await service.getCategoryItems(categoryId, page: nextPage, pageSize: pageSize);
 
+  if (container.read(serverUrlProvider) != serverUrl) return;
   if (_categoryRequestVersions[categoryId] != requestVersion) return;
 
   if (response.isSuccess && response.data != null) {

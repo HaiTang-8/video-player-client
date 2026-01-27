@@ -86,15 +86,19 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     WatchHistoryState state,
     List<WatchHistoryGroup> groups,
   ) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    // 图片高度 (220 * 9/16 ≈ 124) + 间距 8 + 文字区域 (标题2行 + 间距2 + 副标题1行)
+    final mobileListHeight = 124 + 8 + textScaler.scale(60);
+
     if (state.isLoading && state.items.isEmpty) {
-      return const SizedBox(
-        height: 190,
-        child: Center(child: CircularProgressIndicator()),
+      return SizedBox(
+        height: mobileListHeight,
+        child: const Center(child: CircularProgressIndicator()),
       );
     }
     if (state.error != null && state.items.isEmpty) {
       return SizedBox(
-        height: 190,
+        height: mobileListHeight,
         child: Center(
           child: Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
         ),
@@ -108,8 +112,12 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
   }
 
   Widget _buildMobileList(List<WatchHistoryGroup> groups) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    // 图片高度 (220 * 9/16 ≈ 124) + 间距 8 + 文字区域 (标题2行 + 间距2 + 副标题1行)
+    final listHeight = 124 + 8 + textScaler.scale(60);
+
     return SizedBox(
-      height: 190,
+      height: listHeight,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
@@ -119,6 +127,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
           return Padding(
             padding: const EdgeInsets.only(right: _itemSpacing),
             child: _WatchHistoryCard(
+              key: ValueKey('history_${group.primaryItem.id}'),
               group: group,
               width: _mobileItemWidth,
               onTap: () => _navigateToDetail(group.primaryItem),
@@ -165,6 +174,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
               itemBuilder: (context, index) {
                 final group = groups[index];
                 return _WatchHistoryCard(
+                  key: ValueKey('history_${group.primaryItem.id}'),
                   group: group,
                   width: itemWidth,
                   onTap: () => _navigateToDetail(group.primaryItem),
@@ -211,6 +221,7 @@ class _WatchHistoryCard extends ConsumerStatefulWidget {
   final double width;
 
   const _WatchHistoryCard({
+    super.key,
     required this.group,
     this.onTap,
     this.width = 140,

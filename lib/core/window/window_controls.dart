@@ -7,6 +7,9 @@ class WindowControls {
   static const MethodChannel _channel =
       MethodChannel('media_player/window_controls');
 
+  /// 是否为桌面平台（Windows/macOS）
+  /// 注意：不包含 Linux，因为本项目没有 Linux 原生窗口控制实现
+  /// 如需纯 Dart 的桌面判断（如平滑滚动），请使用 DesktopSmoothScroll.isDesktop
   static bool get isDesktop =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.windows ||

@@ -25,6 +25,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
   static const int _rowCount = 2;
 
   bool _loaded = false;
+  String? _loadedServerUrl;
 
   double get _itemWidth =>
       WindowControls.isDesktop ? _desktopItemWidth : _mobileItemWidth;
@@ -32,19 +33,32 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
   @override
   void initState() {
     super.initState();
-    // 移动端直接加载默认数量
+    // 移动端直接加载默认数量（避免首帧“暂无内容”闪烁）。
     if (!WindowControls.isDesktop) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _tryLoad();
-      });
+      _tryLoad();
     }
   }
 
   void _tryLoad({int? pageSize}) {
-    if (_loaded) return;
+    final serverUrl = ref.read(serverUrlProvider);
+    final service = ref.read(mediaServiceProvider);
+    if (serverUrl == null || serverUrl.isEmpty || service == null) return;
+
+    // Treat "loaded" as scoped to current serverUrl; switching server should reload.
+    if (_loaded && _loadedServerUrl == serverUrl) return;
     _loaded = true;
+    _loadedServerUrl = serverUrl;
     loadCategoryItems(ref, widget.category.id, pageSize: pageSize ?? 20);
+  }
+
+  void _retry() {
+    _loaded = false;
+    _loadedServerUrl = null;
+    if (WindowControls.isDesktop) {
+      setState(() {});
+    } else {
+      _tryLoad();
+    }
   }
 
   void _loadForDesktop(double availableWidth) {
@@ -58,6 +72,22 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
 
   @override
   Widget build(BuildContext context) {
+    // Server switch: clear local "loaded" flag so the row can reload on the new server.
+    ref.listen<String?>(serverUrlProvider, (previous, next) {
+      if (previous == next) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loaded = false;
+        _loadedServerUrl = null;
+        // On desktop the pageSize depends on layout; trigger a rebuild to recompute.
+        if (WindowControls.isDesktop) {
+          setState(() {});
+        } else {
+          _tryLoad();
+        }
+      });
+    });
+
     final theme = Theme.of(context);
     final itemsState = ref.watch(categoryItemsProvider(widget.category.id));
 
@@ -109,6 +139,13 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
     final mobileListHeight = 132 + 8 + textScaler.scale(40);
 
     if (!WindowControls.isDesktop) {
+      if (!_loaded && itemsState.items.isEmpty && itemsState.error == null) {
+        // Initial load (or server switched) – show loading instead of "empty" flash.
+        return SizedBox(
+          height: mobileListHeight,
+          child: const Center(child: CircularProgressIndicator()),
+        );
+      }
       if (itemsState.isLoading && itemsState.items.isEmpty) {
         return SizedBox(
           height: mobileListHeight,
@@ -119,8 +156,14 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
         return SizedBox(
           height: mobileListHeight,
           child: Center(
-            child:
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
+                const SizedBox(height: 8),
+                TextButton(onPressed: _retry, child: const Text('重试')),
+              ],
+            ),
           ),
         );
       }
@@ -154,6 +197,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
           return Padding(
             padding: const EdgeInsets.only(right: _itemSpacing),
             child: LibraryPosterCard(
+              key: ValueKey('poster_${item.type.name}_${item.id}'),
               item: item,
               width: _mobileItemWidth,
               onTap: () => _navigateToDetail(item),
@@ -177,6 +221,14 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
           });
         }
 
+        if (!_loaded && itemsState.items.isEmpty && itemsState.error == null) {
+          // Initial load (or server switched) – show loading instead of "empty" flash.
+          final itemHeight = _itemWidth / 0.48;
+          return SizedBox(
+            height: itemHeight * _rowCount + _itemSpacing,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
         if (itemsState.isLoading && itemsState.items.isEmpty) {
           final itemHeight = _itemWidth / 0.48;
           return SizedBox(
@@ -188,8 +240,14 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
           return SizedBox(
             height: 180,
             child: Center(
-              child: Text('加载失败',
-                  style: TextStyle(color: theme.colorScheme.error)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
+                  const SizedBox(height: 8),
+                  TextButton(onPressed: _retry, child: const Text('重试')),
+                ],
+              ),
             ),
           );
         }
@@ -223,6 +281,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
                 width: itemWidth,
                 height: itemHeight,
                 child: LibraryPosterCard(
+                  key: ValueKey('poster_${item.type.name}_${item.id}'),
                   item: item,
                   width: itemWidth,
                   onTap: () => _navigateToDetail(item),

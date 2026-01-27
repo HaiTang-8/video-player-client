@@ -209,7 +209,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     return Container(
       padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 8,
+        top: 8,
         left: leftInset,
         right: 12,
         bottom: 8,
@@ -364,6 +364,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           itemBuilder: (context, index) {
             final item = state.items[index];
             return LibraryPosterCard(
+              key: ValueKey('poster_${item.type.name}_${item.id}'),
               item: item,
               width: 140,
               onTap: () => _navigateToDetail(item),
