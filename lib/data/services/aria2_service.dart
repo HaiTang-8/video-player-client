@@ -77,7 +77,18 @@ class Aria2Service {
     }
     options['header'] = allHeaders;
 
-    debugPrint('[Aria2] Headers: $allHeaders');
+    if (kDebugMode) {
+      final redacted = allHeaders.map((line) {
+        final idx = line.indexOf(':');
+        if (idx <= 0) return line;
+        final key = line.substring(0, idx).trim().toLowerCase();
+        if (key == 'authorization' || key == 'cookie') {
+          return '${line.substring(0, idx)}: <redacted>';
+        }
+        return line;
+      }).toList();
+      debugPrint('[Aria2] Headers: $redacted');
+    }
 
     final result = await _call('aria2.addUri', [
       [url],

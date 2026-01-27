@@ -1,21 +1,23 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/services/storage_management_service.dart';
+import '../../providers/download_provider.dart';
 
-class StorageManagementScreen extends StatefulWidget {
+class StorageManagementScreen extends ConsumerStatefulWidget {
   const StorageManagementScreen({super.key});
 
   @override
-  State<StorageManagementScreen> createState() =>
+  ConsumerState<StorageManagementScreen> createState() =>
       _StorageManagementScreenState();
 }
 
-class _StorageManagementScreenState extends State<StorageManagementScreen> {
+class _StorageManagementScreenState extends ConsumerState<StorageManagementScreen> {
   final _service = StorageManagementService.instance;
   List<StorageCategory> _categories = [];
   bool _isLoading = true;
@@ -52,6 +54,11 @@ class _StorageManagementScreenState extends State<StorageManagementScreen> {
     if (confirmed == true && mounted) {
       setState(() => _clearingId = category.id);
       await _service.clearCategory(category.id);
+      if (category.id == 'downloads') {
+        // Storage cleanup also clears persisted records; make UI state consistent immediately.
+        ref.read(downloadManagerProvider.notifier).clearTasksInMemory();
+        await ref.read(downloadManagerProvider.notifier).reloadTasks();
+      }
       await _loadStorageUsage();
       if (mounted) {
         setState(() => _clearingId = null);

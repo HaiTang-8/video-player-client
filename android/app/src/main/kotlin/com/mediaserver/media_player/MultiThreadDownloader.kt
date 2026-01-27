@@ -218,30 +218,32 @@ class MultiThreadDownloader(
             requestBuilder.header(key, value)
         }
 
-        val response = client.newCall(requestBuilder.build()).execute()
-        if (!response.isSuccessful && response.code != 206) {
-            throw Exception("HTTP ${response.code}: ${response.message}")
-        }
+        client.newCall(requestBuilder.build()).execute().use { response ->
+            // Range downloads must return 206; a 200 response would corrupt the preallocated file.
+            if (response.code != 206) {
+                throw Exception("HTTP ${response.code}: ${response.message}")
+            }
 
-        val body = response.body ?: throw Exception("Empty response body")
-        val buffer = ByteArray(8192)
+            val body = response.body ?: throw Exception("Empty response body")
+            val buffer = ByteArray(8192)
 
-        RandomAccessFile(file, "rw").use { raf ->
-            raf.seek(range.first)
+            RandomAccessFile(file, "rw").use { raf ->
+                raf.seek(range.first)
 
-            body.byteStream().use { input ->
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    if (cancelFlag.get()) break
+                body.byteStream().use { input ->
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        if (cancelFlag.get()) break
 
-                    while (pauseFlag.get() && !cancelFlag.get()) {
-                        delay(100)
+                        while (pauseFlag.get() && !cancelFlag.get()) {
+                            delay(100)
+                        }
+
+                        if (cancelFlag.get()) break
+
+                        raf.write(buffer, 0, bytesRead)
+                        onBytesDownloaded(bytesRead.toLong())
                     }
-
-                    if (cancelFlag.get()) break
-
-                    raf.write(buffer, 0, bytesRead)
-                    onBytesDownloaded(bytesRead.toLong())
                 }
             }
         }

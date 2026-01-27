@@ -1,5 +1,9 @@
 import 'dart:io';
+
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'download_service.dart';
 
 class StorageCategory {
   final String id;
@@ -143,6 +147,9 @@ class StorageManagementService {
       if (await downloadDir.exists()) {
         await downloadDir.delete(recursive: true);
       }
+      // Keep persistent records consistent with the filesystem.
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(DownloadService.tasksKey);
     } catch (_) {}
   }
 

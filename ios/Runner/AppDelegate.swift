@@ -33,6 +33,22 @@ import ActivityKit
         } catch {
           result(nil)
         }
+      } else if call.method == "excludeFromBackup" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String else {
+          result(FlutterError(code: "INVALID_ARGS", message: "Missing path", details: nil))
+          return
+        }
+        do {
+          let url = URL(fileURLWithPath: path)
+          var values = URLResourceValues()
+          values.isExcludedFromBackup = true
+          var mutableUrl = url
+          try mutableUrl.setResourceValues(values)
+          result(true)
+        } catch {
+          result(false)
+        }
       } else {
         result(FlutterMethodNotImplemented)
       }
@@ -63,11 +79,7 @@ import ActivityKit
         let headers = args["headers"] as? [String: String] ?? [:]
         let displayName = args["displayName"] as? String
 
-        MultiThreadDownloader.shared.startDownload(taskId: taskId, url: url, savePath: savePath, headers: headers, displayName: displayName) { [weak self] progress in
-          DispatchQueue.main.async {
-            self?.eventSink?(progress.toDict())
-          }
-        }
+        MultiThreadDownloader.shared.startDownload(taskId: taskId, url: url, savePath: savePath, headers: headers, displayName: displayName)
         result(taskId)
 
       case "pauseDownload":
@@ -132,11 +144,17 @@ import ActivityKit
 extension AppDelegate: FlutterStreamHandler {
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     self.eventSink = events
+    MultiThreadDownloader.shared.setProgressHandler { [weak self] progress in
+      DispatchQueue.main.async {
+        self?.eventSink?(progress.toDict())
+      }
+    }
     return nil
   }
 
   func onCancel(withArguments arguments: Any?) -> FlutterError? {
     self.eventSink = nil
+    MultiThreadDownloader.shared.setProgressHandler(nil)
     return nil
   }
 }

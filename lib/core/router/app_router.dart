@@ -255,10 +255,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/download-episodes',
         builder: (context, state) {
           final extra = state.extra as Map<String, dynamic>;
+          final seasonData = extra['season'];
+          final season = seasonData is Season
+              ? seasonData
+              : Season.fromJson(seasonData as Map<String, dynamic>);
           return DownloadEpisodesScreen(
             tvShowName: extra['tvShowName'] as String,
             seasonNumber: extra['seasonNumber'] as int,
-            season: extra['season'] as Season,
+            season: season,
             storageName: extra['storageName'] as String?,
           );
         },

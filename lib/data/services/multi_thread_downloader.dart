@@ -218,8 +218,7 @@ class MultiThreadDownloader {
       downloadedBytes = await file.length();
     }
 
-    final sink = file.openWrite(mode: downloadedBytes > 0 ? FileMode.append : FileMode.write);
-
+    IOSink? sink;
     try {
       final options = Options(
         headers: {
@@ -227,13 +226,54 @@ class MultiThreadDownloader {
           if (downloadedBytes > 0) 'Range': 'bytes=$downloadedBytes-',
         },
         responseType: ResponseType.stream,
+        validateStatus: (status) => status == 200 || status == 206 || status == 416,
       );
 
-      final response = await _dio.get<ResponseBody>(
+      var response = await _dio.get<ResponseBody>(
         url,
         options: options,
         cancelToken: cancelToken,
       );
+
+      var effectiveDownloadedBytes = downloadedBytes;
+      final statusCode = response.statusCode ?? 0;
+      if (downloadedBytes > 0) {
+        if (statusCode == 200) {
+          // Server ignored Range; restart from scratch.
+          effectiveDownloadedBytes = 0;
+        } else if (statusCode == 206) {
+          final contentRange = response.headers.value('content-range');
+          final match = RegExp(r'^bytes (\d+)-').firstMatch(contentRange ?? '');
+          final start = match != null ? int.tryParse(match.group(1)!) : null;
+          if (start == null || start != downloadedBytes) {
+            try {
+              await file.delete();
+            } catch (_) {}
+            throw Exception('Resume validation failed (Content-Range mismatch)');
+          }
+        } else if (statusCode == 416) {
+          // Local partial is invalid; restart from scratch.
+          try {
+            await response.data?.stream.drain();
+          } catch (_) {}
+          try {
+            if (await file.exists()) await file.delete();
+          } catch (_) {}
+          effectiveDownloadedBytes = 0;
+          response = await _dio.get<ResponseBody>(
+            url,
+            options: Options(
+              headers: headers,
+              responseType: ResponseType.stream,
+              validateStatus: (status) => status == 200 || status == 206,
+            ),
+            cancelToken: cancelToken,
+          );
+        }
+      }
+
+      downloadedBytes = effectiveDownloadedBytes;
+      sink = file.openWrite(mode: downloadedBytes > 0 ? FileMode.append : FileMode.write);
 
       int totalBytes = fileSize;
       if (totalBytes == 0) {
@@ -277,17 +317,19 @@ class MultiThreadDownloader {
       }
 
       await sink.flush();
-      await sink.close();
 
       if (!_cancelled) {
         onComplete?.call();
       }
     } catch (e) {
-      await sink.close();
       if (e is DioException && e.type == DioExceptionType.cancel) {
         return;
       }
       rethrow;
+    } finally {
+      try {
+        await sink?.close();
+      } catch (_) {}
     }
   }
 
@@ -444,15 +486,16 @@ class MultiThreadDownloader {
 
       final outputFile = File(savePath);
       final outputSink = outputFile.openWrite();
-
-      for (final chunk in chunks) {
-        final partFile = File('$tempDir/part_${chunk.index}');
-        final partData = await partFile.readAsBytes();
-        outputSink.add(partData);
+      try {
+        for (final chunk in chunks) {
+          final partFile = File('$tempDir/part_${chunk.index}');
+          // Stream each part into the final file to avoid loading large chunks into memory.
+          await outputSink.addStream(partFile.openRead());
+        }
+        await outputSink.flush();
+      } finally {
+        await outputSink.close();
       }
-
-      await outputSink.flush();
-      await outputSink.close();
 
       await tempDirFile.delete(recursive: true);
 
@@ -498,26 +541,30 @@ class MultiThreadDownloader {
             'Range': 'bytes=$startPosition-$endPosition',
           },
           responseType: ResponseType.stream,
+          validateStatus: (status) => status == 206,
         ),
         cancelToken: cancelToken,
       );
 
-      final sink = partFile.openWrite(mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write);
+      final sink = partFile.openWrite(
+        mode: chunk.downloaded > 0 ? FileMode.append : FileMode.write,
+      );
+      try {
+        await for (final data in response.data!.stream) {
+          if (_cancelled) break;
+          while (_paused && !_cancelled) {
+            await Future.delayed(const Duration(milliseconds: 100));
+          }
+          if (_cancelled) break;
 
-      await for (final data in response.data!.stream) {
-        if (_cancelled) break;
-        while (_paused && !_cancelled) {
-          await Future.delayed(const Duration(milliseconds: 100));
+          sink.add(data);
+          chunk.downloaded += data.length;
+          onProgress(chunk.downloaded);
         }
-        if (_cancelled) break;
-
-        sink.add(data);
-        chunk.downloaded += data.length;
-        onProgress(chunk.downloaded);
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-
-      await sink.flush();
-      await sink.close();
 
       if (!_cancelled && chunk.downloaded >= chunk.length) {
         chunk.completed = true;

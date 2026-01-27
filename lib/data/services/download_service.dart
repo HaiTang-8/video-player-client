@@ -4,10 +4,12 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/api_constants.dart';
+import '../../core/utils/file_name_sanitizer.dart';
 import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
@@ -19,13 +21,15 @@ import 'native_downloader.dart';
 typedef ProgressCallback = void Function(int received, int total);
 
 class DownloadService {
+  static const MethodChannel _storageChannel = MethodChannel('media_player/storage');
+
   final Dio _dio;
   final String _serverUrl;
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, MultiThreadDownloader> _multiThreadDownloaders = {};
   final Map<int, Storage> _storageCache = {};
 
-  static const String _tasksKey = 'download_tasks';
+  static const String tasksKey = 'download_tasks';
 
   // 多线程下载配置
   int threadCount = 8;
@@ -39,12 +43,28 @@ class DownloadService {
 
   DownloadService(this._dio, this._serverUrl);
 
+  String? _cachedDownloadDir;
+
   Future<String> get _downloadDir async {
+    final cached = _cachedDownloadDir;
+    if (cached != null) return cached;
+
     final dir = await getApplicationDocumentsDirectory();
     final downloadDir = Directory('${dir.path}/downloads');
     if (!await downloadDir.exists()) {
       await downloadDir.create(recursive: true);
     }
+    _cachedDownloadDir = downloadDir.path;
+
+    // Avoid iCloud/iTunes backups for large video files.
+    if (Platform.isIOS) {
+      try {
+        await _storageChannel.invokeMethod('excludeFromBackup', {'path': downloadDir.path});
+      } catch (_) {
+        // Best-effort only.
+      }
+    }
+
     return downloadDir.path;
   }
 
@@ -186,12 +206,13 @@ class DownloadService {
       final url = '$_serverUrl$apiPath';
       final queryParams = userAgent != null ? '?user_agent=${Uri.encodeComponent(userAgent)}' : '';
       final fullUrl = '$url$queryParams';
-      debugPrint('[DownloadService] requesting: $fullUrl');
+      if (kDebugMode) {
+        debugPrint('[DownloadService] requesting download url via apiPath=$apiPath');
+      }
       final response = await _dio.get(fullUrl);
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data['data'] as Map<String, dynamic>?;
         final downloadUrl = data?['url'] as String?;
-        debugPrint('[DownloadService] downloadUrl=$downloadUrl');
         if (downloadUrl != null && downloadUrl.isNotEmpty) {
           return downloadUrl.startsWith('http') ? downloadUrl : '$_serverUrl$downloadUrl';
         }
@@ -249,10 +270,6 @@ class DownloadService {
     return _effectivePort(a) == _effectivePort(b);
   }
 
-  String _sanitizeFileName(String fileName) {
-    return fileName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
-  }
-
   Future<DownloadTask> createTask({
     required Episode episode,
     required String tvShowName,
@@ -260,9 +277,9 @@ class DownloadService {
     String? storageName,
   }) async {
     final dir = await _downloadDir;
-    final sanitizedTvShowName = _sanitizeFileName(tvShowName);
+    final sanitizedTvShowName = sanitizeFileName(tvShowName);
     final fileName = episode.filePath?.split('/').last ?? 'episode_${episode.id}.mp4';
-    final sanitizedFileName = _sanitizeFileName(fileName);
+    final sanitizedFileName = sanitizeFileName(fileName);
 
     final localPath = '$dir/$sanitizedTvShowName/S${seasonNumber.toString().padLeft(2, '0')}/$sanitizedFileName';
 
@@ -294,7 +311,7 @@ class DownloadService {
   }) async {
     final dir = await _downloadDir;
     final fileName = movie.filePath?.split('/').last ?? 'movie_${movie.id}.mp4';
-    final sanitizedFileName = _sanitizeFileName(fileName);
+    final sanitizedFileName = sanitizeFileName(fileName);
 
     final localPath = '$dir/Movies/$sanitizedFileName';
 
@@ -351,12 +368,18 @@ class DownloadService {
       return;
     }
 
-    debugPrint('[DownloadService] ========== DOWNLOAD DEBUG ==========');
-    debugPrint('[DownloadService] Download URL: $streamUrl');
-    debugPrint('[DownloadService] File: ${task.fileName}');
-    debugPrint('[DownloadService] Multi-thread: $useMultiThread, Threads: $threadCount');
-    debugPrint('[DownloadService] Native downloader: $useNativeDownloader');
-    debugPrint('[DownloadService] =====================================');
+    if (kDebugMode) {
+      final safeUrl = Uri.tryParse(streamUrl);
+      final safeUrlText = safeUrl == null
+          ? '<invalid-url>'
+          : '${safeUrl.scheme}://${safeUrl.host}${safeUrl.path}';
+      debugPrint('[DownloadService] ========== DOWNLOAD DEBUG ==========');
+      debugPrint('[DownloadService] Download URL: $safeUrlText');
+      debugPrint('[DownloadService] File: ${task.fileName}');
+      debugPrint('[DownloadService] Multi-thread: $useMultiThread, Threads: $threadCount');
+      debugPrint('[DownloadService] Native downloader: $useNativeDownloader');
+      debugPrint('[DownloadService] =====================================');
+    }
 
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
 
@@ -665,16 +688,58 @@ class DownloadService {
       final options = Options(
         headers: requestHeaders.isEmpty ? null : requestHeaders,
         responseType: ResponseType.stream,
+        validateStatus: (status) => status == 200 || status == 206 || status == 416,
       );
 
-      final response = await _dio.get<ResponseBody>(
+      var response = await _dio.get<ResponseBody>(
         url,
         options: options,
         cancelToken: cancelToken,
       );
 
-      final totalBytes = _parseContentLength(response, downloadedBytes);
+      var effectiveDownloadedBytes = downloadedBytes;
+      final statusCode = response.statusCode ?? 0;
 
+      // Range resume safety: never blindly append unless the server confirms partial content.
+      if (downloadedBytes > 0) {
+        if (statusCode == 200) {
+          // Server ignored Range and returned the full content; restart from scratch.
+          effectiveDownloadedBytes = 0;
+        } else if (statusCode == 206) {
+          final contentRange = response.headers.value('content-range');
+          final match = RegExp(r'^bytes (\d+)-').firstMatch(contentRange ?? '');
+          final start = match != null ? int.tryParse(match.group(1)!) : null;
+          if (start == null || start != downloadedBytes) {
+            try {
+              await file.delete();
+            } catch (_) {}
+            onError(updatedTask, 'Resume validation failed (Content-Range mismatch)');
+            return;
+          }
+        } else if (statusCode == 416) {
+          // Local partial is invalid (e.g. remote changed). Restart download from scratch.
+          try {
+            await response.data?.stream.drain();
+          } catch (_) {}
+          try {
+            if (await file.exists()) await file.delete();
+          } catch (_) {}
+          effectiveDownloadedBytes = 0;
+          response = await _dio.get<ResponseBody>(
+            url,
+            options: Options(
+              headers: headers.isEmpty ? null : headers,
+              responseType: ResponseType.stream,
+              validateStatus: (status) => status == 200 || status == 206,
+            ),
+            cancelToken: cancelToken,
+          );
+        }
+      }
+
+      final totalBytes = _parseContentLength(response, effectiveDownloadedBytes);
+
+      downloadedBytes = effectiveDownloadedBytes;
       sink = file.openWrite(mode: downloadedBytes > 0 ? FileMode.append : FileMode.write);
 
       updatedTask = updatedTask.copyWith(
@@ -876,11 +941,38 @@ class DownloadService {
   Future<List<DownloadTask>> loadTasks() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_tasksKey);
+      final jsonStr = prefs.getString(tasksKey);
       if (jsonStr == null) return [];
 
       final list = jsonDecode(jsonStr) as List;
-      return list.map((e) => DownloadTask.fromJson(e as Map<String, dynamic>)).toList();
+      final tasks = list.map((e) => DownloadTask.fromJson(e as Map<String, dynamic>)).toList();
+
+      // Reconcile persisted state with filesystem (e.g. files deleted via storage cleanup).
+      var changed = false;
+      final reconciled = <DownloadTask>[];
+      for (final task in tasks) {
+        if (task.status == DownloadStatus.completed) {
+          final exists = await File(task.localPath).exists();
+          if (!exists) {
+            changed = true;
+            reconciled.add(task.copyWith(
+              status: DownloadStatus.failed,
+              errorMessage: 'Local file missing',
+              progress: 0,
+              downloadedBytes: 0,
+              completedAt: null,
+            ));
+            continue;
+          }
+        }
+        reconciled.add(task);
+      }
+
+      if (changed) {
+        await saveTasks(reconciled);
+      }
+
+      return reconciled;
     } catch (e) {
       debugPrint('Failed to load download tasks: $e');
       return [];
@@ -891,21 +983,18 @@ class DownloadService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final jsonStr = jsonEncode(tasks.map((t) => t.toJson()).toList());
-      await prefs.setString(_tasksKey, jsonStr);
+      await prefs.setString(tasksKey, jsonStr);
     } catch (e) {
       debugPrint('Failed to save download tasks: $e');
     }
   }
 
   Future<int> getAvailableSpace() async {
+    if (!(Platform.isIOS || Platform.isAndroid)) return 0;
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      if (Platform.isIOS || Platform.isMacOS) {
-        final stat = await FileStat.stat(dir.path);
-        return stat.size;
-      }
-      return 0;
-    } catch (e) {
+      final value = await _storageChannel.invokeMethod<num>('getAvailableSpace');
+      return value?.toInt() ?? 0;
+    } catch (_) {
       return 0;
     }
   }
