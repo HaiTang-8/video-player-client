@@ -32,6 +32,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       refreshCategoryItems(ref, widget.categoryId, pageSize: 30);
     });
   }
@@ -77,6 +78,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       return AppErrorWidget(
         message: state.error!,
         onRetry: () => refreshCategoryItems(ref, widget.categoryId, pageSize: 30),
+        scrollable: true,
       );
     }
 
@@ -84,6 +86,7 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
       return const EmptyWidget(
         message: '暂无内容',
         icon: Icons.movie_outlined,
+        scrollable: true,
       );
     }
 

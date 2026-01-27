@@ -35,22 +35,25 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
     // 移动端直接加载默认数量
     if (!WindowControls.isDesktop) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        loadCategoryItems(ref, widget.category.id);
-        _loaded = true;
+        if (!mounted) return;
+        _tryLoad();
       });
     }
   }
 
-  void _loadForDesktop(double availableWidth) {
+  void _tryLoad({int? pageSize}) {
     if (_loaded) return;
     _loaded = true;
+    loadCategoryItems(ref, widget.category.id, pageSize: pageSize ?? 20);
+  }
 
+  void _loadForDesktop(double availableWidth) {
     final itemsPerRow = ((availableWidth + _itemSpacing) /
             (_itemWidth + _itemSpacing))
-        .floor();
+        .floor()
+        .clamp(1, 100);
     final pageSize = itemsPerRow * _rowCount;
-
-    loadCategoryItems(ref, widget.category.id, pageSize: pageSize);
+    _tryLoad(pageSize: pageSize);
   }
 
   @override
@@ -102,16 +105,19 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
   }
 
   Widget _buildContent(ThemeData theme, CategoryItemsState itemsState) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final mobileListHeight = 132 + 8 + textScaler.scale(40);
+
     if (!WindowControls.isDesktop) {
       if (itemsState.isLoading && itemsState.items.isEmpty) {
-        return const SizedBox(
-          height: 180,
-          child: Center(child: CircularProgressIndicator()),
+        return SizedBox(
+          height: mobileListHeight,
+          child: const Center(child: CircularProgressIndicator()),
         );
       }
       if (itemsState.error != null && itemsState.items.isEmpty) {
         return SizedBox(
-          height: 180,
+          height: mobileListHeight,
           child: Center(
             child:
                 Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
@@ -120,7 +126,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
       }
       if (itemsState.items.isEmpty) {
         return SizedBox(
-          height: 180,
+          height: mobileListHeight,
           child: Center(
             child:
                 Text('暂无内容', style: TextStyle(color: theme.colorScheme.outline)),
@@ -134,8 +140,11 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
   }
 
   Widget _buildHorizontalList(List<MediaItem> items) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final listHeight = 132 + 8 + textScaler.scale(40);
+
     return SizedBox(
-      height: 180,
+      height: listHeight,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
@@ -163,6 +172,7 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
         // 首次加载时计算需要的数量
         if (!_loaded) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
             _loadForDesktop(availableWidth);
           });
         }
@@ -195,10 +205,9 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
 
         final itemsPerRow = ((availableWidth + _itemSpacing) /
                 (_itemWidth + _itemSpacing))
-            .floor();
-        final itemWidth = itemsPerRow > 0
-            ? (availableWidth - (itemsPerRow - 1) * _itemSpacing) / itemsPerRow
-            : _itemWidth;
+            .floor()
+            .clamp(1, 100);
+        final itemWidth = (availableWidth - (itemsPerRow - 1) * _itemSpacing) / itemsPerRow;
         final displayCount =
             (itemsPerRow * _rowCount).clamp(0, itemsState.items.length);
         final itemHeight = itemWidth / 0.48;

@@ -27,6 +27,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       ref.read(watchHistoryProvider.notifier).load(limit: 100);
     });
   }
@@ -74,9 +75,24 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
 
   Future<void> _deleteSelected() async {
     if (_selectedIds.isEmpty) return;
+    final confirmed = await DialogUtils.showConfirmDialog(
+      context: context,
+      title: '确认删除',
+      content: '确定要删除选中的 ${_selectedIds.length} 条记录吗？',
+      confirmText: '删除',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
     final ids = _selectedIds.toList();
-    await ref.read(watchHistoryProvider.notifier).deleteBatch(ids);
-    setState(() => _selectedIds.clear());
+    final success = await ref.read(watchHistoryProvider.notifier).deleteBatch(ids);
+    if (!mounted) return;
+    if (success) {
+      setState(() => _selectedIds.clear());
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('删除失败，请重试')),
+      );
+    }
   }
 
   Future<void> _deleteAll() async {
@@ -87,12 +103,18 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       confirmText: '确定',
       isDestructive: true,
     );
-    if (confirmed == true) {
-      await ref.read(watchHistoryProvider.notifier).deleteAll();
+    if (confirmed != true) return;
+    final success = await ref.read(watchHistoryProvider.notifier).deleteAll();
+    if (!mounted) return;
+    if (success) {
       setState(() {
         _selectedIds.clear();
         _isEditMode = false;
       });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('清空失败，请重试')),
+      );
     }
   }
 
@@ -194,6 +216,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       return AppErrorWidget(
         message: state.error!,
         onRetry: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),
+        scrollable: true,
       );
     }
 
@@ -201,6 +224,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       return const EmptyWidget(
         message: '暂无观看记录',
         icon: Icons.history,
+        scrollable: true,
       );
     }
 
@@ -228,7 +252,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
   }
 
   Future<void> _navigateToDetail(WatchHistoryItem item) async {
-    final title = _buildTitle(item);
+    final title = item.buildTitle();
     if (item.mediaType == 'movie') {
       await context.push(
         '/player/movie/${item.mediaId}',
@@ -249,24 +273,6 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     ref.read(watchHistoryProvider.notifier).refresh();
-  }
-
-  String _buildTitle(WatchHistoryItem item) {
-    final mediaInfo = item.mediaInfo;
-    if (mediaInfo == null) return '';
-    final episodeInfo = mediaInfo.episodeInfo;
-    if (item.mediaType == 'tv' && episodeInfo != null) {
-      final parts = <String>[mediaInfo.title];
-      if (episodeInfo.seasonNumber > 0) {
-        parts.add('第${episodeInfo.seasonNumber}季');
-      }
-      parts.add('第${episodeInfo.episodeNumber}集');
-      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
-        parts.add(episodeInfo.episodeName!);
-      }
-      return parts.join(' ');
-    }
-    return mediaInfo.title;
   }
 }
 
@@ -332,7 +338,7 @@ class _WatchHistoryGridItem extends ConsumerWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            _buildImage(serverBaseUrl, primaryItem),
+                            _buildImage(context, serverBaseUrl, primaryItem),
                             Positioned(
                               left: 0,
                               right: 0,
@@ -414,32 +420,33 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
   }
 
-  Widget _buildImage(String? serverBaseUrl, WatchHistoryItem item) {
+  Widget _buildImage(BuildContext context, String? serverBaseUrl, WatchHistoryItem item) {
     final imagePath = _imagePath(item);
     if (imagePath != null && imagePath.isNotEmpty) {
       final imageUrl = ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl);
       return CachedNetworkImage(
         imageUrl: imageUrl,
         fit: BoxFit.cover,
-        placeholder: (context, url) => _buildPlaceholder(),
-        errorWidget: (context, url, error) => _buildPlaceholder(),
+        placeholder: (ctx, url) => _buildPlaceholder(context),
+        errorWidget: (ctx, url, error) => _buildPlaceholder(context),
       );
     }
-    return _buildPlaceholder();
+    return _buildPlaceholder(context);
   }
 
-  Widget _buildPlaceholder() {
+  Widget _buildPlaceholder(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
-      color: Colors.grey[300],
-      child: const Center(child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey)),
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Center(child: Icon(Icons.movie_outlined, size: 40, color: theme.colorScheme.outline)),
     );
   }
 
-  /// 叠卡背景：用浅色卡片模拟“多张卡片”的层次感
+  /// 叠卡背景：用浅色卡片模拟"多张卡片"的层次感
   Widget _buildStackedCardShadow(ThemeData theme) {
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.7),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.2),

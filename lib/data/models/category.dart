@@ -107,7 +107,26 @@ class WatchHistoryItem {
   });
 
   /// 计算播放进度（0.0 - 1.0）
-  double get progress => duration > 0 ? position / duration : 0;
+  double get progress => duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0;
+
+  /// 构建播放标题（用于播放器显示）
+  String buildTitle() {
+    final mediaInfo = this.mediaInfo;
+    if (mediaInfo == null) return '';
+    final episodeInfo = mediaInfo.episodeInfo;
+    if (mediaType == 'tv' && episodeInfo != null) {
+      final parts = <String>[mediaInfo.title];
+      if (episodeInfo.seasonNumber > 0) {
+        parts.add('第${episodeInfo.seasonNumber}季');
+      }
+      parts.add('第${episodeInfo.episodeNumber}集');
+      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
+        parts.add(episodeInfo.episodeName!);
+      }
+      return parts.join(' ');
+    }
+    return mediaInfo.title;
+  }
 
   factory WatchHistoryItem.fromJson(Map<String, dynamic> json) {
     return WatchHistoryItem(

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import 'media_provider.dart';
+import 'server_provider.dart';
 
 class WatchHistoryState {
   final List<WatchHistoryItem> items;
@@ -30,9 +31,13 @@ final watchHistoryProvider = NotifierProvider<WatchHistoryNotifier, WatchHistory
 
 class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   @override
-  WatchHistoryState build() => WatchHistoryState();
+  WatchHistoryState build() {
+    ref.watch(serverUrlProvider);
+    return WatchHistoryState();
+  }
 
   Future<void> load({int limit = 20}) async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
     if (state.isLoading) return;
@@ -40,6 +45,8 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
     state = state.copyWith(isLoading: true, error: null);
 
     final response = await service.getRecentlyWatched(limit: limit);
+
+    if (ref.read(serverUrlProvider) != serverUrl) return;
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
@@ -55,11 +62,14 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   }
 
   Future<void> refresh({int limit = 20}) async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
     if (state.isLoading) return;
 
     final response = await service.getRecentlyWatched(limit: limit);
+
+    if (ref.read(serverUrlProvider) != serverUrl) return;
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(items: response.data!);
@@ -67,10 +77,14 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   }
 
   Future<bool> delete(int id) async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return false;
 
     final response = await service.deleteWatchHistory(id);
+
+    if (ref.read(serverUrlProvider) != serverUrl) return false;
+
     if (response.isSuccess) {
       state = state.copyWith(
         items: state.items.where((item) => item.id != id).toList(),
@@ -81,10 +95,14 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   }
 
   Future<bool> deleteBatch(List<int> ids) async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return false;
 
     final response = await service.deleteWatchHistoryBatch(ids);
+
+    if (ref.read(serverUrlProvider) != serverUrl) return false;
+
     if (response.isSuccess) {
       state = state.copyWith(
         items: state.items.where((item) => !ids.contains(item.id)).toList(),
@@ -95,10 +113,14 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   }
 
   Future<bool> deleteAll() async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return false;
 
     final response = await service.deleteAllWatchHistory();
+
+    if (ref.read(serverUrlProvider) != serverUrl) return false;
+
     if (response.isSuccess) {
       state = state.copyWith(items: []);
       return true;

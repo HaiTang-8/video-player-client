@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import 'media_provider.dart';
+import 'server_provider.dart';
 
 class CategoriesState {
   final List<CategoryStats> categories;
@@ -30,9 +31,13 @@ final categoriesProvider = NotifierProvider<CategoriesNotifier, CategoriesState>
 
 class CategoriesNotifier extends Notifier<CategoriesState> {
   @override
-  CategoriesState build() => CategoriesState();
+  CategoriesState build() {
+    ref.watch(serverUrlProvider);
+    return CategoriesState();
+  }
 
   Future<void> load() async {
+    final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
     if (state.isLoading) return;
@@ -40,6 +45,8 @@ class CategoriesNotifier extends Notifier<CategoriesState> {
     state = state.copyWith(isLoading: true, error: null);
 
     final response = await service.getCategories();
+
+    if (ref.read(serverUrlProvider) != serverUrl) return;
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
@@ -55,6 +62,7 @@ class CategoriesNotifier extends Notifier<CategoriesState> {
   }
 
   Future<void> refresh() async {
+    clearAllCategoryCache();
     state = CategoriesState();
     await load();
   }
@@ -92,7 +100,10 @@ class CategoryItemsState {
   }
 }
 
+String? _cachedServerUrl;
 final _categoryItemsCache = <String, CategoryItemsState>{};
+int _requestVersion = 0;
+final _categoryRequestVersions = <String, int>{};
 
 final categoryItemsProvider = Provider.family<CategoryItemsState, String>((ref, categoryId) {
   return _categoryItemsCache[categoryId] ?? CategoryItemsState();
@@ -100,6 +111,19 @@ final categoryItemsProvider = Provider.family<CategoryItemsState, String>((ref, 
 
 void _updateCategoryItems(String categoryId, CategoryItemsState state) {
   _categoryItemsCache[categoryId] = state;
+}
+
+void _validateCacheForServer(String? serverUrl) {
+  if (_cachedServerUrl != serverUrl) {
+    _categoryItemsCache.clear();
+    _categoryRequestVersions.clear();
+    _cachedServerUrl = serverUrl;
+  }
+}
+
+void clearAllCategoryCache() {
+  _categoryItemsCache.clear();
+  _categoryRequestVersions.clear();
 }
 
 Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
@@ -111,16 +135,24 @@ Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize =
   // 这里在同步阶段通过 `ref.context` 获取 ProviderContainer 并缓存下来，
   // 后续使用 container 读/失效 provider，不再依赖已失效的 BuildContext。
   final container = ProviderScope.containerOf(ref.context, listen: false);
+  final serverUrl = container.read(serverUrlProvider);
+  _validateCacheForServer(serverUrl);
+
   final service = container.read(mediaServiceProvider);
   if (service == null) return;
 
   final currentState = _categoryItemsCache[categoryId] ?? CategoryItemsState();
   if (currentState.isLoading) return;
 
+  final requestVersion = ++_requestVersion;
+  _categoryRequestVersions[categoryId] = requestVersion;
+
   _updateCategoryItems(categoryId, currentState.copyWith(isLoading: true, error: null));
   container.invalidate(categoryItemsProvider(categoryId));
 
   final response = await service.getCategoryItems(categoryId, page: 1, pageSize: pageSize);
+
+  if (_categoryRequestVersions[categoryId] != requestVersion) return;
 
   if (response.isSuccess && response.data != null) {
     _updateCategoryItems(categoryId, CategoryItemsState(
@@ -138,11 +170,17 @@ Future<void> loadCategoryItems(WidgetRef ref, String categoryId, {int pageSize =
 Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
   // 同上：用 container 替代 `ref.invalidate`，避免在 Widget 已卸载时访问 `ref`。
   final container = ProviderScope.containerOf(ref.context, listen: false);
+  final serverUrl = container.read(serverUrlProvider);
+  _validateCacheForServer(serverUrl);
+
   final service = container.read(mediaServiceProvider);
   if (service == null) return;
 
   final currentState = _categoryItemsCache[categoryId] ?? CategoryItemsState();
   if (currentState.isLoading || !currentState.hasMore) return;
+
+  final requestVersion = ++_requestVersion;
+  _categoryRequestVersions[categoryId] = requestVersion;
 
   _updateCategoryItems(categoryId, currentState.copyWith(isLoading: true));
   container.invalidate(categoryItemsProvider(categoryId));
@@ -150,9 +188,12 @@ Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSi
   final nextPage = currentState.currentPage + 1;
   final response = await service.getCategoryItems(categoryId, page: nextPage, pageSize: pageSize);
 
+  if (_categoryRequestVersions[categoryId] != requestVersion) return;
+
   if (response.isSuccess && response.data != null) {
+    final latestState = _categoryItemsCache[categoryId] ?? CategoryItemsState();
     _updateCategoryItems(categoryId, CategoryItemsState(
-      items: [...currentState.items, ...response.data!],
+      items: [...latestState.items, ...response.data!],
       isLoading: false,
       currentPage: nextPage,
       hasMore: response.data!.length >= pageSize,
@@ -166,6 +207,7 @@ Future<void> loadMoreCategoryItems(WidgetRef ref, String categoryId, {int pageSi
 Future<void> refreshCategoryItems(WidgetRef ref, String categoryId, {int pageSize = 20}) async {
   // 同上：先拿到 container，确保后续 invalidate 不依赖 Widget 是否仍挂载。
   final container = ProviderScope.containerOf(ref.context, listen: false);
+  _categoryRequestVersions[categoryId] = ++_requestVersion;
   _categoryItemsCache.remove(categoryId);
   container.invalidate(categoryItemsProvider(categoryId));
   await loadCategoryItems(ref, categoryId, pageSize: pageSize);

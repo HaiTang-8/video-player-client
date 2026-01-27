@@ -195,10 +195,11 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
   }
 
   Widget _buildPlaceholder() {
+    final theme = Theme.of(context);
     return Container(
-      color: Colors.grey[300],
-      child: const Center(
-        child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey),
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(Icons.movie_outlined, size: 40, color: theme.colorScheme.outline),
       ),
     );
   }

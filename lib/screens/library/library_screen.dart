@@ -22,6 +22,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       ref.read(categoriesProvider.notifier).load();
       ref.read(watchHistoryProvider.notifier).load();
     });
@@ -29,6 +30,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(serverUrlProvider, (previous, next) {
+      if (previous != next && next != null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ref.read(categoriesProvider.notifier).load();
+          ref.read(watchHistoryProvider.notifier).load();
+        });
+      }
+    });
+
     final categoriesState = ref.watch(categoriesProvider);
     final isDesktop = WindowControls.isDesktop;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -86,6 +97,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return AppErrorWidget(
         message: state.error!,
         onRetry: () => ref.read(categoriesProvider.notifier).load(),
+        scrollable: true,
       );
     }
 
@@ -101,6 +113,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return const EmptyWidget(
         message: '暂无媒体内容\n请先添加存储源并扫描',
         icon: Icons.movie_outlined,
+        scrollable: true,
       );
     }
 
@@ -114,7 +127,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           return const WatchHistoryRow();
         }
         final categoryIndex = hasWatchHistory ? index - 1 : index;
-        return CategoryRow(category: nonEmptyCategories[categoryIndex]);
+        return CategoryRow(
+          key: ValueKey('category_${nonEmptyCategories[categoryIndex].id}'),
+          category: nonEmptyCategories[categoryIndex],
+        );
       },
     );
   }

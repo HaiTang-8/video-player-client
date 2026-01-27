@@ -31,16 +31,18 @@ class LoadingWidget extends StatelessWidget {
 class AppErrorWidget extends StatelessWidget {
   final String message;
   final VoidCallback? onRetry;
+  final bool scrollable;
 
   const AppErrorWidget({
     super.key,
     required this.message,
     this.onRetry,
+    this.scrollable = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -69,6 +71,21 @@ class AppErrorWidget extends StatelessWidget {
         ),
       ),
     );
+
+    if (scrollable) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: content,
+            ),
+          );
+        },
+      );
+    }
+    return content;
   }
 }
 
@@ -77,17 +94,19 @@ class EmptyWidget extends StatelessWidget {
   final String message;
   final IconData? icon;
   final Widget? action;
+  final bool scrollable;
 
   const EmptyWidget({
     super.key,
     required this.message,
     this.icon,
     this.action,
+    this.scrollable = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
+    final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -114,5 +133,20 @@ class EmptyWidget extends StatelessWidget {
         ),
       ),
     );
+
+    if (scrollable) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: content,
+            ),
+          );
+        },
+      );
+    }
+    return content;
   }
 }

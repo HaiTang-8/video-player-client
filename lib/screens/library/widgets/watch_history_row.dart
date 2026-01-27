@@ -23,14 +23,6 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
   static const double _horizontalPadding = 16.0;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(watchHistoryProvider.notifier).load(limit: 20);
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(watchHistoryProvider);
@@ -154,9 +146,11 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         final extraPadding = (!shouldShrink && contentWidth < availableWidth)
             ? (availableWidth - contentWidth) / 2
             : 0.0;
-        // 图片高度 + 间距 + 文字区域
+        // 图片高度 + 间距 + 文字区域（根据字号缩放）
         final imageHeight = itemWidth * 9 / 16;
-        final listHeight = imageHeight + 8 + 40 + 2 + 16;
+        final textScaler = MediaQuery.textScalerOf(context);
+        final textAreaHeight = textScaler.scale(40) + 2 + textScaler.scale(16);
+        final listHeight = imageHeight + 8 + textAreaHeight;
 
         return ScrollConfiguration(
           behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
@@ -184,7 +178,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
   }
 
   Future<void> _navigateToDetail(WatchHistoryItem item) async {
-    final title = _buildTitle(item);
+    final title = item.buildTitle();
     if (item.mediaType == 'movie') {
       await context.push(
         '/player/movie/${item.mediaId}',
@@ -206,25 +200,6 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     ref.read(watchHistoryProvider.notifier).refresh();
-  }
-
-  String _buildTitle(WatchHistoryItem item) {
-    final mediaInfo = item.mediaInfo;
-    if (mediaInfo == null) return '';
-
-    final episodeInfo = mediaInfo.episodeInfo;
-    if (item.mediaType == 'tv' && episodeInfo != null) {
-      final parts = <String>[mediaInfo.title];
-      if (episodeInfo.seasonNumber > 0) {
-        parts.add('第${episodeInfo.seasonNumber}季');
-      }
-      parts.add('第${episodeInfo.episodeNumber}集');
-      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
-        parts.add(episodeInfo.episodeName!);
-      }
-      return parts.join(' ');
-    }
-    return mediaInfo.title;
   }
 }
 
@@ -442,19 +417,20 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   }
 
   Widget _buildPlaceholder() {
+    final theme = Theme.of(context);
     return Container(
-      color: Colors.grey[300],
-      child: const Center(
-        child: Icon(Icons.movie_outlined, size: 40, color: Colors.grey),
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: Center(
+        child: Icon(Icons.movie_outlined, size: 40, color: theme.colorScheme.outline),
       ),
     );
   }
 
-  /// 叠卡背景：用浅色卡片模拟“多张卡片”的层次感
+  /// 叠卡背景：用浅色卡片模拟"多张卡片"的层次感
   Widget _buildStackedCardShadow(ThemeData theme) {
     return Container(
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceVariant.withValues(alpha: 0.7),
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: theme.colorScheme.outline.withValues(alpha: 0.2),
