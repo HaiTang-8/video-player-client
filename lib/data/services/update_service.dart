@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
@@ -17,6 +19,7 @@ class ReleaseInfo {
   final String downloadUrl;
   final String fileName;
   final int? fileSize;
+  final String? checksum;
 
   ReleaseInfo({
     required this.version,
@@ -24,6 +27,7 @@ class ReleaseInfo {
     required this.downloadUrl,
     required this.fileName,
     this.fileSize,
+    this.checksum,
   });
 }
 
@@ -107,6 +111,7 @@ class UpdateService {
             downloadUrl: downloadUrl,
             fileName: name,
             fileSize: asset['size'] as int?,
+            checksum: asset['checksum'] as String?,
           );
         }
       }
@@ -132,8 +137,11 @@ class UpdateService {
   bool _isNewerVersion(String latest, String current) {
     final latestParts = latest.split('.').map((e) => int.tryParse(e) ?? 0).toList();
     final currentParts = current.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final maxLength = latestParts.length > currentParts.length
+        ? latestParts.length
+        : currentParts.length;
 
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < maxLength; i++) {
       final l = i < latestParts.length ? latestParts[i] : 0;
       final c = i < currentParts.length ? currentParts[i] : 0;
       if (l > c) return true;
@@ -147,27 +155,51 @@ class UpdateService {
     void Function(double progress)? onProgress,
   }) async {
     final tempDir = await getTemporaryDirectory();
-    final savePath = p.join(tempDir.path, 'update', info.fileName);
+    final safeFileName = p.basename(info.fileName).replaceAll(RegExp(r'[^\w\-.]'), '_');
+    if (safeFileName.isEmpty || safeFileName.startsWith('.')) {
+      throw ArgumentError('Invalid file name: ${info.fileName}');
+    }
+    final savePath = p.join(tempDir.path, 'update', safeFileName);
     final file = File(savePath);
     await file.parent.create(recursive: true);
 
-    final request = http.Request('GET', Uri.parse(info.downloadUrl));
-    final response = await http.Client().send(request);
+    final client = http.Client();
+    try {
+      final request = http.Request('GET', Uri.parse(info.downloadUrl));
+      final response = await client.send(request).timeout(
+        const Duration(minutes: 30),
+        onTimeout: () => throw TimeoutException('Download timed out'),
+      );
 
-    final totalBytes = response.contentLength ?? info.fileSize ?? 0;
-    var receivedBytes = 0;
-    final sink = file.openWrite();
+      final totalBytes = response.contentLength ?? info.fileSize ?? 0;
+      var receivedBytes = 0;
+      final sink = file.openWrite();
 
-    await for (final chunk in response.stream) {
-      sink.add(chunk);
-      receivedBytes += chunk.length;
-      if (totalBytes > 0 && onProgress != null) {
-        onProgress(receivedBytes / totalBytes);
+      try {
+        await for (final chunk in response.stream) {
+          sink.add(chunk);
+          receivedBytes += chunk.length;
+          if (totalBytes > 0 && onProgress != null) {
+            onProgress(receivedBytes / totalBytes);
+          }
+        }
+      } finally {
+        await sink.close();
       }
-    }
-    await sink.close();
 
-    return savePath;
+      if (info.checksum != null && info.checksum!.isNotEmpty) {
+        final fileBytes = await file.readAsBytes();
+        final computedHash = sha256.convert(fileBytes).toString();
+        if (computedHash.toLowerCase() != info.checksum!.toLowerCase()) {
+          await file.delete();
+          throw StateError('Checksum mismatch: expected ${info.checksum}, got $computedHash');
+        }
+      }
+
+      return savePath;
+    } finally {
+      client.close();
+    }
   }
 
   Future<void> installUpdate(String filePath) async {
