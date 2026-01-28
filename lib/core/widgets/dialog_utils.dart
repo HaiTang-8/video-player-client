@@ -26,27 +26,40 @@ class DialogUtils {
         context: context,
         // 控制是否允许点击遮罩层关闭，用于必须做出选择的场景
         barrierDismissible: barrierDismissible,
-        builder: (context) => shadcn.AlertDialog(
-          title: Text(title),
-          // 优先使用自定义内容组件，未提供时回退为纯文本
-          content: contentWidget ?? Text(content),
-          actions: [
-            shadcn.OutlineButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: Text(cancelText),
-            ),
-            if (isDestructive)
-              shadcn.DestructiveButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(confirmText),
-              )
-            else
-              shadcn.PrimaryButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text(confirmText),
+        builder: (context) {
+          final theme = shadcn.Theme.of(context);
+          // shadcn_flutter 的 destructive 默认会用较低 alpha（0.5），在弹窗里看起来像“灰色遮罩”。
+          // 这里把默认/hover/focus 的背景都改成不透明 destructive 色，避免鼠标移入移出时颜色突变。
+          final destructiveStyle = shadcn.ButtonVariance.destructive.withBackgroundColor(
+            color: theme.colorScheme.destructive,
+            hoverColor: theme.colorScheme.destructive,
+            focusColor: theme.colorScheme.destructive,
+          );
+
+          return shadcn.AlertDialog(
+            title: Text(title),
+            // 优先使用自定义内容组件，未提供时回退为纯文本
+            content: contentWidget ?? Text(content),
+            actions: [
+              shadcn.OutlineButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(cancelText),
               ),
-          ],
-        ),
+              if (isDestructive)
+                shadcn.Button.destructive(
+                  style: destructiveStyle,
+                  disableFocusOutline: true,
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(confirmText),
+                )
+              else
+                shadcn.PrimaryButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(confirmText),
+                ),
+            ],
+          );
+        },
       );
     } finally {
       container.read(windowBorderVisibleProvider.notifier).show();

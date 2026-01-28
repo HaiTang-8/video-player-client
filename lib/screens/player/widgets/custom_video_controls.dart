@@ -612,6 +612,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   _toggleVisibility();
                 }
               },
+              onDoubleTap: WindowControls.isDesktop ? widget.onToggleFullscreen : null,
               onLongPressStart:
                   WindowControls.isDesktop || _isLocked
                       ? null
