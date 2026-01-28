@@ -13,6 +13,13 @@ import 'package:path/path.dart' as p;
 
 import '../../core/constants/app_constants.dart';
 
+class SecurityException implements Exception {
+  final String message;
+  SecurityException(this.message);
+  @override
+  String toString() => 'SecurityException: $message';
+}
+
 class ReleaseInfo {
   final String version;
   final String? releaseNotes;
@@ -35,9 +42,28 @@ class UpdateService {
   UpdateService._();
   static final instance = UpdateService._();
 
+  // 可信下载域名白名单
+  static const _trustedDomains = ['github.com', 'githubusercontent.com'];
+
   String? _serverUrl;
 
+  void _validateServerUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https') {
+      throw ArgumentError('Server URL must use HTTPS protocol: $url');
+    }
+  }
+
+  bool _isTrustedDownloadUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return false;
+    return _trustedDomains.any((d) => uri.host == d || uri.host.endsWith('.$d'));
+  }
+
   Future<void> init(String? serverUrl) async {
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      _validateServerUrl(serverUrl);
+    }
     _serverUrl = serverUrl;
     if (Platform.isMacOS && serverUrl != null && serverUrl.isNotEmpty) {
       final feedURL = '$serverUrl${AppConstants.updateAppcastPath}';
@@ -48,6 +74,9 @@ class UpdateService {
   }
 
   void updateServerUrl(String? serverUrl) {
+    if (serverUrl != null && serverUrl.isNotEmpty) {
+      _validateServerUrl(serverUrl);
+    }
     _serverUrl = serverUrl;
     if (Platform.isMacOS && serverUrl != null && serverUrl.isNotEmpty) {
       final feedURL = '$serverUrl${AppConstants.updateAppcastPath}';
@@ -154,6 +183,16 @@ class UpdateService {
     ReleaseInfo info, {
     void Function(double progress)? onProgress,
   }) async {
+    // 安全验证：下载 URL 必须来自可信域名
+    if (!_isTrustedDownloadUrl(info.downloadUrl)) {
+      throw SecurityException('Download URL is not from trusted domain: ${info.downloadUrl}');
+    }
+
+    // 安全验证：必须有 checksum
+    if (info.checksum == null || info.checksum!.isEmpty) {
+      throw SecurityException('Checksum is required for security verification');
+    }
+
     final tempDir = await getTemporaryDirectory();
     final safeFileName = p.basename(info.fileName).replaceAll(RegExp(r'[^\w\-.]'), '_');
     if (safeFileName.isEmpty || safeFileName.startsWith('.')) {
@@ -187,13 +226,12 @@ class UpdateService {
         await sink.close();
       }
 
-      if (info.checksum != null && info.checksum!.isNotEmpty) {
-        final fileBytes = await file.readAsBytes();
-        final computedHash = sha256.convert(fileBytes).toString();
-        if (computedHash.toLowerCase() != info.checksum!.toLowerCase()) {
-          await file.delete();
-          throw StateError('Checksum mismatch: expected ${info.checksum}, got $computedHash');
-        }
+      // 强制 checksum 验证
+      final fileBytes = await file.readAsBytes();
+      final computedHash = sha256.convert(fileBytes).toString();
+      if (computedHash.toLowerCase() != info.checksum!.toLowerCase()) {
+        await file.delete();
+        throw SecurityException('Checksum mismatch: expected ${info.checksum}, got $computedHash');
       }
 
       return savePath;
@@ -219,12 +257,36 @@ class UpdateService {
   }
 
   Future<void> _installWindows(String exePath) async {
+    // 安全验证：Authenticode 签名验证
+    final signatureValid = await _verifyWindowsSignature(exePath);
+    if (!signatureValid) {
+      throw SecurityException('Windows executable signature verification failed: $exePath');
+    }
+
     await Process.start(
       exePath,
       ['/SILENT', '/RESTARTAPPLICATIONS'],
       mode: ProcessStartMode.detached,
     );
     exit(0);
+  }
+
+  Future<bool> _verifyWindowsSignature(String exePath) async {
+    try {
+      // 使用 PowerShell 验证 Authenticode 签名有效性
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-Command',
+        '(Get-AuthenticodeSignature -LiteralPath "$exePath").Status -eq "Valid"'
+      ]);
+
+      final isValid = result.stdout.toString().trim().toLowerCase() == 'true';
+      debugPrint('[UpdateService] Signature verification: ${isValid ? "passed" : "failed"}');
+      return isValid;
+    } catch (e) {
+      debugPrint('[UpdateService] Signature verification error: $e');
+      return false;
+    }
   }
 
   Future<void> _installAndroid(String apkPath) async {
