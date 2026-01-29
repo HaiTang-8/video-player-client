@@ -1,5 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 /// 加载中组件
 class LoadingWidget extends StatelessWidget {
@@ -9,16 +9,17 @@ class LoadingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = shadcn.Theme.of(context);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CupertinoActivityIndicator(radius: 14, color: Colors.white),
+          const shadcn.CircularProgressIndicator(),
           if (message != null) ...[
             const SizedBox(height: 16),
             Text(
               message!,
-              style: Theme.of(context).textTheme.bodyMedium,
+              style: theme.typography.small,
             ),
           ],
         ],
@@ -42,6 +43,7 @@ class AppErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = shadcn.Theme.of(context);
     final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -49,22 +51,22 @@ class AppErrorWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              CupertinoIcons.exclamationmark_circle,
+              Icons.error_outline,
               size: 64,
-              color: Theme.of(context).colorScheme.error,
+              color: theme.colorScheme.destructive,
             ),
             const SizedBox(height: 16),
             Text(
               message,
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: theme.typography.base,
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 24),
-              FilledButton.icon(
+              shadcn.PrimaryButton(
+                leading: const Icon(Icons.refresh),
                 onPressed: onRetry,
-                icon: const Icon(CupertinoIcons.refresh),
-                label: const Text('重试'),
+                child: const Text('重试'),
               ),
             ],
           ],
@@ -106,6 +108,7 @@ class EmptyWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = shadcn.Theme.of(context);
     final content = Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -113,16 +116,16 @@ class EmptyWidget extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              icon ?? CupertinoIcons.tray,
+              icon ?? Icons.inbox_outlined,
               size: 64,
-              color: Theme.of(context).colorScheme.outline,
+              color: theme.colorScheme.mutedForeground,
             ),
             const SizedBox(height: 16),
             Text(
               message,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.outline,
-                  ),
+              style: theme.typography.base.copyWith(
+                color: theme.colorScheme.mutedForeground,
+              ),
               textAlign: TextAlign.center,
             ),
             if (action != null) ...[

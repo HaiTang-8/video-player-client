@@ -49,8 +49,8 @@ class UpdateService {
 
   void _validateServerUrl(String url) {
     final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'https') {
-      throw ArgumentError('Server URL must use HTTPS protocol: $url');
+    if (uri == null) {
+      throw ArgumentError('Invalid server URL: $url');
     }
   }
 
@@ -69,7 +69,7 @@ class UpdateService {
       final feedURL = '$serverUrl${AppConstants.updateAppcastPath}';
       await autoUpdater.setFeedURL(feedURL);
       await autoUpdater.setScheduledCheckInterval(3600);
-      await autoUpdater.checkForUpdates(inBackground: true);
+      autoUpdater.checkForUpdates(inBackground: true);
     }
   }
 

@@ -123,10 +123,10 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
     ref.listen<String?>(errorNotificationProvider, (_, error) {
       if (error != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          final navigatorState = router.routerDelegate.navigatorKey.currentState;
-          if (navigatorState?.overlay != null) {
-            DialogUtils.showToastWithOverlay(
-              overlay: navigatorState!.overlay!,
+          final navigatorContext = router.routerDelegate.navigatorKey.currentContext;
+          if (navigatorContext != null) {
+            DialogUtils.showToast(
+              context: navigatorContext,
               message: error,
               isError: true,
             );

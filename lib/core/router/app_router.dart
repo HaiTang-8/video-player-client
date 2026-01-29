@@ -24,6 +24,7 @@ import '../../screens/settings/storage_management_screen.dart';
 import '../../screens/tvshow_detail/overview_screen.dart';
 import '../../screens/download/download_episodes_screen.dart';
 import '../../screens/download/download_manager_screen.dart';
+import '../../screens/connection_error/connection_error_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -53,15 +54,27 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       final isConfigured = serverUrl != null && serverUrl.isNotEmpty;
       final isConnected = connectionState == ServerConnectionState.connected;
+      final isError = connectionState == ServerConnectionState.error;
       final isOnConfigPage = state.matchedLocation == '/config';
+      final isOnErrorPage = state.matchedLocation == '/connection-error';
 
       // 如果未配置服务器且不在配置页面，跳转到配置页面
       if (!isConfigured && !isOnConfigPage) {
         return '/config';
       }
 
+      // 如果已配置但连接失败，跳转到错误页面
+      if (isConfigured && isError && !isOnErrorPage && !isOnConfigPage) {
+        return '/connection-error';
+      }
+
       // 如果已配置且在配置页面且已连接，跳转到媒体库
       if (isConfigured && isOnConfigPage && isConnected) {
+        return '/library';
+      }
+
+      // 如果在错误页面但已连接，跳转到媒体库
+      if (isOnErrorPage && isConnected) {
         return '/library';
       }
 
@@ -72,6 +85,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/config',
         builder: (context, state) => const ServerConfigScreen(),
+      ),
+
+      // 连接错误页面（不在 Shell 内）
+      GoRoute(
+        path: '/connection-error',
+        builder: (context, state) => const ConnectionErrorScreen(),
       ),
 
       // 主 Shell 路由（带底部导航栏）

@@ -62,6 +62,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   MediaService? _mediaService;
   bool _hasSeekToInitialPosition = false;
   List<SubtitleInfo> _externalSubtitles = [];
+  bool _hasAutoSelectedSubtitle = false;
+  bool _externalSubtitleAutoLoaded = false;
   List<Episode>? _episodes;
   double? _sessionPlaybackSpeed;
   int? _pendingSeekPosition;
@@ -341,6 +343,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         unawaited(_saveProgress()); // 播放完成时保存进度
       }
     }));
+
+    // 监听内嵌字幕轨道加载（用于自动选择简体中文字幕）
+    _subscriptions.add(_player.stream.tracks.listen((tracks) {
+      if (!mounted || _isDisposing) return;
+      if (tracks.subtitle.isNotEmpty) {
+        _tryAutoSelectEmbeddedSubtitle();
+      }
+    }));
   }
 
   void _startProgressTimer() {
@@ -391,9 +401,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     for (final sub in _subscriptions) {
       sub.cancel();
     }
-    try {
-      _toastOverlay?.remove();
-    } catch (_) {}
+
     unawaited(_saveProgress()); // 退出时保存最终进度
     if (_isFullscreen) {
       _exitFullscreen();
@@ -455,6 +463,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // 无条件重置，确保重试时也能正确 seek 和设置倍速
       _hasSeekToInitialPosition = false;
       _hasAppliedPlaybackSettings = false;
+      _hasAutoSelectedSubtitle = false;
+      _externalSubtitleAutoLoaded = false;
       if (episodeIndex != null) {
         _currentEpisodeIndex = episodeIndex;
       }
@@ -510,7 +520,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
         _mediaService ??= ref.read(mediaServiceProvider);
         _startProgressTimer();
-        _showToast('正在使用本地缓存播放');
+        DialogUtils.showToast(context: context, message: '正在使用本地缓存播放');
 
         setState(() {
           _isLoading = false;
@@ -722,7 +732,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
           // 显示提示
           if (mounted) {
-            _showToast('已自动加载字幕: ${bestSub.displayName}');
+            DialogUtils.showToast(context: context, message: '已自动加载字幕: ${bestSub.displayName}');
+            _externalSubtitleAutoLoaded = true;
+            _hasAutoSelectedSubtitle = true;
           }
         }
       }
@@ -731,53 +743,48 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  OverlayEntry? _toastOverlay;
+  SubtitleTrack? _findChineseSubtitleTrack(List<SubtitleTrack> tracks) {
+    final validTracks = tracks.where((t) => t.id != 'no' && t.id != 'auto').toList();
+    if (validTracks.isEmpty) return null;
 
-  void _showToast(String message) {
-    try {
-      _toastOverlay?.remove();
-    } catch (_) {}
-    _toastOverlay = null;
-    if (!mounted) return;
-    final overlay = Overlay.of(context);
-    final entry = OverlayEntry(
-      builder:
-          (context) => Positioned(
-            top: MediaQuery.of(context).padding.top + 60,
-            left: 16,
-            right: 16,
-            child: Material(
-              color: Colors.transparent,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    message,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
-                  ),
-                ),
-              ),
-            ),
-          ),
-    );
-    _toastOverlay = entry;
-    overlay.insert(entry);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (_toastOverlay == entry) {
-        try {
-          entry.remove();
-        } catch (_) {}
-        _toastOverlay = null;
+    const chineseLanguages = ['zh', 'chi', 'zho', 'zh-cn', 'zh-hans', 'chs', 'sc'];
+    const chineseTitleKeywords = ['简体', '简中', 'chs', 'sc', 'simplified', '中文', 'chinese'];
+
+    for (final track in validTracks) {
+      final lang = track.language?.toLowerCase() ?? '';
+      if (chineseLanguages.contains(lang)) return track;
+    }
+
+    for (final track in validTracks) {
+      final title = track.title?.toLowerCase() ?? '';
+      for (final keyword in chineseTitleKeywords) {
+        if (title.contains(keyword.toLowerCase())) return track;
       }
-    });
+    }
+
+    for (final track in validTracks) {
+      final lang = track.language?.toLowerCase() ?? '';
+      if (lang.startsWith('zh')) return track;
+    }
+
+    return null;
   }
+
+  void _tryAutoSelectEmbeddedSubtitle() {
+    if (_hasAutoSelectedSubtitle || _externalSubtitleAutoLoaded) return;
+
+    final tracks = _player.state.tracks.subtitle;
+    final chineseTrack = _findChineseSubtitleTrack(tracks);
+
+    if (chineseTrack != null) {
+      _hasAutoSelectedSubtitle = true;
+      _player.setSubtitleTrack(chineseTrack);
+      final displayName = chineseTrack.title ?? chineseTrack.language ?? chineseTrack.id;
+      DialogUtils.showToast(context: context, message: '已自动选择内嵌字幕: $displayName');
+    }
+  }
+
+
 
   Episode? get _currentEpisode {
     if (_episodes == null || _episodes!.isEmpty) return null;
