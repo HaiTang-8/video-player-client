@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
+import '../data/services/api_client.dart';
 import '../data/services/storage_service.dart';
 import 'server_provider.dart';
 
@@ -78,6 +79,53 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
       return true;
     }
     return false;
+  }
+
+  Future<bool> enableStorage(int id) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
+
+    final response = await service.enableStorage(id);
+
+    if (response.isSuccess) {
+      await loadStorages();
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> disableStorage(int id) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return false;
+
+    final response = await service.disableStorage(id);
+
+    if (response.isSuccess) {
+      await loadStorages();
+      return true;
+    }
+    return false;
+  }
+
+  Future<(bool success, String? error)> testConnection({
+    required String type,
+    required Map<String, String> settings,
+  }) async {
+    final serverUrl = ref.read(serverUrlProvider);
+    if (serverUrl == null || serverUrl.isEmpty) {
+      return (false, '服务不可用');
+    }
+
+    // 创建临时的 ApiClient（不带 onError 回调），避免触发全局错误通知
+    final tempClient = ApiClient(baseUrl: serverUrl);
+    final tempService = StorageService(tempClient);
+
+    final response = await tempService.testConnection(type: type, settings: settings);
+
+    if (response.isSuccess) {
+      return (true, null);
+    }
+    return (false, response.error ?? '连接失败');
   }
 }
 
@@ -317,7 +365,7 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
   if (response.isSuccess && response.data != null) {
     _updateBrowseState(storageId, BrowseState(files: response.data!, currentPath: path, isLoading: false));
   } else {
-    _updateBrowseState(storageId, currentState.copyWith(isLoading: false, error: response.error, currentPath: path));
+    _updateBrowseState(storageId, currentState.copyWith(isLoading: false, error: response.error));
   }
   ref.invalidate(browseProvider(storageId));
 }

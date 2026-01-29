@@ -5,6 +5,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
@@ -517,7 +518,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.info_outline, color: Colors.white70, size: 16),
+                  const Icon(LucideIcons.info, color: Colors.white70),
                   const SizedBox(width: 6),
                   const Text(
                     '媒体信息',
@@ -530,7 +531,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   const Spacer(),
                   GestureDetector(
                     onTap: () => setState(() => _showMediaInfo = false),
-                    child: const Icon(Icons.close, color: Colors.white54, size: 16),
+                    child: const Icon(LucideIcons.x, color: Colors.white54),
                   ),
                 ],
               ),
@@ -708,7 +709,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              _brightness > 0.5 ? Icons.brightness_high : Icons.brightness_low,
+              _brightness > 0.5 ? LucideIcons.sun : LucideIcons.moon,
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -739,8 +740,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           children: [
             Icon(
               _volume > 0.5
-                  ? Icons.volume_up
-                  : (_volume > 0 ? Icons.volume_down : Icons.volume_off),
+                  ? LucideIcons.volume2
+                  : (_volume > 0 ? LucideIcons.volume1 : LucideIcons.volumeX),
               color: Colors.white,
             ),
             const SizedBox(width: 12),
@@ -868,15 +869,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                         if (WindowControls.isWindows) ...[
                           const SizedBox(width: 16),
                           _WindowCaptionButton(
-                            icon: Icons.remove,
+                            icon: LucideIcons.minus,
                             onPressed: () => WindowControls.minimize(),
                           ),
                           _WindowCaptionButton(
-                            icon: Icons.crop_square,
+                            icon: LucideIcons.square,
                             onPressed: () => WindowControls.toggleMaximize(),
                           ),
                           _WindowCaptionButton(
-                            icon: Icons.close,
+                            icon: LucideIcons.x,
                             hoverColor: const Color(0xFFE81123),
                             onPressed: () => WindowControls.close(),
                           ),
@@ -1004,11 +1005,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                     _buildSubtitleButton(
                         isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                      _buildIconButton(Icons.format_list_bulleted, _showPlaylistMenu,
+                      _buildIconButton(LucideIcons.listVideo, _showPlaylistMenu,
                           isLast: !WindowControls.isDesktop),
                     if (WindowControls.isDesktop)
                       _buildIconButton(
-                        widget.isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                        widget.isFullscreen ? LucideIcons.minimize : LucideIcons.maximize,
                         widget.onToggleFullscreen,
                         isLast: true,
                       ),
@@ -1028,9 +1029,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       children: [
         IconButton(
           icon: Icon(
-            _volume == 0 ? Icons.volume_off : Icons.volume_up,
+            _volume == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
             color: Colors.white,
-            size: 28,
+            size: 26,
           ),
           onPressed: () {
             widget.player.setVolume(_volume == 0 ? 100 : 0);
@@ -1066,9 +1067,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         _showControlsTemporarily();
       },
       icon: Icon(
-        _isFillMode ? Icons.zoom_in_map : Icons.zoom_out_map,
+        _isFillMode ? LucideIcons.minimize2 : LucideIcons.maximize2,
         color: Colors.white,
-        size: 24,
+        size: 26,
       ),
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
@@ -1139,7 +1140,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
-          child: const Icon(Icons.graphic_eq, color: Colors.white, size: 28),
+          child: const Icon(LucideIcons.audioLines, color: Colors.white, size: 26),
         ),
       ),
     );
@@ -1201,7 +1202,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
-          child: const Icon(Icons.subtitles_outlined, color: Colors.white, size: 28),
+          child: const Icon(LucideIcons.captions, color: Colors.white, size: 26),
         ),
       ),
     );
@@ -1213,9 +1214,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       children: [
         IconButton(
           icon: Icon(
-            Icons.skip_previous,
+            LucideIcons.skipBack,
             color: widget.hasPrevious ? Colors.white : Colors.white38,
-            size: 36,
+            size: 26,
           ),
           onPressed: widget.hasPrevious ? widget.onPrevious : null,
           padding: EdgeInsets.zero,
@@ -1224,9 +1225,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
-            _playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+            _playing ? LucideIcons.circlePause : LucideIcons.circlePlay,
             color: Colors.white,
-            size: 36,
+            size: 32,
           ),
           onPressed: () => widget.player.playOrPause(),
           padding: EdgeInsets.zero,
@@ -1235,9 +1236,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
-            Icons.skip_next,
+            LucideIcons.skipForward,
             color: widget.hasNext ? Colors.white : Colors.white38,
-            size: 36,
+            size: 26,
           ),
           onPressed: widget.hasNext ? widget.onNext : null,
           padding: EdgeInsets.zero,
@@ -1261,13 +1262,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         child: GestureDetector(
           key: key,
           onTap: onPressed,
-          child: Icon(icon, color: Colors.white, size: 28),
+          child: Icon(icon, color: Colors.white, size: 26),
         ),
       );
     }
     return IconButton(
       key: key,
-      icon: Icon(icon, color: Colors.white, size: 28),
+      icon: Icon(icon, color: Colors.white, size: 26),
       onPressed: onPressed,
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(minWidth: minW),
@@ -1293,9 +1294,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
-              _isLocked ? Icons.lock : Icons.lock_open,
-              color: Colors.white,
-              size: 24,
+              _isLocked ? LucideIcons.lock : LucideIcons.lockOpen,
             ),
           ),
         ),
@@ -1406,9 +1405,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                                     children: [
                                       if (isCurrent) ...[
                                         const Icon(
-                                          Icons.play_circle_outline,
+                                          LucideIcons.circlePlay,
                                           color: Colors.white,
-                                          size: 20,
                                         ),
                                         const SizedBox(width: 10),
                                       ],
@@ -1483,7 +1481,7 @@ class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
           width: 46,
           height: 44,
           color: bg,
-          child: Center(child: Icon(widget.icon, size: 16, color: Colors.white)),
+          child: Center(child: Icon(widget.icon, color: Colors.white)),
         ),
       ),
     );

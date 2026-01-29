@@ -54,7 +54,10 @@ class ApiConstants {
 
   // 存储源
   static const String storages = '$apiPrefix/storages';
+  static const String storageTestConnection = '$apiPrefix/storages/test-connection';
   static String storageDetail(int id) => '$apiPrefix/storages/$id';
+  static String storageEnable(int id) => '$apiPrefix/storages/$id/enable';
+  static String storageDisable(int id) => '$apiPrefix/storages/$id/disable';
   static String storageScan(int id) => '$apiPrefix/storages/$id/scan';
   static String storageScanProgress(int id) =>
       '$apiPrefix/storages/$id/scan/progress';

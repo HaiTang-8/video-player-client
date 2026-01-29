@@ -5,6 +5,7 @@ class Storage {
   final int id;
   final String name;
   final String type;
+  final bool enabled;
   final Map<String, String>? settings;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -13,6 +14,7 @@ class Storage {
     required this.id,
     required this.name,
     required this.type,
+    required this.enabled,
     this.settings,
     this.createdAt,
     this.updatedAt,
@@ -38,6 +40,7 @@ class Storage {
       id: json['id'] as int,
       name: json['name'] as String? ?? '',
       type: json['type'] as String? ?? '',
+      enabled: json['enabled'] as bool? ?? true,
       settings: parsedSettings,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
@@ -52,6 +55,7 @@ class Storage {
         'id': id,
         'name': name,
         'type': type,
+        'enabled': enabled,
         'settings': settings,
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
@@ -64,6 +68,8 @@ class Storage {
         return 'WebDAV';
       case 'local':
         return '本地存储';
+      case 'openlist':
+        return 'OpenList';
       default:
         return type;
     }

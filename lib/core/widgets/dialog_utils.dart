@@ -17,7 +17,7 @@ class DialogUtils {
     String cancelText = '取消',
     String confirmText = '确定',
     bool isDestructive = false,
-    bool barrierDismissible = true,
+    bool barrierDismissible = false,
   }) async {
     final container = ProviderScope.containerOf(context);
     container.read(windowBorderVisibleProvider.notifier).hide();
@@ -100,9 +100,23 @@ class DialogUtils {
     bool isError = false,
   }) {
     final theme = shadcn.Theme.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final backgroundColor = isError
+        ? (isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFEF2F2))
+        : (isDark ? const Color(0xFF14532D) : const Color(0xFFF0FDF4));
+
+    final borderColor = isError
+        ? (isDark ? const Color(0xFFB91C1C) : const Color(0xFFFECACA))
+        : (isDark ? const Color(0xFF166534) : const Color(0xFFBBF7D0));
+
     final iconColor = isError
-        ? theme.colorScheme.destructive
-        : theme.colorScheme.primary;
+        ? (isDark ? const Color(0xFFEF4444) : const Color(0xFFDC2626))
+        : (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A));
+
+    final textColor = isError
+        ? (isDark ? const Color(0xFFFECACA) : const Color(0xFF7F1D1D))
+        : (isDark ? const Color(0xFFDCFCE7) : const Color(0xFF14532D));
 
     shadcn.showToast(
       context: context,
@@ -111,9 +125,9 @@ class DialogUtils {
         margin: const EdgeInsets.only(top: 32),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: theme.colorScheme.card,
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.colorScheme.border),
+          border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
@@ -136,7 +150,7 @@ class DialogUtils {
               child: Text(
                 message,
                 style: theme.typography.small.copyWith(
-                  color: theme.colorScheme.cardForeground,
+                  color: textColor,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -149,7 +163,9 @@ class DialogUtils {
               child: Icon(
                 shadcn.LucideIcons.x,
                 size: 16,
-                color: theme.colorScheme.mutedForeground,
+                color: isError
+                    ? (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C))
+                    : (isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534)),
               ),
             ),
           ],
@@ -172,6 +188,7 @@ class DialogUtils {
     try {
       return await shadcn.showDialog<T>(
         context: context,
+        barrierDismissible: false,
         builder: (context) => shadcn.AlertDialog(
           title: Text(title),
           content: Column(
@@ -222,6 +239,7 @@ class DialogUtils {
     try {
       return await shadcn.showDialog<String>(
         context: context,
+        barrierDismissible: false,
         builder: (context) => shadcn.AlertDialog(
           title: Text(title),
           content: Padding(

@@ -467,6 +467,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _externalSubtitleAutoLoaded = false;
       if (episodeIndex != null) {
         _currentEpisodeIndex = episodeIndex;
+      } else {
+        // 重试场景：清除待 seek 位置，避免使用失败前残留的错误位置
+        _pendingSeekPosition = null;
       }
     });
 

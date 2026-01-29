@@ -38,6 +38,16 @@ class StorageService {
     return _client.delete(ApiConstants.storageDetail(id));
   }
 
+  /// 启用存储源
+  Future<ApiResponse<void>> enableStorage(int id) async {
+    return _client.post(ApiConstants.storageEnable(id));
+  }
+
+  /// 禁用存储源
+  Future<ApiResponse<void>> disableStorage(int id) async {
+    return _client.post(ApiConstants.storageDisable(id));
+  }
+
   /// 更新存储源
   Future<ApiResponse<Storage>> updateStorage({
     required int id,
@@ -49,6 +59,17 @@ class StorageService {
       ApiConstants.storageDetail(id),
       data: {'name': name, 'type': type, 'settings': settings},
       fromJson: (json) => Storage.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 测试存储源连接
+  Future<ApiResponse<void>> testConnection({
+    required String type,
+    required Map<String, String> settings,
+  }) async {
+    return _client.post(
+      ApiConstants.storageTestConnection,
+      data: {'type': type, 'settings': settings},
     );
   }
 

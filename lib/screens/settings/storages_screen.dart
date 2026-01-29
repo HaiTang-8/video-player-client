@@ -2,7 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pull_down_button/pull_down_button.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -10,6 +10,26 @@ import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+
+/// 存储源类型枚举
+enum StorageType {
+  webdav('webdav', 'WebDAV', CupertinoIcons.cloud),
+  local('local', '本地存储', CupertinoIcons.folder),
+  openlist('openlist', 'OpenList', CupertinoIcons.link);
+
+  final String value;
+  final String label;
+  final IconData icon;
+
+  const StorageType(this.value, this.label, this.icon);
+
+  static StorageType fromString(String value) {
+    return StorageType.values.firstWhere(
+      (e) => e.value == value.toLowerCase(),
+      orElse: () => StorageType.webdav,
+    );
+  }
+}
 
 /// 存储源管理页面
 class StoragesScreen extends ConsumerStatefulWidget {
@@ -35,68 +55,126 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final isDesktop = WindowControls.isDesktop;
 
     return Scaffold(
-      appBar:
-          isDesktop
-              ? DesktopAppBar(
-                title: const Text('存储源管理'),
-                onBack: () => context.pop(),
-              )
-              : MobileAppBar(
-                title: const Text('存储源管理'),
-                onBack: () => context.pop(),
-              ),
+      appBar: isDesktop
+          ? DesktopAppBar(
+              title: const Text('存储源管理'),
+              onBack: () => context.pop(),
+            )
+          : MobileAppBar(
+              title: const Text('存储源管理'),
+              onBack: () => context.pop(),
+            ),
       body: storagesAsync.when(
         loading: () => const ListSkeletonLoader(),
-        error:
-            (error, stack) => AppErrorWidget(
-              message: error.toString(),
-              onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
-            ),
+        error: (error, stack) => AppErrorWidget(
+          message: error.toString(),
+          onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
+        ),
         data: (storages) {
           if (storages.isEmpty) {
-            return const EmptyWidget(
-              message: '暂无存储源\n点击右下角按钮添加',
-              icon: Icons.storage_outlined,
-            );
+            return _buildEmptyState(context);
           }
-
-          return RefreshIndicator(
-            onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: storages.length,
-              itemBuilder: (context, index) {
-                final storage = storages[index];
-                final isScanning = scanState.scanning.contains(storage.id);
-                final progress = scanState.progresses[storage.id];
-
-                return _StorageCard(
-                  storage: storage,
-                  isScanning: isScanning,
-                  progress: progress,
-                  onScan: () => _startScan(storage.id, forceScrape: false),
-                  onForceScrape: () => _startScan(storage.id, forceScrape: true),
-                  onDelete: () => _deleteStorage(storage),
-                );
-              },
-            ),
-          );
+          return _buildStorageList(context, storages, scanState, isDesktop);
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddStorageDialog(),
-        child: const Icon(Icons.add),
+      floatingActionButton: shadcn.PrimaryButton(
+        onPressed: () => _showAddStorageDialog(context),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.add, size: 18),
+            SizedBox(width: 8),
+            Text('添加存储源'),
+          ],
+        ),
       ),
     );
   }
 
-  Future<void> _startScan(int storageId, {bool forceScrape = false}) async {
-    final success = await ref
-        .read(scanStateProvider.notifier)
-        .startScan(storageId, forceScrape: forceScrape);
-    if (!success && mounted) {
-      DialogUtils.showToast(context: context, message: '启动扫描失败', isError: true);
-    }
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.folder_badge_plus,
+            size: 64,
+            color: theme.colorScheme.outline,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '暂无存储源',
+            style: theme.textTheme.titleMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '点击右下角按钮添加存储源',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.outline,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStorageList(
+    BuildContext context,
+    List<Storage> storages,
+    ScanState scanState,
+    bool isDesktop,
+  ) {
+    return RefreshIndicator(
+      onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final crossAxisCount = isDesktop && constraints.maxWidth > 800
+              ? (constraints.maxWidth > 1200 ? 3 : 2)
+              : 1;
+
+          if (crossAxisCount == 1) {
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: storages.length,
+              itemBuilder: (context, index) {
+                final storage = storages[index];
+                return _StorageCard(
+                  storage: storage,
+                  onEdit: () => _showEditStorageDialog(context, storage),
+                  onDelete: () => _deleteStorage(storage),
+                  onBrowse: () => context.push('/storages/${storage.id}', extra: storage),
+                  onToggleEnabled: (enabled) => _toggleStorageEnabled(storage, enabled),
+                );
+              },
+            );
+          }
+
+          return GridView.builder(
+            padding: const EdgeInsets.all(16),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 1.8,
+            ),
+            itemCount: storages.length,
+            itemBuilder: (context, index) {
+              final storage = storages[index];
+              return _StorageCard(
+                storage: storage,
+                onEdit: () => _showEditStorageDialog(context, storage),
+                onDelete: () => _deleteStorage(storage),
+                onBrowse: () => context.push('/storages/${storage.id}', extra: storage),
+                onToggleEnabled: (enabled) => _toggleStorageEnabled(storage, enabled),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _deleteStorage(Storage storage) async {
@@ -118,231 +196,65 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     }
   }
 
-  void _showAddStorageDialog() {
-    final nameController = TextEditingController();
-    final urlController = TextEditingController();
-    final usernameController = TextEditingController();
-    final passwordController = TextEditingController();
-    final proxyUrlController = TextEditingController();
-    final publicBaseUrlController = TextEditingController();
-    String selectedType = 'webdav';
-    bool useProxy = false;
-    // WebDAV 默认直连；本地默认代理（保持兼容）。
-    String streamMode = 'redirect';
+  Future<void> _toggleStorageEnabled(Storage storage, bool enabled) async {
+    final success = enabled
+        ? await ref.read(storagesProvider.notifier).enableStorage(storage.id)
+        : await ref.read(storagesProvider.notifier).disableStorage(storage.id);
+    if (mounted) {
+      DialogUtils.showToast(
+        context: context,
+        message: success
+            ? (enabled ? '存储源已启用' : '存储源已禁用')
+            : (enabled ? '启用失败' : '禁用失败'),
+        isError: !success,
+      );
+    }
+  }
 
-    showCupertinoDialog<void>(
+  void _showAddStorageDialog(BuildContext context) {
+    shadcn.showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => CupertinoAlertDialog(
-          title: const Text('添加存储源'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Material(
-              color: Colors.transparent,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CupertinoTextField(
-                    controller: nameController,
-                    placeholder: '名称（如：我的媒体库）',
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.tertiarySystemFill,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: CupertinoSlidingSegmentedControl<String>(
-                      groupValue: selectedType,
-                      children: const {
-                        'webdav': Text('WebDAV'),
-                        'local': Text('本地存储'),
-                      },
-                      onValueChanged: (value) {
-                        setState(() {
-                          selectedType = value!;
-                          // 根据类型重置默认值，避免“切换类型后残留上一次配置”造成误用。
-                          if (selectedType == 'webdav') {
-                            streamMode = 'redirect';
-                            publicBaseUrlController.clear();
-                          } else {
-                            streamMode = 'proxy';
-                          }
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  if (selectedType == 'webdav') ...[
-                    CupertinoTextField(
-                      controller: urlController,
-                      placeholder: 'WebDAV URL',
-                      keyboardType: TextInputType.url,
-                    ),
-                    const SizedBox(height: 8),
-                    CupertinoTextField(
-                      controller: usernameController,
-                      placeholder: '用户名',
-                    ),
-                    const SizedBox(height: 8),
-                    CupertinoTextField(
-                      controller: passwordController,
-                      placeholder: '密码',
-                      obscureText: true,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('使用代理访问', style: TextStyle(fontSize: 14)),
-                        CupertinoSwitch(
-                          value: useProxy,
-                          onChanged: (value) {
-                            setState(() {
-                              useProxy = value;
-                              if (!useProxy) {
-                                proxyUrlController.clear();
-                              }
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    if (useProxy) ...[
-                      const SizedBox(height: 8),
-                      CupertinoTextField(
-                        controller: proxyUrlController,
-                        placeholder: '代理地址（可选）',
-                        keyboardType: TextInputType.url,
-                      ),
-                    ],
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
-                        CupertinoSlidingSegmentedControl<String>(
-                          groupValue: streamMode,
-                          children: const {
-                            'proxy': Text('代理'),
-                            'redirect': Text('直连'),
-                          },
-                          onValueChanged: (value) {
-                            setState(() {
-                              streamMode = value!;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    CupertinoTextField(
-                      controller: urlController,
-                      placeholder: '路径（如：/path/to/media）',
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('流媒体模式', style: TextStyle(fontSize: 14)),
-                        CupertinoSlidingSegmentedControl<String>(
-                          groupValue: streamMode,
-                          children: const {
-                            'proxy': Text('代理'),
-                            'redirect': Text('直连'),
-                          },
-                          onValueChanged: (value) {
-                            setState(() {
-                              streamMode = value!;
-                              if (streamMode != 'redirect') {
-                                publicBaseUrlController.clear();
-                              }
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                    if (streamMode == 'redirect') ...[
-                      const SizedBox(height: 8),
-                      CupertinoTextField(
-                        controller: publicBaseUrlController,
-                        placeholder: '直连基地址（如：http://nas.local:8081/media）',
-                        keyboardType: TextInputType.url,
-                      ),
-                    ],
-                  ],
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
-            ),
-            CupertinoDialogAction(
-              onPressed: () async {
-                final name = nameController.text.trim();
-                if (name.isEmpty) {
-                  DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
-                  return;
-                }
+      builder: (context) => _StorageFormDialog(
+        onSubmit: (name, type, settings) async {
+          final success = await ref.read(storagesProvider.notifier).addStorage(
+            name: name,
+            type: type,
+            settings: settings,
+          );
+          if (context.mounted) {
+            Navigator.pop(context);
+            DialogUtils.showToast(
+              context: context,
+              message: success ? '添加成功' : '添加失败',
+              isError: !success,
+            );
+          }
+        },
+      ),
+    );
+  }
 
-                Map<String, String> settings;
-                if (selectedType == 'webdav') {
-                  settings = {
-                    'url': urlController.text.trim(),
-                    'username': usernameController.text.trim(),
-                    'password': passwordController.text,
-                    'use_proxy': useProxy.toString(),
-                    'stream_mode': streamMode,
-                  };
-                  final proxyUrl = proxyUrlController.text.trim();
-                  if (proxyUrl.isNotEmpty) {
-                    settings['proxy_url'] = proxyUrl;
-                  }
-                } else {
-                  if (streamMode == 'redirect' &&
-                      publicBaseUrlController.text.trim().isEmpty) {
-                    DialogUtils.showToast(
-                      context: context,
-                      message: '直连模式需要填写直连基地址',
-                      isError: true,
-                    );
-                    return;
-                  }
-
-                  settings = {
-                    'path': urlController.text.trim(),
-                    'stream_mode': streamMode,
-                  };
-                  final publicBaseUrl = publicBaseUrlController.text.trim();
-                  if (publicBaseUrl.isNotEmpty) {
-                    settings['public_base_url'] = publicBaseUrl;
-                  }
-                }
-
-                final success = await ref
-                    .read(storagesProvider.notifier)
-                    .addStorage(
-                      name: name,
-                      type: selectedType,
-                      settings: settings,
-                    );
-
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  DialogUtils.showToast(
-                    context: context,
-                    message: success ? '添加成功' : '添加失败',
-                    isError: !success,
-                  );
-                }
-              },
-              child: const Text('添加'),
-            ),
-          ],
-        ),
+  void _showEditStorageDialog(BuildContext context, Storage storage) {
+    shadcn.showDialog(
+      context: context,
+      builder: (context) => _StorageFormDialog(
+        storage: storage,
+        onSubmit: (name, type, settings) async {
+          final success = await ref.read(storagesProvider.notifier).updateStorage(
+            id: storage.id,
+            name: name,
+            type: type,
+            settings: settings,
+          );
+          if (context.mounted) {
+            Navigator.pop(context);
+            DialogUtils.showToast(
+              context: context,
+              message: success ? '更新成功' : '更新失败',
+              isError: !success,
+            );
+          }
+        },
       ),
     );
   }
@@ -351,111 +263,651 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
 /// 存储源卡片
 class _StorageCard extends StatelessWidget {
   final Storage storage;
-  final bool isScanning;
-  final ScanProgress? progress;
-  final VoidCallback onScan;
-  final VoidCallback onForceScrape;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onBrowse;
+  final ValueChanged<bool> onToggleEnabled;
 
   const _StorageCard({
     required this.storage,
-    required this.isScanning,
-    this.progress,
-    required this.onScan,
-    required this.onForceScrape,
+    required this.onEdit,
     required this.onDelete,
+    required this.onBrowse,
+    required this.onToggleEnabled,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final storageType = StorageType.fromString(storage.type);
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  storage.type == 'webdav' ? CupertinoIcons.cloud : CupertinoIcons.folder,
-                  color: theme.colorScheme.primary,
+    return shadcn.Card(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: storage.enabled ? 0.1 : 0.05),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        storage.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        storage.typeDisplayName,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                      ),
-                    ],
-                  ),
+                child: Icon(
+                  storageType.icon,
+                  color: storage.enabled ? theme.colorScheme.primary : theme.colorScheme.outline,
+                  size: 22,
                 ),
-                PullDownButton(
-                  itemBuilder: (context) => [
-                    PullDownMenuItem(
-                      title: '删除',
-                      icon: CupertinoIcons.trash,
-                      isDestructive: true,
-                      onTap: onDelete,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      storage.name,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: storage.enabled ? null : theme.colorScheme.outline,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _buildTypeBadge(context, storageType),
+                        if (storage.settings?['url'] != null) ...[
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              storage.settings!['url']!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.outline,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
-                  buttonBuilder: (context, showMenu) => CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: showMenu,
-                    child: const Icon(CupertinoIcons.ellipsis_circle),
-                  ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // 扫描进度
-            if (isScanning && progress != null) ...[
-              LinearProgressIndicator(value: progress!.progress / 100),
-              const SizedBox(height: 8),
-              Text(
-                '${progress!.statusText}: ${progress!.scannedFiles}/${progress!.totalFiles}',
-                style: theme.textTheme.bodySmall,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(width: 8),
+              CupertinoSwitch(
+                value: storage.enabled,
+                onChanged: onToggleEnabled,
+              ),
             ],
+          ),
+          const Spacer(),
+          const SizedBox(height: 16),
+          _buildActionButtons(context),
+        ],
+      ),
+    );
+  }
 
-            // 操作按钮
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton.icon(
-                  onPressed: isScanning ? null : onForceScrape,
-                  icon: const Icon(CupertinoIcons.arrow_2_circlepath),
-                  label: const Text('强制刮削'),
+  Widget _buildTypeBadge(BuildContext context, StorageType type) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        type.label,
+        style: theme.textTheme.labelSmall?.copyWith(
+          color: theme.colorScheme.onSecondaryContainer,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        shadcn.OutlineButton(
+          onPressed: onEdit,
+          size: shadcn.ButtonSize.small,
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.pencil, size: 14),
+              SizedBox(width: 6),
+              Text('编辑'),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        shadcn.OutlineButton(
+          onPressed: onDelete,
+          size: shadcn.ButtonSize.small,
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.trash, size: 14),
+              SizedBox(width: 6),
+              Text('删除'),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        shadcn.PrimaryButton(
+          onPressed: onBrowse,
+          size: shadcn.ButtonSize.small,
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(CupertinoIcons.folder, size: 14),
+              SizedBox(width: 6),
+              Text('浏览'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 存储源表单对话框
+class _StorageFormDialog extends ConsumerStatefulWidget {
+  final Storage? storage;
+  final Future<void> Function(String name, String type, Map<String, String> settings) onSubmit;
+
+  const _StorageFormDialog({
+    this.storage,
+    required this.onSubmit,
+  });
+
+  @override
+  ConsumerState<_StorageFormDialog> createState() => _StorageFormDialogState();
+}
+
+class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
+  late final TextEditingController _nameController;
+  late final TextEditingController _urlController;
+  late final TextEditingController _usernameController;
+  late final TextEditingController _passwordController;
+  late final TextEditingController _proxyUrlController;
+  late final TextEditingController _publicBaseUrlController;
+  late final TextEditingController _tokenController;
+
+  late StorageType _selectedType;
+  bool _useProxy = false;
+  String _streamMode = 'redirect';
+  bool _isSubmitting = false;
+  bool _isTesting = false;
+
+  bool get isEditing => widget.storage != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final storage = widget.storage;
+    final settings = storage?.settings ?? {};
+
+    _nameController = TextEditingController(text: storage?.name ?? '');
+    _urlController = TextEditingController(text: settings['url'] ?? settings['path'] ?? '');
+    _usernameController = TextEditingController(text: settings['username'] ?? '');
+    _passwordController = TextEditingController(text: settings['password'] ?? '');
+    _proxyUrlController = TextEditingController(text: settings['proxy_url'] ?? '');
+    _publicBaseUrlController = TextEditingController(text: settings['public_base_url'] ?? '');
+    _tokenController = TextEditingController(text: settings['token'] ?? '');
+
+    _selectedType = storage != null
+        ? StorageType.fromString(storage.type)
+        : StorageType.webdav;
+    _useProxy = settings['use_proxy'] == 'true';
+    _streamMode = settings['stream_mode'] ?? 'redirect';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _urlController.dispose();
+    _usernameController.dispose();
+    _passwordController.dispose();
+    _proxyUrlController.dispose();
+    _publicBaseUrlController.dispose();
+    _tokenController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDesktop = WindowControls.isDesktop;
+    final dialogWidth = isDesktop ? 480.0 : MediaQuery.of(context).size.width * 0.9;
+
+    return shadcn.AlertDialog(
+      title: Text(isEditing ? '编辑存储源' : '添加存储源'),
+      content: SizedBox(
+        width: dialogWidth,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 16),
+              _buildNameField(),
+              const SizedBox(height: 16),
+              _buildTypeSelector(),
+              const SizedBox(height: 16),
+              ..._buildTypeSpecificFields(),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        shadcn.OutlineButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        shadcn.PrimaryButton(
+          onPressed: _isSubmitting ? null : _handleSubmit,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Text(isEditing ? '保存' : '添加'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNameField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('名称').semiBold().small(),
+        const SizedBox(height: 8),
+        shadcn.TextField(
+          controller: _nameController,
+          placeholder: const Text('如：我的媒体库'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTypeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('类型').semiBold().small(),
+        const SizedBox(height: 8),
+        Row(
+          children: StorageType.values.map((type) {
+            final isSelected = _selectedType == type;
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: type != StorageType.values.last ? 8 : 0,
                 ),
-                const SizedBox(width: 8),
-                FilledButton.icon(
-                  onPressed: isScanning ? null : onScan,
-                  icon:
-                      isScanning
-                          ? const CupertinoActivityIndicator(radius: 8)
-                          : const Icon(CupertinoIcons.refresh),
-                  label: Text(isScanning ? '扫描中...' : '扫描'),
-                ),
-              ],
+                child: isSelected
+                    ? shadcn.PrimaryButton(
+                        onPressed: () => setState(() => _selectedType = type),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(type.icon, size: 16),
+                            const SizedBox(width: 6),
+                            Text(type.label),
+                          ],
+                        ),
+                      )
+                    : shadcn.OutlineButton(
+                        onPressed: () => setState(() {
+                          _selectedType = type;
+                          _resetTypeDefaults();
+                        }),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(type.icon, size: 16),
+                            const SizedBox(width: 6),
+                            Text(type.label),
+                          ],
+                        ),
+                      ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  void _resetTypeDefaults() {
+    setState(() {
+      if (_selectedType == StorageType.webdav) {
+        _streamMode = 'redirect';
+        _publicBaseUrlController.clear();
+      } else if (_selectedType == StorageType.local) {
+        _streamMode = 'proxy';
+      } else if (_selectedType == StorageType.openlist) {
+        _streamMode = 'redirect';
+      }
+    });
+  }
+
+  List<Widget> _buildTypeSpecificFields() {
+    switch (_selectedType) {
+      case StorageType.webdav:
+        return _buildWebDAVFields();
+      case StorageType.local:
+        return _buildLocalFields();
+      case StorageType.openlist:
+        return _buildOpenListFields();
+    }
+  }
+
+  List<Widget> _buildWebDAVFields() {
+    return [
+      _buildFieldLabel('WebDAV URL'),
+      shadcn.TextField(
+        controller: _urlController,
+        placeholder: const Text('https://example.com/dav'),
+        keyboardType: TextInputType.url,
+      ),
+      const SizedBox(height: 16),
+      _buildFieldLabel('用户名'),
+      shadcn.TextField(
+        controller: _usernameController,
+        placeholder: const Text('用户名'),
+      ),
+      const SizedBox(height: 16),
+      _buildFieldLabel('密码'),
+      shadcn.TextField(
+        controller: _passwordController,
+        placeholder: const Text('密码'),
+        obscureText: true,
+      ),
+      const SizedBox(height: 16),
+      _buildProxySwitch(),
+      if (_useProxy) ...[
+        const SizedBox(height: 16),
+        _buildFieldLabel('代理地址'),
+        shadcn.TextField(
+          controller: _proxyUrlController,
+          placeholder: const Text('代理地址（可选）'),
+          keyboardType: TextInputType.url,
+        ),
+      ],
+      const SizedBox(height: 16),
+      _buildStreamModeSelector(),
+    ];
+  }
+
+  List<Widget> _buildLocalFields() {
+    return [
+      _buildFieldLabel('路径'),
+      shadcn.TextField(
+        controller: _urlController,
+        placeholder: const Text('/path/to/media'),
+      ),
+      const SizedBox(height: 16),
+      _buildStreamModeSelector(),
+      if (_streamMode == 'redirect') ...[
+        const SizedBox(height: 16),
+        _buildFieldLabel('直连基地址'),
+        shadcn.TextField(
+          controller: _publicBaseUrlController,
+          placeholder: const Text('http://nas.local:8081/media'),
+          keyboardType: TextInputType.url,
+        ),
+      ],
+    ];
+  }
+
+  List<Widget> _buildOpenListFields() {
+    return [
+      _buildFieldLabel('OpenList 地址'),
+      shadcn.TextField(
+        controller: _urlController,
+        placeholder: const Text('https://openlist.example.com'),
+        keyboardType: TextInputType.url,
+      ),
+      const SizedBox(height: 16),
+      _buildFieldLabel('Token（可选）'),
+      shadcn.TextField(
+        controller: _tokenController,
+        placeholder: const Text('访问令牌'),
+        obscureText: true,
+      ),
+      const SizedBox(height: 16),
+      _buildFieldLabel('用户名（可选）'),
+      shadcn.TextField(
+        controller: _usernameController,
+        placeholder: const Text('用户名'),
+      ),
+      const SizedBox(height: 16),
+      _buildFieldLabel('密码（可选）'),
+      shadcn.TextField(
+        controller: _passwordController,
+        placeholder: const Text('密码'),
+        obscureText: true,
+      ),
+      const SizedBox(height: 16),
+      _buildStreamModeSelector(),
+      const SizedBox(height: 16),
+      _buildTestConnectionButton(),
+    ];
+  }
+
+  Widget _buildTestConnectionButton() {
+    return shadcn.OutlineButton(
+      onPressed: _isTesting ? null : _handleTestConnection,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isTesting)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(CupertinoIcons.wifi, size: 14),
+          const SizedBox(width: 6),
+          Text(_isTesting ? '测试中...' : '测试连接'),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleTestConnection() async {
+    final url = _urlController.text.trim();
+    if (url.isEmpty) {
+      DialogUtils.showToast(context: context, message: '请输入 OpenList 地址', isError: true);
+      return;
+    }
+
+    setState(() => _isTesting = true);
+
+    final settings = <String, String>{
+      'url': url,
+      'stream_mode': _streamMode,
+    };
+    final token = _tokenController.text.trim();
+    if (token.isNotEmpty) {
+      settings['token'] = token;
+    }
+    final username = _usernameController.text.trim();
+    if (username.isNotEmpty) {
+      settings['username'] = username;
+    }
+    final password = _passwordController.text;
+    if (password.isNotEmpty) {
+      settings['password'] = password;
+    }
+
+    final (success, error) = await ref.read(storagesProvider.notifier).testConnection(
+      type: 'openlist',
+      settings: settings,
+    );
+
+    if (mounted) {
+      setState(() => _isTesting = false);
+      DialogUtils.showToast(
+        context: context,
+        message: success ? '连接成功' : (error ?? '连接失败'),
+        isError: !success,
+      );
+    }
+  }
+
+  Widget _buildFieldLabel(String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(label).semiBold().small(),
+    );
+  }
+
+  Widget _buildProxySwitch() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        const Text('使用代理访问').small(),
+        shadcn.Switch(
+          value: _useProxy,
+          onChanged: (value) {
+            setState(() {
+              _useProxy = value;
+              if (!_useProxy) {
+                _proxyUrlController.clear();
+              }
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreamModeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('流媒体模式').semiBold().small(),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _streamMode == 'proxy'
+                  ? shadcn.PrimaryButton(
+                      onPressed: () => setState(() => _streamMode = 'proxy'),
+                      child: const Text('代理'),
+                    )
+                  : shadcn.OutlineButton(
+                      onPressed: () => setState(() => _streamMode = 'proxy'),
+                      child: const Text('代理'),
+                    ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _streamMode == 'redirect'
+                  ? shadcn.PrimaryButton(
+                      onPressed: () => setState(() => _streamMode = 'redirect'),
+                      child: const Text('直连'),
+                    )
+                  : shadcn.OutlineButton(
+                      onPressed: () => setState(() => _streamMode = 'redirect'),
+                      child: const Text('直连'),
+                    ),
             ),
           ],
         ),
-      ),
+      ],
+    );
+  }
+
+  Future<void> _handleSubmit() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
+      return;
+    }
+
+    Map<String, String> settings;
+    switch (_selectedType) {
+      case StorageType.webdav:
+        settings = {
+          'url': _urlController.text.trim(),
+          'username': _usernameController.text.trim(),
+          'password': _passwordController.text,
+          'use_proxy': _useProxy.toString(),
+          'stream_mode': _streamMode,
+        };
+        final proxyUrl = _proxyUrlController.text.trim();
+        if (proxyUrl.isNotEmpty) {
+          settings['proxy_url'] = proxyUrl;
+        }
+        break;
+      case StorageType.local:
+        if (_streamMode == 'redirect' && _publicBaseUrlController.text.trim().isEmpty) {
+          DialogUtils.showToast(
+            context: context,
+            message: '直连模式需要填写直连基地址',
+            isError: true,
+          );
+          return;
+        }
+        settings = {
+          'path': _urlController.text.trim(),
+          'stream_mode': _streamMode,
+        };
+        final publicBaseUrl = _publicBaseUrlController.text.trim();
+        if (publicBaseUrl.isNotEmpty) {
+          settings['public_base_url'] = publicBaseUrl;
+        }
+        break;
+      case StorageType.openlist:
+        settings = {
+          'url': _urlController.text.trim(),
+          'stream_mode': _streamMode,
+        };
+        final token = _tokenController.text.trim();
+        if (token.isNotEmpty) {
+          settings['token'] = token;
+        }
+        final username = _usernameController.text.trim();
+        if (username.isNotEmpty) {
+          settings['username'] = username;
+        }
+        final password = _passwordController.text;
+        if (password.isNotEmpty) {
+          settings['password'] = password;
+        }
+        break;
+    }
+
+    setState(() => _isSubmitting = true);
+    await widget.onSubmit(name, _selectedType.value, settings);
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+    }
+  }
+}
+
+extension on Text {
+  Widget semiBold() {
+    return DefaultTextStyle.merge(
+      style: const TextStyle(fontWeight: FontWeight.w600),
+      child: this,
+    );
+  }
+
+  Widget small() {
+    return DefaultTextStyle.merge(
+      style: const TextStyle(fontSize: 13),
+      child: this,
     );
   }
 }

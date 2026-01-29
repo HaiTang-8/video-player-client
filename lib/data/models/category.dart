@@ -88,6 +88,8 @@ class WatchHistoryItem {
   final String mediaType;
   final int mediaId;
   final int? episodeId;
+  final int? tmdbMediaId;
+  final int? tmdbEpisodeId;
   final int position;
   final int duration;
   final bool completed;
@@ -99,6 +101,8 @@ class WatchHistoryItem {
     required this.mediaType,
     required this.mediaId,
     this.episodeId,
+    this.tmdbMediaId,
+    this.tmdbEpisodeId,
     required this.position,
     required this.duration,
     required this.completed,
@@ -134,6 +138,8 @@ class WatchHistoryItem {
       mediaType: json['media_type'] as String? ?? '',
       mediaId: (json['media_id'] as num?)?.toInt() ?? 0,
       episodeId: (json['episode_id'] as num?)?.toInt(),
+      tmdbMediaId: (json['tmdb_media_id'] as num?)?.toInt(),
+      tmdbEpisodeId: (json['tmdb_episode_id'] as num?)?.toInt(),
       position: (json['position'] as num?)?.toInt() ?? 0,
       duration: (json['duration'] as num?)?.toInt() ?? 0,
       completed: json['completed'] as bool? ?? false,
@@ -152,6 +158,8 @@ class WatchHistoryItem {
         'media_type': mediaType,
         'media_id': mediaId,
         'episode_id': episodeId,
+        if (tmdbMediaId != null) 'tmdb_media_id': tmdbMediaId,
+        if (tmdbEpisodeId != null) 'tmdb_episode_id': tmdbEpisodeId,
         'position': position,
         'duration': duration,
         'completed': completed,
