@@ -44,8 +44,11 @@ class StorageService {
   }
 
   /// 禁用存储源
-  Future<ApiResponse<void>> disableStorage(int id) async {
-    return _client.post(ApiConstants.storageDisable(id));
+  Future<ApiResponse<void>> disableStorage(int id, {bool hideMedia = false}) async {
+    return _client.post(
+      ApiConstants.storageDisable(id),
+      data: {'hide_media': hideMedia},
+    );
   }
 
   /// 更新存储源
@@ -177,6 +180,41 @@ class StorageService {
       receiveTimeout: const Duration(seconds: 300),
       fromJson:
           (json) => AiTidyApplyResult.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 获取黑名单
+  Future<ApiResponse<List<String>>> getBlacklist(int storageId) async {
+    return _client.get<List<String>>(
+      ApiConstants.storageBlacklist(storageId),
+      fromJson: (json) {
+        final data = json as Map<String, dynamic>;
+        return List<String>.from(data['blacklist'] ?? []);
+      },
+    );
+  }
+
+  /// 添加到黑名单
+  Future<ApiResponse<void>> addToBlacklist(int storageId, String path) async {
+    return _client.post(
+      ApiConstants.storageBlacklistAdd(storageId),
+      data: {'path': path},
+    );
+  }
+
+  /// 从黑名单移除
+  Future<ApiResponse<void>> removeFromBlacklist(int storageId, String path) async {
+    return _client.post(
+      ApiConstants.storageBlacklistRemove(storageId),
+      data: {'path': path},
+    );
+  }
+
+  /// 设置黑名单（批量操作）
+  Future<ApiResponse<void>> setBlacklist(int storageId, List<String> blacklist) async {
+    return _client.put(
+      ApiConstants.storageBlacklist(storageId),
+      data: {'blacklist': blacklist},
     );
   }
 

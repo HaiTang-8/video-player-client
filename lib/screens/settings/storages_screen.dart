@@ -197,18 +197,67 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   }
 
   Future<void> _toggleStorageEnabled(Storage storage, bool enabled) async {
-    final success = enabled
-        ? await ref.read(storagesProvider.notifier).enableStorage(storage.id)
-        : await ref.read(storagesProvider.notifier).disableStorage(storage.id);
-    if (mounted) {
-      DialogUtils.showToast(
-        context: context,
-        message: success
-            ? (enabled ? '存储源已启用' : '存储源已禁用')
-            : (enabled ? '启用失败' : '禁用失败'),
-        isError: !success,
+    if (enabled) {
+      final success = await ref.read(storagesProvider.notifier).enableStorage(storage.id);
+      if (mounted) {
+        DialogUtils.showToast(
+          context: context,
+          message: success ? '存储源已启用' : '启用失败',
+          isError: !success,
+        );
+      }
+    } else {
+      final result = await _showDisableOptionsDialog(storage);
+      if (result == null) return;
+      final success = await ref.read(storagesProvider.notifier).disableStorage(
+        storage.id,
+        hideMedia: result,
       );
+      if (mounted) {
+        DialogUtils.showToast(
+          context: context,
+          message: success ? '存储源已禁用' : '禁用失败',
+          isError: !success,
+        );
+      }
     }
+  }
+
+  Future<bool?> _showDisableOptionsDialog(Storage storage) async {
+    return shadcn.showDialog<bool>(
+      context: context,
+      builder: (context) => shadcn.AlertDialog(
+        title: const Text('禁用存储源'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('确定要禁用「${storage.name}」吗？'),
+            const SizedBox(height: 12),
+            Text(
+              '禁用后，该存储源将不再被扫描。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          shadcn.OutlineButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('取消'),
+          ),
+          shadcn.OutlineButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('仅禁用'),
+          ),
+          shadcn.PrimaryButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('禁用并隐藏媒体'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showAddStorageDialog(BuildContext context) {
@@ -319,6 +368,22 @@ class _StorageCard extends StatelessWidget {
                     Row(
                       children: [
                         _buildTypeBadge(context, storageType),
+                        if (!storage.enabled && storage.hideWhenDisabled) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.errorContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '媒体已隐藏',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: theme.colorScheme.onErrorContainer,
+                              ),
+                            ),
+                          ),
+                        ],
                         if (storage.settings?['url'] != null) ...[
                           const SizedBox(width: 8),
                           Expanded(

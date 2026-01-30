@@ -68,6 +68,12 @@ class ApiConstants {
       '$apiPrefix/storages/$id/ai-tidy/preview';
   static String storageAiTidyApply(int id) =>
       '$apiPrefix/storages/$id/ai-tidy/apply';
+  static String storageBlacklist(int id) =>
+      '$apiPrefix/storages/$id/blacklist';
+  static String storageBlacklistAdd(int id) =>
+      '$apiPrefix/storages/$id/blacklist/add';
+  static String storageBlacklistRemove(int id) =>
+      '$apiPrefix/storages/$id/blacklist/remove';
 
   // 任务
   static const String tasksRunning = '$apiPrefix/tasks/running';

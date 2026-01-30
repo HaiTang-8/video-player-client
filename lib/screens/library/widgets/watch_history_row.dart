@@ -145,17 +145,10 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
         final maxItemCount = ((availableWidth + _itemSpacing) /
                 (_desktopMinItemWidth + _itemSpacing))
             .floor();
-        // 当卡片数量较少时保持最小宽度，并居中展示避免留出大空白
         final bool shouldShrink = groups.length > maxItemCount && maxItemCount > 0;
         final itemWidth = shouldShrink
             ? (availableWidth - (maxItemCount - 1) * _itemSpacing) / maxItemCount
             : _desktopMinItemWidth;
-        final contentWidth =
-            groups.length * itemWidth + (groups.length - 1) * _itemSpacing;
-        final extraPadding = (!shouldShrink && contentWidth < availableWidth)
-            ? (availableWidth - contentWidth) / 2
-            : 0.0;
-        // 图片高度 + 间距 + 文字区域（根据字号缩放）
         final imageHeight = itemWidth * 9 / 16;
         final textScaler = MediaQuery.textScalerOf(context);
         final textAreaHeight = textScaler.scale(40) + 2 + textScaler.scale(16);
@@ -167,8 +160,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             height: listHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding:
-                  EdgeInsets.symmetric(horizontal: _horizontalPadding + extraPadding),
+              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
               itemCount: groups.length,
               separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
               itemBuilder: (context, index) {

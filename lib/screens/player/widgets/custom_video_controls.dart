@@ -5,7 +5,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
-import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
+import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapIcons;
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
@@ -1005,8 +1005,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                     _buildSubtitleButton(
                         isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                      _buildIconButton(LucideIcons.listVideo, _showPlaylistMenu,
-                          isLast: !WindowControls.isDesktop),
+                      _buildIconButton(LucideIcons.list, _showPlaylistMenu,
+                          isLast: !WindowControls.isDesktop, size: 30),
                     if (WindowControls.isDesktop)
                       _buildIconButton(
                         widget.isFullscreen ? LucideIcons.minimize : LucideIcons.maximize,
@@ -1027,17 +1027,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        IconButton(
-          icon: Icon(
-            _volume == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
-            color: Colors.white,
-            size: 26,
-          ),
-          onPressed: () {
+        GestureDetector(
+          onTap: () {
             widget.player.setVolume(_volume == 0 ? 100 : 0);
           },
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 48),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Icon(
+              _volume == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
+              color: Colors.white,
+              size: 22,
+            ),
+          ),
         ),
         SizedBox(
           width: 80,
@@ -1069,7 +1070,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       icon: Icon(
         _isFillMode ? LucideIcons.minimize2 : LucideIcons.maximize2,
         color: Colors.white,
-        size: 26,
+        size: 22,
       ),
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
@@ -1140,7 +1141,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
-          child: const Icon(LucideIcons.audioLines, color: Colors.white, size: 26),
+          child: const SizedBox(
+            width: 30,
+            height: 30,
+            child: Center(child: Icon(LucideIcons.audioLines, color: Colors.white, size: 26)),
+          ),
         ),
       ),
     );
@@ -1202,7 +1207,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
-          child: const Icon(LucideIcons.captions, color: Colors.white, size: 26),
+          child: const SizedBox(
+            width: 30,
+            height: 30,
+            child: Center(child: Icon(LucideIcons.captions, color: Colors.white, size: 30)),
+          ),
         ),
       ),
     );
@@ -1214,7 +1223,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       children: [
         IconButton(
           icon: Icon(
-            LucideIcons.skipBack,
+            BootstrapIcons.skipStartFill,
             color: widget.hasPrevious ? Colors.white : Colors.white38,
             size: 26,
           ),
@@ -1225,7 +1234,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
-            _playing ? LucideIcons.circlePause : LucideIcons.circlePlay,
+            _playing ? BootstrapIcons.stopCircleFill : BootstrapIcons.playCircleFill,
             color: Colors.white,
             size: 32,
           ),
@@ -1236,7 +1245,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
-            LucideIcons.skipForward,
+            BootstrapIcons.skipEndFill,
             color: widget.hasNext ? Colors.white : Colors.white38,
             size: 26,
           ),
@@ -1253,22 +1262,28 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     VoidCallback? onPressed, {
     GlobalKey? key,
     bool isLast = false,
+    double size = 26,
   }) {
     final isDesktop = WindowControls.isDesktop;
     final minW = isDesktop ? 48.0 : 40.0;
+    final iconWidget = SizedBox(
+      width: size,
+      height: size,
+      child: Center(child: Icon(icon, color: Colors.white, size: size)),
+    );
     if (isLast) {
       return Padding(
         padding: EdgeInsets.only(left: (minW - 28) / 2),
         child: GestureDetector(
           key: key,
           onTap: onPressed,
-          child: Icon(icon, color: Colors.white, size: 26),
+          child: iconWidget,
         ),
       );
     }
     return IconButton(
       key: key,
-      icon: Icon(icon, color: Colors.white, size: 26),
+      icon: iconWidget,
       onPressed: onPressed,
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(minWidth: minW),

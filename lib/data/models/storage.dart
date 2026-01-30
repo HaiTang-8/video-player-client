@@ -6,6 +6,7 @@ class Storage {
   final String name;
   final String type;
   final bool enabled;
+  final bool hideWhenDisabled;
   final Map<String, String>? settings;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -15,6 +16,7 @@ class Storage {
     required this.name,
     required this.type,
     required this.enabled,
+    this.hideWhenDisabled = false,
     this.settings,
     this.createdAt,
     this.updatedAt,
@@ -41,6 +43,7 @@ class Storage {
       name: json['name'] as String? ?? '',
       type: json['type'] as String? ?? '',
       enabled: json['enabled'] as bool? ?? true,
+      hideWhenDisabled: json['hide_when_disabled'] as bool? ?? false,
       settings: parsedSettings,
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'] as String)
@@ -56,6 +59,7 @@ class Storage {
         'name': name,
         'type': type,
         'enabled': enabled,
+        'hide_when_disabled': hideWhenDisabled,
         'settings': settings,
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),

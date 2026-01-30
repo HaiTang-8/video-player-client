@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
-import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
@@ -13,6 +12,7 @@ import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import 'ai_tidy_preview_screen.dart';
+import 'blacklist_manager_dialog.dart';
 
 class StorageBrowseScreen extends ConsumerStatefulWidget {
   final int storageId;
@@ -21,7 +21,8 @@ class StorageBrowseScreen extends ConsumerStatefulWidget {
   const StorageBrowseScreen({super.key, required this.storageId, this.storage});
 
   @override
-  ConsumerState<StorageBrowseScreen> createState() => _StorageBrowseScreenState();
+  ConsumerState<StorageBrowseScreen> createState() =>
+      _StorageBrowseScreenState();
 }
 
 class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
@@ -30,6 +31,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       browseStorage(ref, widget.storageId, '/');
+      loadBlacklist(ref, widget.storageId);
     });
   }
 
@@ -37,9 +39,10 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   Widget build(BuildContext context) {
     final browseState = ref.watch(browseProvider(widget.storageId));
     final storageName = widget.storage?.name ?? '目录浏览';
-    final title = browseState.currentPath == '/'
-        ? storageName
-        : browseState.currentPath.split('/').last;
+    final title =
+        browseState.currentPath == '/'
+            ? storageName
+            : browseState.currentPath.split('/').last;
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
 
@@ -50,62 +53,84 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
         goBackDirectory(ref, widget.storageId);
       },
       child: Scaffold(
-        appBar: isDesktop
-            ? DesktopAppBar(
-                title: Text(title),
-                onBack: () {
-                  if (browseState.currentPath != '/') {
-                    goBackDirectory(ref, widget.storageId);
-                    return;
-                  }
-                  context.pop();
-                },
-                actions: [
-                  IconButton(
-                    tooltip: '刷新',
-                    icon: const Icon(CupertinoIcons.refresh),
-                    onPressed: () {
-                      browseStorage(ref, widget.storageId, browseState.currentPath);
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'AI 整理当前目录',
-                    icon: const Icon(CupertinoIcons.wand_stars),
-                    onPressed: () => _startAiTidy(browseState.currentPath),
-                  ),
-                ],
-              )
-            : MobileAppBar(
-                title: Text(title),
-                onBack: () {
-                  if (browseState.currentPath != '/') {
-                    goBackDirectory(ref, widget.storageId);
-                    return;
-                  }
-                  context.pop();
-                },
-                actions: [
-                  IconButton(
-                    tooltip: '刷新',
-                    icon: const Icon(CupertinoIcons.refresh, size: 20),
-                    onPressed: () {
-                      browseStorage(ref, widget.storageId, browseState.currentPath);
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'AI 整理当前目录',
-                    icon: const Icon(CupertinoIcons.wand_stars, size: 20),
-                    onPressed: () => _startAiTidy(browseState.currentPath),
-                  ),
-                ],
-              ),
+        appBar:
+            isDesktop
+                ? DesktopAppBar(
+                  title: Text(title),
+                  onBack: () {
+                    if (browseState.currentPath != '/') {
+                      goBackDirectory(ref, widget.storageId);
+                      return;
+                    }
+                    context.pop();
+                  },
+                  actions: [
+                    IconButton(
+                      tooltip: '刷新',
+                      icon: const Icon(CupertinoIcons.refresh),
+                      onPressed: () {
+                        browseStorage(
+                          ref,
+                          widget.storageId,
+                          browseState.currentPath,
+                        );
+                      },
+                    ),
+                    IconButton(
+                      tooltip: '黑名单管理',
+                      icon: const Icon(CupertinoIcons.nosign),
+                      onPressed: () => _showBlacklistManager(),
+                    ),
+                    IconButton(
+                      tooltip: 'AI 整理当前目录',
+                      icon: const Icon(CupertinoIcons.wand_stars),
+                      onPressed: () => _startAiTidy(browseState.currentPath),
+                    ),
+                  ],
+                )
+                : MobileAppBar(
+                  title: Text(title),
+                  onBack: () {
+                    if (browseState.currentPath != '/') {
+                      goBackDirectory(ref, widget.storageId);
+                      return;
+                    }
+                    context.pop();
+                  },
+                  actions: [
+                    IconButton(
+                      tooltip: '刷新',
+                      icon: const Icon(CupertinoIcons.refresh, size: 20),
+                      onPressed: () {
+                        browseStorage(
+                          ref,
+                          widget.storageId,
+                          browseState.currentPath,
+                        );
+                      },
+                    ),
+                    IconButton(
+                      tooltip: '黑名单管理',
+                      icon: const Icon(CupertinoIcons.nosign, size: 20),
+                      onPressed: () => _showBlacklistManager(),
+                    ),
+                    IconButton(
+                      tooltip: 'AI 整理当前目录',
+                      icon: const Icon(CupertinoIcons.wand_stars, size: 20),
+                      onPressed: () => _startAiTidy(browseState.currentPath),
+                    ),
+                  ],
+                ),
         body: Column(
           children: [
             _PathBar(
               path: browseState.currentPath,
               onCopy: () => _copyToClipboard(context, browseState.currentPath),
             ),
-            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
+            Divider(
+              height: 1,
+              color: theme.dividerColor.withValues(alpha: 0.3),
+            ),
             Expanded(child: _buildBody(context, browseState)),
           ],
         ),
@@ -137,94 +162,100 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     });
 
     if (items.isEmpty) {
-      return const EmptyWidget(
-        message: '该目录为空',
-        icon: CupertinoIcons.folder,
-      );
+      return const EmptyWidget(message: '该目录为空', icon: CupertinoIcons.folder);
     }
 
     return DesktopSmoothScroll(
       child: Stack(
         children: [
           RefreshIndicator(
-        onRefresh: () async {
-          await browseStorage(ref, widget.storageId, state.currentPath);
-        },
-        child: ListView.builder(
-          primary: true,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        itemCount: items.length + 1,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                children: [
-                  for (int i = 0; i < items.length; i++) ...[
-                    _FileTile(
-                      file: items[i],
-                      onTap: () async {
-                        if (items[i].isDir) {
-                          await enterDirectory(ref, widget.storageId, items[i].name);
-                        } else {
-                          await _showFileInfo(context, items[i]);
-                        }
-                      },
-                      onLongPress: () => _copyToClipboard(context, items[i].path),
+            onRefresh: () async {
+              await browseStorage(ref, widget.storageId, state.currentPath);
+            },
+            child: ListView.builder(
+              primary: true,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: items.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    if (i < items.length - 1)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 60),
-                        child: Divider(
-                          height: 1,
-                          thickness: 0.5,
-                          color: theme.dividerColor.withValues(alpha: 0.3),
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            );
-          }
-          return const SizedBox.shrink();
-        },
-      ),
-    ),
-        if (state.isLoading)
-          Positioned.fill(
-            child: Container(
-              color: isDark ? Colors.black54 : Colors.white54,
-              child: const Center(
-                child: CircularProgressIndicator(),
-              ),
+                    child: Column(
+                      children: [
+                        for (int i = 0; i < items.length; i++) ...[
+                          _FileTile(
+                            file: items[i],
+                            isBlacklisted: state.isBlacklisted(items[i].path),
+                            onTap: () async {
+                              if (items[i].isDir) {
+                                await enterDirectory(
+                                  ref,
+                                  widget.storageId,
+                                  items[i].name,
+                                );
+                              } else {
+                                await _showFileInfo(context, items[i]);
+                              }
+                            },
+                            onLongPress:
+                                () =>
+                                    _showContextMenu(context, items[i], state),
+                          ),
+                          if (i < items.length - 1)
+                            Padding(
+                              padding: const EdgeInsets.only(left: 60),
+                              child: Divider(
+                                height: 1,
+                                thickness: 0.5,
+                                color: theme.dividerColor.withValues(
+                                  alpha: 0.3,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
             ),
           ),
+          if (state.isLoading)
+            Positioned.fill(
+              child: Container(
+                color: isDark ? Colors.black54 : Colors.white54,
+                child: const Center(child: CircularProgressIndicator()),
+              ),
+            ),
         ],
       ),
     );
   }
 
   Future<void> _startAiTidy(String currentPath) async {
-    final selected = await showDialog<({int maxFiles, bool enableTmdb, String folderMode})>(
-      context: context,
-      builder: (context) => _AiTidyStartDialog(path: currentPath),
-    );
+    final selected =
+        await showDialog<({int maxFiles, bool enableTmdb, String folderMode})>(
+          context: context,
+          builder: (context) => _AiTidyStartDialog(path: currentPath),
+        );
     if (!mounted) return;
     if (selected == null) return;
 
     final applied = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AiTidyPreviewScreen(
-          storageId: widget.storageId,
-          rootPath: currentPath,
-          maxFiles: selected.maxFiles,
-          enableTmdb: selected.enableTmdb,
-          folderMode: selected.folderMode,
-        ),
+        builder:
+            (_) => AiTidyPreviewScreen(
+              storageId: widget.storageId,
+              rootPath: currentPath,
+              maxFiles: selected.maxFiles,
+              enableTmdb: selected.enableTmdb,
+              folderMode: selected.folderMode,
+            ),
       ),
     );
 
@@ -244,63 +275,71 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+      builder:
+          (context) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(CupertinoIcons.doc, color: Colors.blue),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      file.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          CupertinoIcons.doc,
+                          color: Colors.blue,
+                        ),
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          file.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  _buildInfoRow(theme, '路径', file.path),
+                  if (file.formattedSize.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(theme, '大小', file.formattedSize),
+                  ],
+                  if (file.modTime != null) ...[
+                    const SizedBox(height: 12),
+                    _buildInfoRow(
+                      theme,
+                      '修改时间',
+                      file.modTime!.toLocal().toString(),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _copyToClipboard(context, file.path);
+                      },
+                      icon: const Icon(CupertinoIcons.doc_on_clipboard),
+                      label: const Text('复制路径'),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              _buildInfoRow(theme, '路径', file.path),
-              if (file.formattedSize.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _buildInfoRow(theme, '大小', file.formattedSize),
-              ],
-              if (file.modTime != null) ...[
-                const SizedBox(height: 12),
-                _buildInfoRow(theme, '修改时间', file.modTime!.toLocal().toString()),
-              ],
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    _copyToClipboard(context, file.path);
-                  },
-                  icon: const Icon(CupertinoIcons.doc_on_clipboard),
-                  label: const Text('复制路径'),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -317,12 +356,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
             ),
           ),
         ),
-        Expanded(
-          child: Text(
-            value,
-            style: theme.textTheme.bodyMedium,
-          ),
-        ),
+        Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
       ],
     );
   }
@@ -331,21 +365,138 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     Clipboard.setData(ClipboardData(text: text));
     DialogUtils.showToast(context: context, message: '已复制');
   }
+
+  void _showBlacklistManager() {
+    showDialog(
+      context: context,
+      builder: (context) => BlacklistManagerDialog(storageId: widget.storageId),
+    );
+  }
+
+  void _showContextMenu(
+    BuildContext context,
+    FileInfo file,
+    BrowseState state,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final isBlacklisted = state.isBlacklisted(file.path);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    file.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(CupertinoIcons.doc_on_clipboard),
+                  title: const Text('复制路径'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _copyToClipboard(context, file.path);
+                  },
+                ),
+                if (file.isDir)
+                  ListTile(
+                    leading: Icon(
+                      isBlacklisted
+                          ? CupertinoIcons.checkmark_circle
+                          : CupertinoIcons.nosign,
+                      color: isBlacklisted ? Colors.green : Colors.orange,
+                    ),
+                    title: Text(isBlacklisted ? '从黑名单移除' : '添加到黑名单'),
+                    subtitle: Text(
+                      isBlacklisted ? '恢复扫描此目录' : '扫描时跳过此目录',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      final success =
+                          isBlacklisted
+                              ? await removeFromBlacklist(
+                                ref,
+                                widget.storageId,
+                                file.path,
+                              )
+                              : await addToBlacklist(
+                                ref,
+                                widget.storageId,
+                                file.path,
+                              );
+                      if (!mounted || !success) return;
+                      DialogUtils.showToast(
+                        context: this.context,
+                        message: isBlacklisted ? '已从黑名单移除' : '已添加到黑名单',
+                      );
+                    },
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+    );
+  }
 }
 
 class _FileTile extends StatelessWidget {
   final FileInfo file;
+  final bool isBlacklisted;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   const _FileTile({
     required this.file,
+    required this.isBlacklisted,
     required this.onTap,
     required this.onLongPress,
   });
 
   static const _videoExtensions = {
-    'mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'ts', 'rmvb', 'rm', '3gp', 'mpg', 'mpeg', 'vob'
+    'mp4',
+    'mkv',
+    'avi',
+    'mov',
+    'wmv',
+    'flv',
+    'webm',
+    'm4v',
+    'ts',
+    'rmvb',
+    'rm',
+    '3gp',
+    'mpg',
+    'mpeg',
+    'vob',
   };
 
   bool get _isVideo {
@@ -360,7 +511,10 @@ class _FileTile extends StatelessWidget {
     final Color iconColor;
     final IconData iconData;
 
-    if (file.isDir) {
+    if (isBlacklisted) {
+      iconColor = Colors.grey;
+      iconData = CupertinoIcons.nosign;
+    } else if (file.isDir) {
       iconColor = Colors.blue;
       iconData = CupertinoIcons.folder;
     } else if (_isVideo) {
@@ -388,24 +542,48 @@ class _FileTile extends StatelessWidget {
                   color: iconColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(
-                  iconData,
-                  size: 20,
-                  color: iconColor,
-                ),
+                child: Icon(iconData, size: 20, color: iconColor),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      file.name,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            file.name,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              fontWeight: FontWeight.w500,
+                              color: isBlacklisted ? Colors.grey : null,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isBlacklisted) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              '已禁用',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.orange,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     if (!file.isDir && file.formattedSize.isNotEmpty) ...[
                       const SizedBox(height: 2),
@@ -511,10 +689,7 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              '将对以下目录（含子目录）生成整理建议：',
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text('将对以下目录（含子目录）生成整理建议：', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
@@ -530,10 +705,7 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              '电影整理模式：',
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text('电影整理模式：', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               value: _folderMode,
@@ -542,23 +714,18 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: const [
-                DropdownMenuItem(
-                  value: 'subfolder',
-                  child: Text('创建子文件夹'),
-                ),
-                DropdownMenuItem(
-                  value: 'rename_file',
-                  child: Text('仅重命名文件'),
-                ),
-                DropdownMenuItem(
-                  value: 'rename_dir',
-                  child: Text('重命名父文件夹'),
-                ),
+                DropdownMenuItem(value: 'subfolder', child: Text('创建子文件夹')),
+                DropdownMenuItem(value: 'rename_file', child: Text('仅重命名文件')),
+                DropdownMenuItem(value: 'rename_dir', child: Text('重命名父文件夹')),
               ],
-              onChanged: (value) => setState(() => _folderMode = value ?? 'subfolder'),
+              onChanged:
+                  (value) => setState(() => _folderMode = value ?? 'subfolder'),
             ),
             const SizedBox(height: 4),
             Text(
@@ -568,10 +735,7 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
               ),
             ),
             const SizedBox(height: 16),
-            Text(
-              '最大分析文件数：',
-              style: theme.textTheme.bodyMedium,
-            ),
+            Text('最大分析文件数：', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<int>(
               value: _maxFiles,
@@ -579,7 +743,10 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
               ),
               items: const [
                 DropdownMenuItem(value: 200, child: Text('200')),
@@ -618,10 +785,12 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
           child: const Text('取消'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(
-            context,
-            (maxFiles: _maxFiles, enableTmdb: _enableTmdb, folderMode: _folderMode),
-          ),
+          onPressed:
+              () => Navigator.pop(context, (
+                maxFiles: _maxFiles,
+                enableTmdb: _enableTmdb,
+                folderMode: _folderMode,
+              )),
           child: const Text('生成预览'),
         ),
       ],

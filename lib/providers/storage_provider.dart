@@ -10,7 +10,10 @@ final storageServiceProvider = Provider<StorageService?>((ref) {
   return StorageService(client);
 });
 
-final storagesProvider = NotifierProvider<StoragesNotifier, AsyncValue<List<Storage>>>(StoragesNotifier.new);
+final storagesProvider =
+    NotifierProvider<StoragesNotifier, AsyncValue<List<Storage>>>(
+      StoragesNotifier.new,
+    );
 
 class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
   @override
@@ -41,7 +44,11 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     final service = ref.read(storageServiceProvider);
     if (service == null) return false;
 
-    final response = await service.addStorage(name: name, type: type, settings: settings);
+    final response = await service.addStorage(
+      name: name,
+      type: type,
+      settings: settings,
+    );
 
     if (response.isSuccess) {
       await loadStorages();
@@ -72,7 +79,12 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     final service = ref.read(storageServiceProvider);
     if (service == null) return false;
 
-    final response = await service.updateStorage(id: id, name: name, type: type, settings: settings);
+    final response = await service.updateStorage(
+      id: id,
+      name: name,
+      type: type,
+      settings: settings,
+    );
 
     if (response.isSuccess) {
       await loadStorages();
@@ -94,11 +106,11 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     return false;
   }
 
-  Future<bool> disableStorage(int id) async {
+  Future<bool> disableStorage(int id, {bool hideMedia = false}) async {
     final service = ref.read(storageServiceProvider);
     if (service == null) return false;
 
-    final response = await service.disableStorage(id);
+    final response = await service.disableStorage(id, hideMedia: hideMedia);
 
     if (response.isSuccess) {
       await loadStorages();
@@ -120,7 +132,10 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     final tempClient = ApiClient(baseUrl: serverUrl);
     final tempService = StorageService(tempClient);
 
-    final response = await tempService.testConnection(type: type, settings: settings);
+    final response = await tempService.testConnection(
+      type: type,
+      settings: settings,
+    );
 
     if (response.isSuccess) {
       return (true, null);
@@ -165,15 +180,9 @@ class ScanState {
   final Map<int, ScanProgress> progresses;
   final Set<int> scanning;
 
-  ScanState({
-    this.progresses = const {},
-    this.scanning = const {},
-  });
+  ScanState({this.progresses = const {}, this.scanning = const {}});
 
-  ScanState copyWith({
-    Map<int, ScanProgress>? progresses,
-    Set<int>? scanning,
-  }) {
+  ScanState copyWith({Map<int, ScanProgress>? progresses, Set<int>? scanning}) {
     return ScanState(
       progresses: progresses ?? this.progresses,
       scanning: scanning ?? this.scanning,
@@ -181,9 +190,14 @@ class ScanState {
   }
 }
 
-final scanStateProvider = NotifierProvider<ScanStateNotifier, ScanState>(ScanStateNotifier.new);
+final scanStateProvider = NotifierProvider<ScanStateNotifier, ScanState>(
+  ScanStateNotifier.new,
+);
 
-final globalScanStateProvider = NotifierProvider<GlobalScanNotifier, GlobalScanState>(GlobalScanNotifier.new);
+final globalScanStateProvider =
+    NotifierProvider<GlobalScanNotifier, GlobalScanState>(
+      GlobalScanNotifier.new,
+    );
 
 class GlobalScanNotifier extends Notifier<GlobalScanState> {
   final Map<int, ScanProgress> _progresses = {};
@@ -196,17 +210,24 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
     final service = ref.read(storageServiceProvider);
     if (service == null) return;
     final storages = ref.read(storagesProvider).value ?? [];
-    if (storages.isEmpty) return;
+    final enabledStorages = storages.where((s) => s.enabled).toList();
+    if (enabledStorages.isEmpty) return;
 
     _cancelled = false;
-    state = state.copyWith(isScanning: true, foundFiles: 0, pendingFiles: 0, updatedFiles: 0, dismissed: false);
+    state = state.copyWith(
+      isScanning: true,
+      foundFiles: 0,
+      pendingFiles: 0,
+      updatedFiles: 0,
+      dismissed: false,
+    );
     _progresses.clear();
 
-    for (final storage in storages) {
+    for (final storage in enabledStorages) {
       await service.startScan(storage.id, forceScrape: forceScrape);
     }
 
-    _pollProgress(storages.map((s) => s.id).toList());
+    _pollProgress(enabledStorages.map((s) => s.id).toList());
   }
 
   void _pollProgress(List<int> storageIds) async {
@@ -276,7 +297,10 @@ class ScanStateNotifier extends Notifier<ScanState> {
     final service = ref.read(storageServiceProvider);
     if (service == null) return false;
 
-    final response = await service.startScan(storageId, forceScrape: forceScrape);
+    final response = await service.startScan(
+      storageId,
+      forceScrape: forceScrape,
+    );
 
     if (response.isSuccess && response.data != null) {
       state = state.copyWith(
@@ -319,30 +343,39 @@ class BrowseState {
   final String currentPath;
   final bool isLoading;
   final String? error;
+  final Set<String> blacklist;
 
   BrowseState({
     this.files = const [],
     this.currentPath = '/',
     this.isLoading = false,
     this.error,
+    this.blacklist = const {},
   });
+
+  bool isBlacklisted(String path) {
+    return blacklist.any((b) => path == b || path.startsWith('$b/'));
+  }
 
   BrowseState copyWith({
     List<FileInfo>? files,
     String? currentPath,
     bool? isLoading,
     String? error,
+    Set<String>? blacklist,
   }) {
     return BrowseState(
       files: files ?? this.files,
       currentPath: currentPath ?? this.currentPath,
       isLoading: isLoading ?? this.isLoading,
       error: error,
+      blacklist: blacklist ?? this.blacklist,
     );
   }
 }
 
 final _browseCache = <int, BrowseState>{};
+final _browseRequestSeq = <int, int>{};
 
 final browseProvider = Provider.family<BrowseState, int>((ref, storageId) {
   return _browseCache[storageId] ?? BrowseState();
@@ -356,21 +389,46 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
   final service = ref.read(storageServiceProvider);
   if (service == null) return;
 
+  final requestSeq = (_browseRequestSeq[storageId] ?? 0) + 1;
+  _browseRequestSeq[storageId] = requestSeq;
+
   final currentState = _browseCache[storageId] ?? BrowseState();
-  _updateBrowseState(storageId, currentState.copyWith(isLoading: true, error: null, currentPath: path));
+  _updateBrowseState(
+    storageId,
+    currentState.copyWith(isLoading: true, error: null, currentPath: path),
+  );
   ref.invalidate(browseProvider(storageId));
 
   final response = await service.browseStorage(storageId, path: path);
 
+  // 如果在等待期间用户发起了新的浏览请求，忽略旧响应，避免覆盖最新状态（尤其是 blacklist）。
+  if (_browseRequestSeq[storageId] != requestSeq) return;
+
+  final latestState = _browseCache[storageId] ?? currentState;
   if (response.isSuccess && response.data != null) {
-    _updateBrowseState(storageId, BrowseState(files: response.data!, currentPath: path, isLoading: false));
+    _updateBrowseState(
+      storageId,
+      latestState.copyWith(
+        files: response.data!,
+        currentPath: path,
+        isLoading: false,
+        error: null,
+      ),
+    );
   } else {
-    _updateBrowseState(storageId, currentState.copyWith(isLoading: false, error: response.error));
+    _updateBrowseState(
+      storageId,
+      latestState.copyWith(isLoading: false, error: response.error),
+    );
   }
   ref.invalidate(browseProvider(storageId));
 }
 
-Future<void> enterDirectory(WidgetRef ref, int storageId, String dirName) async {
+Future<void> enterDirectory(
+  WidgetRef ref,
+  int storageId,
+  String dirName,
+) async {
   final currentPath = (_browseCache[storageId] ?? BrowseState()).currentPath;
   final newPath = currentPath == '/' ? '/$dirName' : '$currentPath/$dirName';
   await browseStorage(ref, storageId, newPath);
@@ -384,4 +442,61 @@ Future<void> goBackDirectory(WidgetRef ref, int storageId) async {
   parts.removeLast();
   final newPath = parts.isEmpty ? '/' : parts.join('/');
   await browseStorage(ref, storageId, newPath.isEmpty ? '/' : newPath);
+}
+
+Future<void> loadBlacklist(WidgetRef ref, int storageId) async {
+  final service = ref.read(storageServiceProvider);
+  if (service == null) return;
+
+  final response = await service.getBlacklist(storageId);
+  if (response.isSuccess && response.data != null) {
+    final currentState = _browseCache[storageId] ?? BrowseState();
+    final blacklist =
+        response.data!
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty && e != '/')
+            .toSet();
+    _updateBrowseState(storageId, currentState.copyWith(blacklist: blacklist));
+    ref.invalidate(browseProvider(storageId));
+  }
+}
+
+Future<bool> addToBlacklist(WidgetRef ref, int storageId, String path) async {
+  final service = ref.read(storageServiceProvider);
+  if (service == null) return false;
+
+  final response = await service.addToBlacklist(storageId, path);
+  if (response.isSuccess) {
+    await loadBlacklist(ref, storageId);
+    return true;
+  }
+  return false;
+}
+
+Future<bool> removeFromBlacklist(
+  WidgetRef ref,
+  int storageId,
+  String path,
+) async {
+  final service = ref.read(storageServiceProvider);
+  if (service == null) return false;
+
+  final response = await service.removeFromBlacklist(storageId, path);
+  if (response.isSuccess) {
+    await loadBlacklist(ref, storageId);
+    return true;
+  }
+  return false;
+}
+
+Future<bool> clearBlacklist(WidgetRef ref, int storageId) async {
+  final service = ref.read(storageServiceProvider);
+  if (service == null) return false;
+
+  final response = await service.setBlacklist(storageId, []);
+  if (response.isSuccess) {
+    await loadBlacklist(ref, storageId);
+    return true;
+  }
+  return false;
 }
