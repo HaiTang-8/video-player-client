@@ -448,7 +448,8 @@ Future<void> loadBlacklist(WidgetRef ref, int storageId) async {
   final service = ref.read(storageServiceProvider);
   if (service == null) return;
 
-  final response = await service.getBlacklist(storageId);
+  // 获取全部黑名单用于浏览时判断
+  final response = await service.getBlacklist(storageId, pageSize: 10000);
   if (response.isSuccess && response.data != null) {
     final currentState = _browseCache[storageId] ?? BrowseState();
     final blacklist =

@@ -183,10 +183,23 @@ class StorageService {
     );
   }
 
-  /// 获取黑名单
-  Future<ApiResponse<List<String>>> getBlacklist(int storageId) async {
+  /// 获取黑名单（分页）
+  Future<ApiResponse<List<String>>> getBlacklist(
+    int storageId, {
+    int page = 1,
+    int pageSize = 10,
+    String? keyword,
+  }) async {
+    final queryParams = <String, dynamic>{
+      'page': page,
+      'page_size': pageSize,
+    };
+    if (keyword != null && keyword.isNotEmpty) {
+      queryParams['keyword'] = keyword;
+    }
     return _client.get<List<String>>(
       ApiConstants.storageBlacklist(storageId),
+      queryParameters: queryParams,
       fromJson: (json) {
         final data = json as Map<String, dynamic>;
         final blacklist = data['blacklist'] as List? ?? [];

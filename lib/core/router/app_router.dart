@@ -117,7 +117,12 @@ final routerProvider = Provider<GoRouter>((ref) {
                 path: ':id',
                 builder: (context, state) {
                   final id = int.parse(state.pathParameters['id']!);
-                  final storage = state.extra as Storage?;
+                  final extra = state.extra;
+                  final storage = extra is Storage
+                      ? extra
+                      : (extra is Map<String, dynamic>
+                          ? Storage.fromJson(extra)
+                          : null);
                   return StorageBrowseScreen(storageId: id, storage: storage);
                 },
               ),
