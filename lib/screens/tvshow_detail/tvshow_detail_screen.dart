@@ -870,7 +870,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   ),
                 ),
                 if (WindowControls.isDesktop)
-                  _EpisodesScrollButtons(controller: _episodesScrollController),
+                  _EpisodesScrollButtons(
+                    key: ValueKey(_selectedSeasonId),
+                    controller: _episodesScrollController,
+                  ),
               ],
             ),
           ),
@@ -2128,7 +2131,7 @@ class _EpisodesScrollButtons extends StatefulWidget {
   static const double _itemSpacing = 16.0;
   static const double _horizontalPadding = 12.0;
 
-  const _EpisodesScrollButtons({required this.controller});
+  const _EpisodesScrollButtons({super.key, required this.controller});
 
   @override
   State<_EpisodesScrollButtons> createState() => _EpisodesScrollButtonsState();
@@ -2142,7 +2145,11 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
   void initState() {
     super.initState();
     widget.controller.addListener(_updateScrollState);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollState());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _updateScrollState();
+      // 延迟再次更新，确保剧集列表完全渲染后获取正确的 maxScrollExtent
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateScrollState());
+    });
   }
 
   @override
