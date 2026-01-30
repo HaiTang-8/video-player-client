@@ -35,6 +35,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   final _crewScrollController = ScrollController();
   final _episodesScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
+  bool _hasAutoScrolled = false;
+  int? _lastAutoScrolledSeasonId;
 
   @override
   void initState() {
@@ -50,10 +52,84 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
-      setState(() => _watchHistory = resp.data);
+      setState(() {
+        _watchHistory = resp.data;
+        _hasAutoScrolled = false;
+      });
     } else {
-      setState(() => _watchHistory = null);
+      setState(() {
+        _watchHistory = null;
+        _hasAutoScrolled = false;
+      });
     }
+  }
+
+  double _calculateScrollPosition({
+    required int targetIndex,
+    required int totalEpisodes,
+  }) {
+    if (!_episodesScrollController.hasClients) {
+      return 0.0;
+    }
+
+    final position = _episodesScrollController.position;
+    final viewportWidth = position.viewportDimension;
+
+    const minItemWidth = 160.0;
+    const itemSpacing = 16.0;
+    const horizontalPadding = 12.0;
+
+    final availableWidth = viewportWidth - horizontalPadding * 2;
+    final itemCount = ((availableWidth + itemSpacing) / (minItemWidth + itemSpacing)).floor();
+    final itemWidth = itemCount > 0
+        ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
+        : minItemWidth;
+
+    final targetOffset = targetIndex * (itemWidth + itemSpacing);
+
+    return targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+  }
+
+  Future<void> _autoScrollToWatchedEpisode({
+    required List<Episode> episodes,
+    required int seasonId,
+  }) async {
+    if (_hasAutoScrolled && _lastAutoScrolledSeasonId == seasonId) {
+      return;
+    }
+
+    final history = _watchHistory;
+    if (history == null || history.episodeId == null) {
+      return;
+    }
+
+    final targetIndex = episodes.indexWhere((ep) => ep.id == history.episodeId);
+    if (targetIndex == -1) {
+      return;
+    }
+
+    if (!_episodesScrollController.hasClients) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _autoScrollToWatchedEpisode(episodes: episodes, seasonId: seasonId);
+      });
+      return;
+    }
+
+    final scrollPosition = _calculateScrollPosition(
+      targetIndex: targetIndex,
+      totalEpisodes: episodes.length,
+    );
+
+    await _episodesScrollController.animateTo(
+      scrollPosition,
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
+
+    setState(() {
+      _hasAutoScrolled = true;
+      _lastAutoScrolledSeasonId = seasonId;
+    });
   }
 
   @override
@@ -189,6 +265,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     serverBaseUrl: serverBaseUrl,
                     fallbackImageUrl: episodeFallbackImage,
                     scrollController: _episodesScrollController,
+                    onEpisodesLoaded: (episodes) {
+                      _autoScrollToWatchedEpisode(
+                        episodes: episodes,
+                        seasonId: selectedSeason.id,
+                      );
+                    },
                   ),
                 )
               else if (_selectedSeasonId != null)
@@ -199,6 +281,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     tvShowName: tvShow.name,
                     fallbackImageUrl: episodeFallbackImage,
                     scrollController: _episodesScrollController,
+                    onEpisodesLoaded: (episodes) {
+                      _autoScrollToWatchedEpisode(
+                        episodes: episodes,
+                        seasonId: _selectedSeasonId!,
+                      );
+                    },
                   ),
                 ),
 
@@ -1397,6 +1485,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
   final String? serverBaseUrl;
   final String? fallbackImageUrl;
   final ScrollController scrollController;
+  final void Function(List<Episode> episodes)? onEpisodesLoaded;
 
   static const double _minItemWidth = 160.0;
   static const double _itemSpacing = 16.0;
@@ -1410,6 +1499,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
     required this.serverBaseUrl,
     this.fallbackImageUrl,
     required this.scrollController,
+    this.onEpisodesLoaded,
   });
 
   @override
@@ -1450,6 +1540,12 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
 
   @override
   Widget build(BuildContext context) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.onEpisodesLoaded != null) {
+        widget.onEpisodesLoaded!(widget.episodes);
+      }
+    });
+
     if (!WindowControls.isDesktop) {
       return _buildList(_EpisodesCarouselDirect._minItemWidth);
     }
@@ -1521,6 +1617,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
   final String? tvShowName;
   final String? fallbackImageUrl;
   final ScrollController scrollController;
+  final void Function(List<Episode> episodes)? onEpisodesLoaded;
 
   static const double _minItemWidth = 160.0;
   static const double _itemSpacing = 16.0;
@@ -1532,6 +1629,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
     this.tvShowName,
     this.fallbackImageUrl,
     required this.scrollController,
+    this.onEpisodesLoaded,
   });
 
   @override
@@ -1600,6 +1698,12 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             ),
           );
         }
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (widget.onEpisodesLoaded != null) {
+            widget.onEpisodesLoaded!(episodes);
+          }
+        });
 
         if (!WindowControls.isDesktop) {
           return _buildList(
