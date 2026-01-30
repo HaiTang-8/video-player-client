@@ -17,6 +17,8 @@ class ApiConstants {
       '$apiPrefix/history/$mediaType/$mediaId';
   static String historyEpisodeProgress(int tvShowId, int episodeId) =>
       '$apiPrefix/history/episode/$tvShowId/$episodeId';
+  static String historySeasonProgress(int tvShowId, int seasonId) =>
+      '$apiPrefix/history/season/$tvShowId/$seasonId';
   static String historyDelete(int id) => '$apiPrefix/history/$id';
   static const String historyBatchDelete = '$apiPrefix/history/batch-delete';
   static const String historyDeleteAll = '$apiPrefix/history';

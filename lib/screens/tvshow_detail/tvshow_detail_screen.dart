@@ -39,13 +39,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadWatchHistory();
   }
 
-  Future<void> _loadWatchHistory() async {
+  Future<void> _loadSeasonWatchHistory(int seasonId) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
-    final resp = await service.getWatchProgress('tv', widget.tvShowId);
+    final resp = await service.getSeasonProgress(
+      tvShowId: widget.tvShowId,
+      seasonId: seasonId,
+    );
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
       setState(() => _watchHistory = resp.data);
@@ -131,6 +133,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               tvShow.seasons!.isNotEmpty) {
             _selectedSeasonId = tvShow.seasons!.first.id;
             _selectedSeasonIndex = 0;
+            _loadSeasonWatchHistory(_selectedSeasonId!);
           }
 
           final selectedSeason =
@@ -469,7 +472,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       final pos = history.position;
       final m = (pos ~/ 60).toString().padLeft(2, '0');
       final s = (pos % 60).toString().padLeft(2, '0');
-      buttonText = '第${ep.seasonNumber}季 第${ep.episodeNumber}集 $m:$s';
+      buttonText = '第${ep.episodeNumber}集 $m:$s';
     }
     return SizedBox(
       width: double.infinity,
@@ -664,7 +667,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       final pos = history.position;
       final m = (pos ~/ 60).toString().padLeft(2, '0');
       final s = (pos % 60).toString().padLeft(2, '0');
-      buttonText = '第${ep.seasonNumber}季 第${ep.episodeNumber}集 $m:$s';
+      buttonText = '第${ep.episodeNumber}集 $m:$s';
     }
     return Material(
       color: Colors.black,
@@ -706,7 +709,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         extra: {'position': history.position},
       );
       if (!mounted) return;
-      await _loadWatchHistory();
+      if (_selectedSeasonId != null) {
+        await _loadSeasonWatchHistory(_selectedSeasonId!);
+      }
       ref.read(watchHistoryProvider.notifier).refresh();
     }
     // TODO: 无历史时播放第一集
@@ -836,6 +841,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               _selectedSeasonIndex = index;
                               _selectedSeasonId = season.id;
                             });
+                            _loadSeasonWatchHistory(season.id);
                           },
                           child: IntrinsicWidth(
                             child: Column(

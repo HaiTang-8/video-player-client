@@ -441,6 +441,18 @@ class MediaService {
     );
   }
 
+  /// 获取指定季的最新观看进度
+  Future<ApiResponse<WatchHistoryItem>> getSeasonProgress({
+    required int tvShowId,
+    required int seasonId,
+  }) async {
+    return _client.get<WatchHistoryItem>(
+      ApiConstants.historySeasonProgress(tvShowId, seasonId),
+      fromJson: (json) =>
+          WatchHistoryItem.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   // ==================== 字幕相关 ====================
 
   /// 获取外挂字幕列表
