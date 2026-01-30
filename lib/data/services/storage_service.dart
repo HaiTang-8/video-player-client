@@ -189,7 +189,12 @@ class StorageService {
       ApiConstants.storageBlacklist(storageId),
       fromJson: (json) {
         final data = json as Map<String, dynamic>;
-        return List<String>.from(data['blacklist'] ?? []);
+        final blacklist = data['blacklist'] as List? ?? [];
+        return blacklist.map((e) {
+          if (e is String) return e;
+          if (e is Map<String, dynamic>) return e['path'] as String? ?? '';
+          return e.toString();
+        }).where((e) => e.isNotEmpty).toList();
       },
     );
   }
