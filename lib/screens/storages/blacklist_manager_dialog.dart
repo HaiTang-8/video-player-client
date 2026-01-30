@@ -29,6 +29,14 @@ class _BlacklistManagerDialogState
     final theme = shadcn.Theme.of(context);
     final browseState = ref.watch(browseProvider(widget.storageId));
     final blacklist = browseState.blacklist.toList()..sort();
+    // shadcn_flutter 的 destructive 默认背景在某些状态（hover/focus 等）会使用较低 alpha，
+    // 在弹窗里看起来像“灰白遮罩”。统一状态色，避免视觉发灰。
+    final destructiveStyle = shadcn.ButtonVariance.destructive
+        .withBackgroundColor(
+          color: theme.colorScheme.destructive,
+          hoverColor: theme.colorScheme.destructive,
+          focusColor: theme.colorScheme.destructive,
+        );
 
     return shadcn.AlertDialog(
       title: Row(
@@ -172,6 +180,8 @@ class _BlacklistManagerDialogState
       actions: [
         if (blacklist.isNotEmpty)
           shadcn.Button.destructive(
+            style: destructiveStyle,
+            disableFocusOutline: true,
             onPressed: _clearAll,
             child: const Text('清空全部'),
           ),
