@@ -291,6 +291,14 @@ class MediaService {
     );
   }
 
+  /// 同步剧集季度信息（从 TMDB 拉取完整季/集元数据）
+  Future<ApiResponse<void>> syncTvShowSeasons(int id, {int? tmdbId}) async {
+    return _client.post(
+      ApiConstants.tvShowBindTmdb(id),
+      data: tmdbId != null ? {'tmdb_id': tmdbId} : const {},
+    );
+  }
+
   /// 删除剧集
   Future<ApiResponse<void>> deleteTvShow(int id) async {
     return _client.delete(ApiConstants.tvShowDetail(id));

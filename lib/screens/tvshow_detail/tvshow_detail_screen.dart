@@ -571,6 +571,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               onTap: () => _scrapeTvShow(context, widget.tvShowId),
             ),
             PullDownMenuItem(
+              title: '同步季度',
+              icon: CupertinoIcons.arrow_2_circlepath,
+              onTap: () => _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId),
+            ),
+            PullDownMenuItem(
               title: '刷新',
               icon: CupertinoIcons.refresh,
               onTap: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
@@ -629,6 +634,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             title: '重新刮削',
             icon: CupertinoIcons.wand_stars,
             onTap: () => _scrapeTvShow(context, widget.tvShowId),
+          ),
+          PullDownMenuItem(
+            title: '同步季度',
+            icon: CupertinoIcons.arrow_2_circlepath,
+            onTap: () => _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId),
           ),
           PullDownMenuItem(
             title: '刷新',
@@ -1238,6 +1248,47 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     DialogUtils.showToast(
       context: context,
       message: resp.error ?? '刮削失败',
+      isError: true,
+    );
+  }
+
+  Future<void> _syncTvShowSeasons(BuildContext context, int id, String? tmdbId) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) {
+      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      return;
+    }
+
+    final confirmed = await DialogUtils.showConfirmDialog(
+      context: context,
+      title: '同步季度',
+      content: '将从 TMDB 重新拉取完整的季度和剧集元数据。是否继续？',
+      confirmText: '开始',
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    DialogUtils.showLoadingDialog(context: context, message: '正在同步...');
+
+    final resp = await service.syncTvShowSeasons(
+      id,
+      tmdbId: tmdbId != null ? int.tryParse(tmdbId) : null,
+    );
+
+    if (context.mounted) {
+      Navigator.pop(context);
+    }
+    if (!context.mounted) return;
+
+    if (resp.isSuccess) {
+      ref.invalidate(tvShowDetailProvider(id));
+      DialogUtils.showToast(context: context, message: '同步完成');
+      return;
+    }
+
+    DialogUtils.showToast(
+      context: context,
+      message: resp.error ?? '同步失败',
       isError: true,
     );
   }
