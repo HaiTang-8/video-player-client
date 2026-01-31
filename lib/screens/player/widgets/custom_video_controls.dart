@@ -1105,23 +1105,30 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   void _showSpeedMenu(BuildContext context, List<double> speeds) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: speeds.map((s) {
+      builder: (dropdownContext) {
+        final children = <shadcn.MenuItem>[];
+        for (var i = 0; i < speeds.length; i++) {
+          final s = speeds[i];
           final selected = (_playbackSpeed - s).abs() < 0.01;
-          return shadcn.MenuButton(
-            leading: selected
-                ? const Icon(Icons.check, size: 16, color: Colors.white)
-                : const SizedBox(width: 16),
-            child: Text('${s}x'),
-            onPressed: (ctx) {
-              Navigator.of(ctx).pop();
-              widget.player.setRate(s);
-              widget.onSpeedChanged?.call(s);
-              _startHideTimer();
-            },
+          children.add(
+            shadcn.MenuButton(
+              trailing: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.black)
+                  : null,
+              child: Text('${s}x'),
+              onPressed: (_) {
+                widget.player.setRate(s);
+                widget.onSpeedChanged?.call(s);
+                _startHideTimer();
+              },
+            ),
           );
-        }).toList(),
-      ),
+          if (i < speeds.length - 1) {
+            children.add(const shadcn.MenuDivider());
+          }
+        }
+        return shadcn.DropdownMenu(children: children);
+      },
     );
   }
 
@@ -1148,29 +1155,37 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final tracks = _audioTracks.where((t) => t.id != 'no').toList();
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          if (tracks.isEmpty)
-            shadcn.MenuButton(
-              child: const Text('无可用音轨'),
-              onPressed: null,
-            ),
-          ...tracks.map((t) {
-            final selected = _currentAudioTrack?.id == t.id;
-            return shadcn.MenuButton(
-              leading: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : const SizedBox(width: 16),
-              child: Text(t.title ?? t.language ?? t.id),
-              onPressed: (ctx) {
-                Navigator.of(ctx).pop();
-                widget.player.setAudioTrack(t);
-                _startHideTimer();
-              },
-            );
-          }),
-        ],
-      ),
+      builder: (dropdownContext) {
+        if (tracks.isEmpty) {
+          return shadcn.DropdownMenu(
+            children: [
+              shadcn.MenuButton(
+                child: const Text('无可用音轨'),
+                onPressed: null,
+              ),
+            ],
+          );
+        }
+        final children = <shadcn.MenuItem>[];
+        for (var i = 0; i < tracks.length; i++) {
+          final t = tracks[i];
+          final selected = _currentAudioTrack?.id == t.id;
+          children.add(shadcn.MenuButton(
+            trailing: selected
+                ? const Icon(Icons.check, size: 16, color: Colors.black)
+                : null,
+            child: Text(t.title ?? t.language ?? t.id),
+            onPressed: (_) {
+              widget.player.setAudioTrack(t);
+              _startHideTimer();
+            },
+          ));
+          if (i < tracks.length - 1) {
+            children.add(const shadcn.MenuDivider());
+          }
+        }
+        return shadcn.DropdownMenu(children: children);
+      },
     );
   }
 
@@ -1204,12 +1219,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         final closeSelected = currentId == 'no' || currentId == null;
         final children = <shadcn.MenuItem>[
           shadcn.MenuButton(
-            leading: closeSelected
-                ? const Icon(Icons.check, size: 16, color: Colors.white)
-                : const SizedBox(width: 16),
+            trailing: closeSelected
+                ? const Icon(Icons.check, size: 16, color: Colors.black)
+                : null,
             child: const Text('关闭'),
-            onPressed: (ctx) {
-              Navigator.of(ctx).pop();
+            onPressed: (_) {
               widget.player.setSubtitleTrack(SubtitleTrack.no());
               _startHideTimer();
             },
@@ -1218,33 +1232,36 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
         if (embeddedTracks.isNotEmpty) {
           children.add(const shadcn.MenuDivider());
-          for (final t in embeddedTracks) {
+          for (var i = 0; i < embeddedTracks.length; i++) {
+            final t = embeddedTracks[i];
             final selected = currentId == t.id;
             children.add(shadcn.MenuButton(
-              leading: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : const SizedBox(width: 16),
+              trailing: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.black)
+                  : null,
               child: Text(t.title ?? t.language ?? t.id),
-              onPressed: (ctx) {
-                Navigator.of(ctx).pop();
+              onPressed: (_) {
                 widget.player.setSubtitleTrack(t);
                 _startHideTimer();
               },
             ));
+            if (i < embeddedTracks.length - 1) {
+              children.add(const shadcn.MenuDivider());
+            }
           }
         }
 
         if (externalSubs.isNotEmpty) {
           children.add(const shadcn.MenuDivider());
-          for (final sub in externalSubs) {
+          for (var i = 0; i < externalSubs.length; i++) {
+            final sub = externalSubs[i];
             final selected = _currentSubtitleTrack?.title == sub.displayName;
             children.add(shadcn.MenuButton(
-              leading: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : const SizedBox(width: 16),
+              trailing: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.black)
+                  : null,
               child: Text(sub.displayName),
-              onPressed: (ctx) {
-                Navigator.of(ctx).pop();
+              onPressed: (_) {
                 final subUrl = sub.url.startsWith('http')
                     ? sub.url
                     : '${widget.serverUrl ?? ''}${sub.url}';
@@ -1254,6 +1271,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                 _startHideTimer();
               },
             ));
+            if (i < externalSubs.length - 1) {
+              children.add(const shadcn.MenuDivider());
+            }
           }
         }
 
