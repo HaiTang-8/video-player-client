@@ -1144,7 +1144,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         }
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: shadcn.DropdownMenu(children: children),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+            child: shadcn.DropdownMenu(children: children),
+          ),
         );
       },
     );
@@ -1217,7 +1220,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
         }
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: shadcn.DropdownMenu(children: children),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+            child: shadcn.DropdownMenu(children: children),
+          ),
         );
       },
     );
@@ -1332,7 +1338,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
         return ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: shadcn.DropdownMenu(children: children),
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+            child: shadcn.DropdownMenu(children: children),
+          ),
         );
       },
     );

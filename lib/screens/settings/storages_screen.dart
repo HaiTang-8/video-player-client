@@ -623,7 +623,6 @@ class _StorageCard extends StatelessWidget {
               ),
             ],
           ),
-          const Spacer(),
           const SizedBox(height: 16),
           _buildActionButtons(context),
         ],
