@@ -191,3 +191,31 @@ class FileInfo {
     return '${kb.toStringAsFixed(2)} KB';
   }
 }
+
+/// 存储源导入结果
+class StorageImportResult {
+  final int successCount;
+  final int skippedCount;
+  final List<String> skippedNames;
+  final List<String>? errors;
+
+  StorageImportResult({
+    required this.successCount,
+    required this.skippedCount,
+    required this.skippedNames,
+    this.errors,
+  });
+
+  factory StorageImportResult.fromJson(Map<String, dynamic> json) {
+    return StorageImportResult(
+      successCount: json['success_count'] as int? ?? 0,
+      skippedCount: json['skipped_count'] as int? ?? 0,
+      skippedNames: (json['skipped_names'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
+      errors:
+          (json['errors'] as List<dynamic>?)?.map((e) => e as String).toList(),
+    );
+  }
+}

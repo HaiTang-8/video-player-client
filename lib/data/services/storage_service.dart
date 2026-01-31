@@ -236,6 +236,35 @@ class StorageService {
     );
   }
 
+  /// 导出存储源
+  Future<ApiResponse<String>> exportStorages({String? password}) async {
+    final queryParams = <String, dynamic>{};
+    if (password != null && password.isNotEmpty) {
+      queryParams['password'] = password;
+    }
+    return _client.get<String>(
+      ApiConstants.storageExport,
+      queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      fromJson: (json) => (json as Map<String, dynamic>)['data'] as String,
+    );
+  }
+
+  /// 导入存储源
+  Future<ApiResponse<StorageImportResult>> importStorages({
+    required String data,
+    String? password,
+  }) async {
+    return _client.post<StorageImportResult>(
+      ApiConstants.storageImport,
+      data: {
+        'data': data,
+        if (password != null && password.isNotEmpty) 'password': password,
+      },
+      fromJson: (json) =>
+          StorageImportResult.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 健康检查
   Future<ApiResponse<void>> healthCheck() async {
     return _client.get(ApiConstants.health);

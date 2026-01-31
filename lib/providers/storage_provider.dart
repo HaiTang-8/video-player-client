@@ -142,6 +142,36 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     }
     return (false, response.error ?? '连接失败');
   }
+
+  Future<(bool success, String? data, String? error)> exportStorages({
+    String? password,
+  }) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return (false, null, '服务不可用');
+
+    final response = await service.exportStorages(password: password);
+    if (response.isSuccess && response.data != null) {
+      return (true, response.data, null);
+    }
+    return (false, null, response.error ?? '导出失败');
+  }
+
+  Future<(bool success, StorageImportResult? result, String? error)>
+      importStorages({
+    required String data,
+    String? password,
+  }) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return (false, null, '服务不可用');
+
+    final response =
+        await service.importStorages(data: data, password: password);
+    if (response.isSuccess && response.data != null) {
+      await loadStorages();
+      return (true, response.data, null);
+    }
+    return (false, null, response.error ?? '导入失败');
+  }
 }
 
 class GlobalScanState {
@@ -385,6 +415,12 @@ void _updateBrowseState(int storageId, BrowseState state) {
   _browseCache[storageId] = state;
 }
 
+void _safeInvalidate(WidgetRef ref, provider) {
+  try {
+    ref.invalidate(provider);
+  } catch (_) {}
+}
+
 Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
   final service = ref.read(storageServiceProvider);
   if (service == null) return;
@@ -397,7 +433,7 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
     storageId,
     currentState.copyWith(isLoading: true, error: null, currentPath: path),
   );
-  ref.invalidate(browseProvider(storageId));
+  _safeInvalidate(ref, browseProvider(storageId));
 
   final response = await service.browseStorage(storageId, path: path);
 
@@ -421,7 +457,7 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
       latestState.copyWith(isLoading: false, error: response.error),
     );
   }
-  ref.invalidate(browseProvider(storageId));
+  _safeInvalidate(ref, browseProvider(storageId));
 }
 
 Future<void> enterDirectory(
@@ -458,7 +494,7 @@ Future<void> loadBlacklist(WidgetRef ref, int storageId) async {
             .where((e) => e.isNotEmpty && e != '/')
             .toSet();
     _updateBrowseState(storageId, currentState.copyWith(blacklist: blacklist));
-    ref.invalidate(browseProvider(storageId));
+    _safeInvalidate(ref, browseProvider(storageId));
   }
 }
 

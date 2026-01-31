@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../providers/window_border_provider.dart';
+import 'password_text_field.dart';
 
 /// 弹窗工具类 - 使用 shadcn_flutter 组件
 class DialogUtils {
@@ -100,23 +102,6 @@ class DialogUtils {
     bool isError = false,
   }) {
     final theme = shadcn.Theme.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    final backgroundColor = isError
-        ? (isDark ? const Color(0xFF7F1D1D) : const Color(0xFFFEF2F2))
-        : (isDark ? const Color(0xFF14532D) : const Color(0xFFF0FDF4));
-
-    final borderColor = isError
-        ? (isDark ? const Color(0xFFB91C1C) : const Color(0xFFFECACA))
-        : (isDark ? const Color(0xFF166534) : const Color(0xFFBBF7D0));
-
-    final iconColor = isError
-        ? (isDark ? const Color(0xFFEF4444) : const Color(0xFFDC2626))
-        : (isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A));
-
-    final textColor = isError
-        ? (isDark ? const Color(0xFFFECACA) : const Color(0xFF7F1D1D))
-        : (isDark ? const Color(0xFFDCFCE7) : const Color(0xFF14532D));
 
     shadcn.showToast(
       context: context,
@@ -125,9 +110,9 @@ class DialogUtils {
         margin: const EdgeInsets.only(top: 32),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: backgroundColor,
+          color: theme.colorScheme.background,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: borderColor),
+          border: Border.all(color: theme.colorScheme.border),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.1),
@@ -143,14 +128,16 @@ class DialogUtils {
                   ? shadcn.LucideIcons.circleAlert
                   : shadcn.LucideIcons.circleCheck,
               size: 20,
-              color: iconColor,
+              color: isError
+                  ? theme.colorScheme.destructive
+                  : const Color(0xFF16A34A),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 message,
                 style: theme.typography.small.copyWith(
-                  color: textColor,
+                  color: theme.colorScheme.foreground,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -163,9 +150,7 @@ class DialogUtils {
               child: Icon(
                 shadcn.LucideIcons.x,
                 size: 16,
-                color: isError
-                    ? (isDark ? const Color(0xFFFCA5A5) : const Color(0xFFB91C1C))
-                    : (isDark ? const Color(0xFF86EFAC) : const Color(0xFF166534)),
+                color: theme.colorScheme.mutedForeground,
               ),
             ),
           ],
@@ -232,6 +217,9 @@ class DialogUtils {
     TextInputType? keyboardType,
     String cancelText = '取消',
     String confirmText = '确定',
+    bool obscureText = false,
+    double maxWidth = 400,
+    int? maxLength,
   }) async {
     final container = ProviderScope.containerOf(context);
     container.read(windowBorderVisibleProvider.notifier).hide();
@@ -242,13 +230,26 @@ class DialogUtils {
         barrierDismissible: false,
         builder: (context) => shadcn.AlertDialog(
           title: Text(title),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: shadcn.TextField(
-              controller: controller,
-              placeholder: placeholder != null ? Text(placeholder) : null,
-              keyboardType: keyboardType,
-              autofocus: true,
+          content: SizedBox(
+            width: maxWidth,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: obscureText
+                  ? PasswordTextField(
+                      controller: controller,
+                      placeholder: placeholder != null ? Text(placeholder) : null,
+                      autofocus: true,
+                      maxLength: maxLength,
+                    )
+                  : shadcn.TextField(
+                      controller: controller,
+                      placeholder: placeholder != null ? Text(placeholder) : null,
+                      keyboardType: keyboardType,
+                      autofocus: true,
+                      inputFormatters: maxLength != null
+                          ? [LengthLimitingTextInputFormatter(maxLength)]
+                          : null,
+                    ),
             ),
           ),
           actions: [

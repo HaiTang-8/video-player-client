@@ -57,6 +57,8 @@ class ApiConstants {
 
   // 存储源
   static const String storages = '$apiPrefix/storages';
+  static const String storageExport = '$apiPrefix/storages/export';
+  static const String storageImport = '$apiPrefix/storages/import';
   static const String storageTestConnection = '$apiPrefix/storages/test-connection';
   static String storageDetail(int id) => '$apiPrefix/storages/$id';
   static String storageEnable(int id) => '$apiPrefix/storages/$id/enable';

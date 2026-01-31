@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
+import '../../core/widgets/password_text_field.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -40,6 +44,11 @@ class StoragesScreen extends ConsumerStatefulWidget {
 }
 
 class _StoragesScreenState extends ConsumerState<StoragesScreen> {
+  // 防止“导出/导入”在短时间内被触发多次（例如 dropdown 关闭动画期间重复触发），
+  // 否则会出现：首次点击弹窗闪一下无响应、第二次点击叠两个弹窗、点击确定像“没反应”等问题。
+  bool _exporting = false;
+  bool _importing = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,22 +63,73 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final scanState = ref.watch(scanStateProvider);
     final isDesktop = WindowControls.isDesktop;
 
-    return Scaffold(
-      appBar: isDesktop
-          ? DesktopAppBar(
-              title: const Text('存储源管理'),
-              onBack: () => context.pop(),
-            )
-          : MobileAppBar(
-              title: const Text('存储源管理'),
-              onBack: () => context.pop(),
+    final actions = [
+      Builder(
+        builder:
+            (buttonContext) => shadcn.IconButton.ghost(
+              icon: const Icon(CupertinoIcons.ellipsis_vertical),
+              onPressed: () {
+                shadcn.showDropdown(
+                  context: buttonContext,
+                  builder:
+                      (context) => shadcn.DropdownMenu(
+                        children: [
+                          shadcn.MenuButton(
+                            leading: const Icon(
+                              CupertinoIcons.square_arrow_up,
+                              size: 18,
+                            ),
+                            child: const Text('导出'),
+                            onPressed: (menuContext) {
+                              shadcn.closeOverlay(menuContext);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                unawaited(_exportStorages());
+                              });
+                            },
+                          ),
+                          shadcn.MenuButton(
+                            leading: const Icon(
+                              CupertinoIcons.square_arrow_down,
+                              size: 18,
+                            ),
+                            child: const Text('导入'),
+                            onPressed: (menuContext) {
+                              shadcn.closeOverlay(menuContext);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                if (!mounted) return;
+                                unawaited(_importStorages());
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                );
+              },
             ),
+      ),
+    ];
+
+    return Scaffold(
+      appBar:
+          isDesktop
+              ? DesktopAppBar(
+                title: const Text('存储源管理'),
+                onBack: () => context.pop(),
+                actions: actions,
+              )
+              : MobileAppBar(
+                title: const Text('存储源管理'),
+                onBack: () => context.pop(),
+                actions: actions,
+              ),
       body: storagesAsync.when(
         loading: () => const ListSkeletonLoader(),
-        error: (error, stack) => AppErrorWidget(
-          message: error.toString(),
-          onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
-        ),
+        error:
+            (error, stack) => AppErrorWidget(
+              message: error.toString(),
+              onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
+            ),
         data: (storages) {
           if (storages.isEmpty) {
             return _buildEmptyState(context);
@@ -85,6 +145,138 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
             Icon(CupertinoIcons.add, size: 18),
             SizedBox(width: 8),
             Text('添加存储源'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportStorages() async {
+    if (_exporting) return;
+    _exporting = true;
+    try {
+      final password = await DialogUtils.showInputDialog(
+        context: context,
+        title: '导出密码（可选）',
+        placeholder: '留空使用默认加密',
+        obscureText: true,
+      );
+
+      if (password == null || !mounted) return;
+
+      final (success, data, error) = await ref
+          .read(storagesProvider.notifier)
+          .exportStorages(
+            password: password.isEmpty ? null : password,
+          );
+
+      if (!success || data == null) {
+        if (mounted) {
+          DialogUtils.showToast(
+            context: context,
+            message: error ?? '导出失败',
+            isError: true,
+          );
+        }
+        return;
+      }
+
+      if (mounted) {
+        await Clipboard.setData(ClipboardData(text: data));
+        if (!mounted) return;
+        DialogUtils.showToast(context: context, message: '已复制到剪贴板');
+      }
+    } finally {
+      _exporting = false;
+    }
+  }
+
+  Future<void> _importStorages() async {
+    if (_importing) return;
+    _importing = true;
+    try {
+      final result = await _showImportDialog();
+      if (result == null || result.data.isEmpty || !mounted) return;
+
+      final (success, importResult, error) = await ref
+          .read(storagesProvider.notifier)
+          .importStorages(
+            data: result.data,
+            password: result.password.isEmpty ? null : result.password,
+          );
+
+      if (!mounted) return;
+
+      if (success && importResult != null) {
+        final message =
+            '导入成功: ${importResult.successCount}, 跳过: ${importResult.skippedCount}';
+        DialogUtils.showToast(context: context, message: message);
+
+        if (importResult.skippedNames.isNotEmpty) {
+          await DialogUtils.showConfirmDialog(
+            context: context,
+            title: '已跳过的存储源',
+            content: '以下存储源已存在，已跳过:\n${importResult.skippedNames.join('\n')}',
+            confirmText: '确定',
+            cancelText: '',
+          );
+        }
+      }
+    } finally {
+      _importing = false;
+    }
+  }
+
+  Future<({String data, String password})?> _showImportDialog() async {
+    final dataController = TextEditingController();
+    final passwordController = TextEditingController();
+    var hasData = false;
+
+    return shadcn.showDialog<({String data, String password})>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => shadcn.AlertDialog(
+          title: const Text('导入存储源'),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                const Text('加密数据'),
+                const SizedBox(height: 8),
+                shadcn.TextField(
+                  controller: dataController,
+                  autofocus: true,
+                  maxLines: 3,
+                  onChanged: (value) => setState(() => hasData = value.isNotEmpty),
+                ),
+                const SizedBox(height: 16),
+                const Text('导入密码（可选）'),
+                const SizedBox(height: 8),
+                PasswordTextField(
+                  controller: passwordController,
+                  placeholder: const Text('留空使用默认加密'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
+            ),
+            shadcn.PrimaryButton(
+              onPressed: hasData
+                  ? () => Navigator.pop(
+                        context,
+                        (data: dataController.text, password: passwordController.text),
+                      )
+                  : null,
+              child: const Text('导入'),
+            ),
           ],
         ),
       ),
@@ -131,9 +323,10 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
       onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final crossAxisCount = isDesktop && constraints.maxWidth > 800
-              ? (constraints.maxWidth > 1200 ? 3 : 2)
-              : 1;
+          final crossAxisCount =
+              isDesktop && constraints.maxWidth > 800
+                  ? (constraints.maxWidth > 1200 ? 3 : 2)
+                  : 1;
 
           if (crossAxisCount == 1) {
             return ListView.builder(
@@ -145,8 +338,13 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                   storage: storage,
                   onEdit: () => _showEditStorageDialog(context, storage),
                   onDelete: () => _deleteStorage(storage),
-                  onBrowse: () => context.push('/storages/${storage.id}', extra: storage),
-                  onToggleEnabled: (enabled) => _toggleStorageEnabled(storage, enabled),
+                  onBrowse:
+                      () => context.push(
+                        '/storages/${storage.id}',
+                        extra: storage,
+                      ),
+                  onToggleEnabled:
+                      (enabled) => _toggleStorageEnabled(storage, enabled),
                 );
               },
             );
@@ -167,8 +365,11 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                 storage: storage,
                 onEdit: () => _showEditStorageDialog(context, storage),
                 onDelete: () => _deleteStorage(storage),
-                onBrowse: () => context.push('/storages/${storage.id}', extra: storage),
-                onToggleEnabled: (enabled) => _toggleStorageEnabled(storage, enabled),
+                onBrowse:
+                    () =>
+                        context.push('/storages/${storage.id}', extra: storage),
+                onToggleEnabled:
+                    (enabled) => _toggleStorageEnabled(storage, enabled),
               );
             },
           );
@@ -198,7 +399,9 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
 
   Future<void> _toggleStorageEnabled(Storage storage, bool enabled) async {
     if (enabled) {
-      final success = await ref.read(storagesProvider.notifier).enableStorage(storage.id);
+      final success = await ref
+          .read(storagesProvider.notifier)
+          .enableStorage(storage.id);
       if (mounted) {
         DialogUtils.showToast(
           context: context,
@@ -209,10 +412,9 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     } else {
       final result = await _showDisableOptionsDialog(storage);
       if (result == null) return;
-      final success = await ref.read(storagesProvider.notifier).disableStorage(
-        storage.id,
-        hideMedia: result,
-      );
+      final success = await ref
+          .read(storagesProvider.notifier)
+          .disableStorage(storage.id, hideMedia: result);
       if (mounted) {
         DialogUtils.showToast(
           context: context,
@@ -226,85 +428,88 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   Future<bool?> _showDisableOptionsDialog(Storage storage) async {
     return shadcn.showDialog<bool>(
       context: context,
-      builder: (context) => shadcn.AlertDialog(
-        title: const Text('禁用存储源'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('确定要禁用「${storage.name}」吗？'),
-            const SizedBox(height: 12),
-            Text(
-              '禁用后，该存储源将不再被扫描。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+      builder:
+          (context) => shadcn.AlertDialog(
+            title: const Text('禁用存储源'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('确定要禁用「${storage.name}」吗？'),
+                const SizedBox(height: 12),
+                Text(
+                  '禁用后，该存储源将不再被扫描。',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: const Text('取消'),
+            actions: [
+              shadcn.OutlineButton(
+                onPressed: () => Navigator.pop(context, null),
+                child: const Text('取消'),
+              ),
+              shadcn.OutlineButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('仅禁用'),
+              ),
+              shadcn.PrimaryButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('禁用并隐藏媒体'),
+              ),
+            ],
           ),
-          shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('仅禁用'),
-          ),
-          shadcn.PrimaryButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('禁用并隐藏媒体'),
-          ),
-        ],
-      ),
     );
   }
 
   void _showAddStorageDialog(BuildContext context) {
     shadcn.showDialog(
       context: context,
-      builder: (context) => _StorageFormDialog(
-        onSubmit: (name, type, settings) async {
-          final success = await ref.read(storagesProvider.notifier).addStorage(
-            name: name,
-            type: type,
-            settings: settings,
-          );
-          if (context.mounted) {
-            Navigator.pop(context);
-            DialogUtils.showToast(
-              context: context,
-              message: success ? '添加成功' : '添加失败',
-              isError: !success,
-            );
-          }
-        },
-      ),
+      builder:
+          (context) => _StorageFormDialog(
+            onSubmit: (name, type, settings) async {
+              final success = await ref
+                  .read(storagesProvider.notifier)
+                  .addStorage(name: name, type: type, settings: settings);
+              if (context.mounted) {
+                Navigator.pop(context);
+                DialogUtils.showToast(
+                  context: context,
+                  message: success ? '添加成功' : '添加失败',
+                  isError: !success,
+                );
+              }
+            },
+          ),
     );
   }
 
   void _showEditStorageDialog(BuildContext context, Storage storage) {
     shadcn.showDialog(
       context: context,
-      builder: (context) => _StorageFormDialog(
-        storage: storage,
-        onSubmit: (name, type, settings) async {
-          final success = await ref.read(storagesProvider.notifier).updateStorage(
-            id: storage.id,
-            name: name,
-            type: type,
-            settings: settings,
-          );
-          if (context.mounted) {
-            Navigator.pop(context);
-            DialogUtils.showToast(
-              context: context,
-              message: success ? '更新成功' : '更新失败',
-              isError: !success,
-            );
-          }
-        },
-      ),
+      builder:
+          (context) => _StorageFormDialog(
+            storage: storage,
+            onSubmit: (name, type, settings) async {
+              final success = await ref
+                  .read(storagesProvider.notifier)
+                  .updateStorage(
+                    id: storage.id,
+                    name: name,
+                    type: type,
+                    settings: settings,
+                  );
+              if (context.mounted) {
+                Navigator.pop(context);
+                DialogUtils.showToast(
+                  context: context,
+                  message: success ? '更新成功' : '更新失败',
+                  isError: !success,
+                );
+              }
+            },
+          ),
     );
   }
 }
@@ -341,12 +546,17 @@ class _StorageCard extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: storage.enabled ? 0.1 : 0.05),
+                  color: theme.colorScheme.primary.withValues(
+                    alpha: storage.enabled ? 0.1 : 0.05,
+                  ),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   storageType.icon,
-                  color: storage.enabled ? theme.colorScheme.primary : theme.colorScheme.outline,
+                  color:
+                      storage.enabled
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.outline,
                   size: 22,
                 ),
               ),
@@ -359,7 +569,8 @@ class _StorageCard extends StatelessWidget {
                       storage.name,
                       style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: storage.enabled ? null : theme.colorScheme.outline,
+                        color:
+                            storage.enabled ? null : theme.colorScheme.outline,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -371,7 +582,10 @@ class _StorageCard extends StatelessWidget {
                         if (!storage.enabled && storage.hideWhenDisabled) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: theme.colorScheme.errorContainer,
                               borderRadius: BorderRadius.circular(4),
@@ -484,12 +698,14 @@ class _StorageCard extends StatelessWidget {
 /// 存储源表单对话框
 class _StorageFormDialog extends ConsumerStatefulWidget {
   final Storage? storage;
-  final Future<void> Function(String name, String type, Map<String, String> settings) onSubmit;
+  final Future<void> Function(
+    String name,
+    String type,
+    Map<String, String> settings,
+  )
+  onSubmit;
 
-  const _StorageFormDialog({
-    this.storage,
-    required this.onSubmit,
-  });
+  const _StorageFormDialog({this.storage, required this.onSubmit});
 
   @override
   ConsumerState<_StorageFormDialog> createState() => _StorageFormDialogState();
@@ -519,16 +735,27 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
     final settings = storage?.settings ?? {};
 
     _nameController = TextEditingController(text: storage?.name ?? '');
-    _urlController = TextEditingController(text: settings['url'] ?? settings['path'] ?? '');
-    _usernameController = TextEditingController(text: settings['username'] ?? '');
-    _passwordController = TextEditingController(text: settings['password'] ?? '');
-    _proxyUrlController = TextEditingController(text: settings['proxy_url'] ?? '');
-    _publicBaseUrlController = TextEditingController(text: settings['public_base_url'] ?? '');
+    _urlController = TextEditingController(
+      text: settings['url'] ?? settings['path'] ?? '',
+    );
+    _usernameController = TextEditingController(
+      text: settings['username'] ?? '',
+    );
+    _passwordController = TextEditingController(
+      text: settings['password'] ?? '',
+    );
+    _proxyUrlController = TextEditingController(
+      text: settings['proxy_url'] ?? '',
+    );
+    _publicBaseUrlController = TextEditingController(
+      text: settings['public_base_url'] ?? '',
+    );
     _tokenController = TextEditingController(text: settings['token'] ?? '');
 
-    _selectedType = storage != null
-        ? StorageType.fromString(storage.type)
-        : StorageType.webdav;
+    _selectedType =
+        storage != null
+            ? StorageType.fromString(storage.type)
+            : StorageType.webdav;
     _useProxy = settings['use_proxy'] == 'true';
     _streamMode = settings['stream_mode'] ?? 'redirect';
   }
@@ -548,7 +775,8 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
   @override
   Widget build(BuildContext context) {
     final isDesktop = WindowControls.isDesktop;
-    final dialogWidth = isDesktop ? 480.0 : MediaQuery.of(context).size.width * 0.9;
+    final dialogWidth =
+        isDesktop ? 480.0 : MediaQuery.of(context).size.width * 0.9;
 
     return shadcn.AlertDialog(
       title: Text(isEditing ? '编辑存储源' : '添加存储源'),
@@ -576,13 +804,17 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
         ),
         shadcn.PrimaryButton(
           onPressed: _isSubmitting ? null : _handleSubmit,
-          child: _isSubmitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                )
-              : Text(isEditing ? '保存' : '添加'),
+          child:
+              _isSubmitting
+                  ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                  : Text(isEditing ? '保存' : '添加'),
         ),
       ],
     );
@@ -609,42 +841,46 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
         const Text('类型').semiBold().small(),
         const SizedBox(height: 8),
         Row(
-          children: StorageType.values.map((type) {
-            final isSelected = _selectedType == type;
-            return Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  right: type != StorageType.values.last ? 8 : 0,
-                ),
-                child: isSelected
-                    ? shadcn.PrimaryButton(
-                        onPressed: () => setState(() => _selectedType = type),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(type.icon, size: 16),
-                            const SizedBox(width: 6),
-                            Text(type.label),
-                          ],
-                        ),
-                      )
-                    : shadcn.OutlineButton(
-                        onPressed: () => setState(() {
-                          _selectedType = type;
-                          _resetTypeDefaults();
-                        }),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(type.icon, size: 16),
-                            const SizedBox(width: 6),
-                            Text(type.label),
-                          ],
-                        ),
-                      ),
-              ),
-            );
-          }).toList(),
+          children:
+              StorageType.values.map((type) {
+                final isSelected = _selectedType == type;
+                return Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      right: type != StorageType.values.last ? 8 : 0,
+                    ),
+                    child:
+                        isSelected
+                            ? shadcn.PrimaryButton(
+                              onPressed:
+                                  () => setState(() => _selectedType = type),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(type.icon, size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(type.label),
+                                ],
+                              ),
+                            )
+                            : shadcn.OutlineButton(
+                              onPressed:
+                                  () => setState(() {
+                                    _selectedType = type;
+                                    _resetTypeDefaults();
+                                  }),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(type.icon, size: 16),
+                                  const SizedBox(width: 6),
+                                  Text(type.label),
+                                ],
+                              ),
+                            ),
+                  ),
+                );
+              }).toList(),
         ),
       ],
     );
@@ -791,16 +1027,17 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
   Future<void> _handleTestConnection() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
-      DialogUtils.showToast(context: context, message: '请输入 OpenList 地址', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '请输入 OpenList 地址',
+        isError: true,
+      );
       return;
     }
 
     setState(() => _isTesting = true);
 
-    final settings = <String, String>{
-      'url': url,
-      'stream_mode': _streamMode,
-    };
+    final settings = <String, String>{'url': url, 'stream_mode': _streamMode};
     final token = _tokenController.text.trim();
     if (token.isNotEmpty) {
       settings['token'] = token;
@@ -814,10 +1051,9 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
       settings['password'] = password;
     }
 
-    final (success, error) = await ref.read(storagesProvider.notifier).testConnection(
-      type: 'openlist',
-      settings: settings,
-    );
+    final (success, error) = await ref
+        .read(storagesProvider.notifier)
+        .testConnection(type: 'openlist', settings: settings);
 
     if (mounted) {
       setState(() => _isTesting = false);
@@ -865,27 +1101,31 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
         Row(
           children: [
             Expanded(
-              child: _streamMode == 'proxy'
-                  ? shadcn.PrimaryButton(
-                      onPressed: () => setState(() => _streamMode = 'proxy'),
-                      child: const Text('代理'),
-                    )
-                  : shadcn.OutlineButton(
-                      onPressed: () => setState(() => _streamMode = 'proxy'),
-                      child: const Text('代理'),
-                    ),
+              child:
+                  _streamMode == 'proxy'
+                      ? shadcn.PrimaryButton(
+                        onPressed: () => setState(() => _streamMode = 'proxy'),
+                        child: const Text('代理'),
+                      )
+                      : shadcn.OutlineButton(
+                        onPressed: () => setState(() => _streamMode = 'proxy'),
+                        child: const Text('代理'),
+                      ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: _streamMode == 'redirect'
-                  ? shadcn.PrimaryButton(
-                      onPressed: () => setState(() => _streamMode = 'redirect'),
-                      child: const Text('直连'),
-                    )
-                  : shadcn.OutlineButton(
-                      onPressed: () => setState(() => _streamMode = 'redirect'),
-                      child: const Text('直连'),
-                    ),
+              child:
+                  _streamMode == 'redirect'
+                      ? shadcn.PrimaryButton(
+                        onPressed:
+                            () => setState(() => _streamMode = 'redirect'),
+                        child: const Text('直连'),
+                      )
+                      : shadcn.OutlineButton(
+                        onPressed:
+                            () => setState(() => _streamMode = 'redirect'),
+                        child: const Text('直连'),
+                      ),
             ),
           ],
         ),
@@ -916,7 +1156,8 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
         }
         break;
       case StorageType.local:
-        if (_streamMode == 'redirect' && _publicBaseUrlController.text.trim().isEmpty) {
+        if (_streamMode == 'redirect' &&
+            _publicBaseUrlController.text.trim().isEmpty) {
           DialogUtils.showToast(
             context: context,
             message: '直连模式需要填写直连基地址',
