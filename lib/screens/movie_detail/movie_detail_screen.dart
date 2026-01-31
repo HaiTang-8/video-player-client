@@ -227,7 +227,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             imageUrl: imageUrl,
             width: double.infinity,
             height: imageHeight,
-            fit: BoxFit.fill,
+            fit: BoxFit.cover,
             alignment: Alignment.center,
             errorWidget:
                 (_, __, ___) =>
