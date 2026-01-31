@@ -1,7 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../widgets/ios_page_transition.dart';
 
@@ -53,22 +52,6 @@ class AppTheme {
     );
   }
 
-  static PullDownButtonTheme get _pullDownButtonTheme {
-    final base = _baseTextStyle.copyWith(
-      letterSpacing: _isWindows ? 0.0 : null,
-    );
-    return PullDownButtonTheme(
-      titleTheme: PullDownMenuTitleTheme(
-        style: base.copyWith(letterSpacing: null),
-      ),
-      itemTheme: PullDownMenuItemTheme(
-        textStyle: base,
-        subtitleStyle: base,
-        iconActionTextStyle: base,
-      ),
-    );
-  }
-
   // 亮色主题
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
@@ -76,7 +59,6 @@ class AppTheme {
     fontFamily: _fontFamily,
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
     cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
-    extensions: <ThemeExtension<dynamic>>[_pullDownButtonTheme],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.light,
@@ -143,7 +125,6 @@ class AppTheme {
     brightness: Brightness.dark,
     fontFamily: _fontFamily,
     cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
-    extensions: <ThemeExtension<dynamic>>[_pullDownButtonTheme],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.dark,

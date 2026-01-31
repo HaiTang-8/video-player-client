@@ -4,7 +4,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
@@ -72,19 +71,30 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
         .startScanAll(forceScrape: forceScrape);
   }
 
-  List<PullDownMenuEntry> _buildScanMenuItems() {
-    return [
-      PullDownMenuItem(
-        title: '扫描新文件',
-        icon: CupertinoIcons.doc_text_search,
-        onTap: () => _startGlobalScan(forceScrape: false),
+  void _showScanMenu(BuildContext context) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.doc_text_search, size: 18),
+            child: const Text('扫描新文件'),
+            onPressed: (ctx) {
+              Navigator.of(ctx).pop();
+              _startGlobalScan(forceScrape: false);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+            child: const Text('强制刮削全部'),
+            onPressed: (ctx) {
+              Navigator.of(ctx).pop();
+              _startGlobalScan(forceScrape: true);
+            },
+          ),
+        ],
       ),
-      PullDownMenuItem(
-        title: '强制刮削全部',
-        icon: CupertinoIcons.arrow_2_circlepath,
-        onTap: () => _startGlobalScan(forceScrape: true),
-      ),
-    ];
+    );
   }
 
   @override
@@ -151,15 +161,13 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                                 ),
                               ),
                             )
-                            : PullDownButton(
-                              key: _refreshButtonKey,
-                              itemBuilder: (context) => _buildScanMenuItems(),
-                              buttonBuilder:
-                                  (context, showMenu) => IconButton(
-                                    tooltip: '扫描存储源',
-                                    onPressed: showMenu,
-                                    icon: const Icon(CupertinoIcons.refresh),
-                                  ),
+                            : Builder(
+                              builder: (menuContext) => IconButton(
+                                key: _refreshButtonKey,
+                                tooltip: '扫描存储源',
+                                onPressed: () => _showScanMenu(menuContext),
+                                icon: const Icon(CupertinoIcons.refresh),
+                              ),
                             ),
                   ),
                   IconButton(
@@ -202,15 +210,13 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                                 ),
                               ),
                             )
-                            : PullDownButton(
-                              key: _refreshButtonKey,
-                              itemBuilder: (context) => _buildScanMenuItems(),
-                              buttonBuilder:
-                                  (context, showMenu) => IconButton(
-                                    tooltip: '扫描存储源',
-                                    onPressed: showMenu,
-                                    icon: const Icon(CupertinoIcons.refresh),
-                                  ),
+                            : Builder(
+                              builder: (menuContext) => IconButton(
+                                key: _refreshButtonKey,
+                                tooltip: '扫描存储源',
+                                onPressed: () => _showScanMenu(menuContext),
+                                icon: const Icon(CupertinoIcons.refresh),
+                              ),
                             ),
                   ),
                   IconButton(

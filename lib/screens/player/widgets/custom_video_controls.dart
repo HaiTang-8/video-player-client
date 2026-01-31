@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem;
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapIcons;
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
@@ -1080,25 +1080,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   Widget _buildSpeedButton() {
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
     final isDesktop = WindowControls.isDesktop;
-    return PullDownButton(
-      routeTheme: isDesktop ? null : const PullDownMenuRouteTheme(width: 100),
-      itemBuilder: (context) => speeds
-          .map(
-            (s) => PullDownMenuItem.selectable(
-              title: '${s}x',
-              selected: (_playbackSpeed - s).abs() < 0.01,
-              onTap: () {
-                widget.player.setRate(s);
-                widget.onSpeedChanged?.call(s);
-                _startHideTimer();
-              },
-            ),
-          )
-          .toList(),
-      buttonBuilder: (context, showMenu) => GestureDetector(
+    return Builder(
+      builder: (menuContext) => GestureDetector(
         onTap: () {
           _hideTimer?.cancel();
-          showMenu();
+          _showSpeedMenu(menuContext, speeds);
         },
         child: Container(
           constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
@@ -1116,28 +1102,35 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     );
   }
 
-  Widget _buildAudioTrackButton({bool isLast = false}) {
-    final tracks = _audioTracks.where((t) => t.id != 'no').toList();
-    return PullDownButton(
-      routeTheme: const PullDownMenuRouteTheme(width: 150),
-      itemBuilder: (context) => [
-        if (tracks.isEmpty)
-          PullDownMenuItem(title: '无可用音轨', enabled: false, onTap: () {}),
-        ...tracks.map(
-          (t) => PullDownMenuItem.selectable(
-            title: t.title ?? t.language ?? t.id,
-            selected: _currentAudioTrack?.id == t.id,
-            onTap: () {
-              widget.player.setAudioTrack(t);
+  void _showSpeedMenu(BuildContext context, List<double> speeds) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: speeds.map((s) {
+          final selected = (_playbackSpeed - s).abs() < 0.01;
+          return shadcn.MenuButton(
+            leading: selected
+                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                : const SizedBox(width: 16),
+            child: Text('${s}x'),
+            onPressed: (ctx) {
+              Navigator.of(ctx).pop();
+              widget.player.setRate(s);
+              widget.onSpeedChanged?.call(s);
               _startHideTimer();
             },
-          ),
-        ),
-      ],
-      buttonBuilder: (context, showMenu) => GestureDetector(
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildAudioTrackButton({bool isLast = false}) {
+    return Builder(
+      builder: (menuContext) => GestureDetector(
         onTap: () {
           _hideTimer?.cancel();
-          showMenu();
+          _showAudioTrackMenu(menuContext);
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
@@ -1151,59 +1144,42 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     );
   }
 
+  void _showAudioTrackMenu(BuildContext context) {
+    final tracks = _audioTracks.where((t) => t.id != 'no').toList();
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          if (tracks.isEmpty)
+            shadcn.MenuButton(
+              child: const Text('无可用音轨'),
+              onPressed: null,
+            ),
+          ...tracks.map((t) {
+            final selected = _currentAudioTrack?.id == t.id;
+            return shadcn.MenuButton(
+              leading: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : const SizedBox(width: 16),
+              child: Text(t.title ?? t.language ?? t.id),
+              onPressed: (ctx) {
+                Navigator.of(ctx).pop();
+                widget.player.setAudioTrack(t);
+                _startHideTimer();
+              },
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSubtitleButton({bool isLast = false}) {
-    final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
-    final externalSubs = widget.externalSubtitles;
-    final currentId = _currentSubtitleTrack?.id;
-    return PullDownButton(
-      routeTheme: const PullDownMenuRouteTheme(width: 150),
-      itemBuilder: (context) => [
-        PullDownMenuItem.selectable(
-          title: '关闭',
-          selected: currentId == 'no' || currentId == null,
-          onTap: () {
-            widget.player.setSubtitleTrack(SubtitleTrack.no());
-            _startHideTimer();
-          },
-        ),
-        if (embeddedTracks.isNotEmpty) const PullDownMenuDivider.large(),
-        ...embeddedTracks.map(
-          (t) => PullDownMenuItem.selectable(
-            title: t.title ?? t.language ?? t.id,
-            selected: currentId == t.id,
-            onTap: () {
-              widget.player.setSubtitleTrack(t);
-              _startHideTimer();
-            },
-          ),
-        ),
-        if (externalSubs.isNotEmpty) const PullDownMenuDivider.large(),
-        ...externalSubs.map(
-          (sub) => PullDownMenuItem.selectable(
-            title: sub.displayName,
-            // 通过 title 匹配选中状态（SubtitleTrack.uri 不支持自定义 id）
-            selected: _currentSubtitleTrack?.title == sub.displayName,
-            onTap: () {
-              final subUrl = sub.url.startsWith('http')
-                  ? sub.url
-                  : '${widget.serverUrl ?? ''}${sub.url}';
-              widget.player.setSubtitleTrack(
-                SubtitleTrack.uri(
-                  subUrl,
-                  title: sub.displayName,
-                ),
-              );
-              _startHideTimer();
-            },
-          ),
-        ),
-        if (embeddedTracks.isEmpty && externalSubs.isEmpty)
-          PullDownMenuItem(title: '无可用字幕', enabled: false, onTap: () {}),
-      ],
-      buttonBuilder: (context, showMenu) => GestureDetector(
+    return Builder(
+      builder: (menuContext) => GestureDetector(
         onTap: () {
           _hideTimer?.cancel();
-          showMenu();
+          _showSubtitleMenu(menuContext);
         },
         child: Padding(
           padding: EdgeInsets.only(left: isLast ? 6 : 0),
@@ -1214,6 +1190,82 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showSubtitleMenu(BuildContext context) {
+    final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
+    final externalSubs = widget.externalSubtitles;
+    final currentId = _currentSubtitleTrack?.id;
+
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) {
+        final closeSelected = currentId == 'no' || currentId == null;
+        final children = <shadcn.MenuItem>[
+          shadcn.MenuButton(
+            leading: closeSelected
+                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                : const SizedBox(width: 16),
+            child: const Text('关闭'),
+            onPressed: (ctx) {
+              Navigator.of(ctx).pop();
+              widget.player.setSubtitleTrack(SubtitleTrack.no());
+              _startHideTimer();
+            },
+          ),
+        ];
+
+        if (embeddedTracks.isNotEmpty) {
+          children.add(const shadcn.MenuDivider());
+          for (final t in embeddedTracks) {
+            final selected = currentId == t.id;
+            children.add(shadcn.MenuButton(
+              leading: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : const SizedBox(width: 16),
+              child: Text(t.title ?? t.language ?? t.id),
+              onPressed: (ctx) {
+                Navigator.of(ctx).pop();
+                widget.player.setSubtitleTrack(t);
+                _startHideTimer();
+              },
+            ));
+          }
+        }
+
+        if (externalSubs.isNotEmpty) {
+          children.add(const shadcn.MenuDivider());
+          for (final sub in externalSubs) {
+            final selected = _currentSubtitleTrack?.title == sub.displayName;
+            children.add(shadcn.MenuButton(
+              leading: selected
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : const SizedBox(width: 16),
+              child: Text(sub.displayName),
+              onPressed: (ctx) {
+                Navigator.of(ctx).pop();
+                final subUrl = sub.url.startsWith('http')
+                    ? sub.url
+                    : '${widget.serverUrl ?? ''}${sub.url}';
+                widget.player.setSubtitleTrack(
+                  SubtitleTrack.uri(subUrl, title: sub.displayName),
+                );
+                _startHideTimer();
+              },
+            ));
+          }
+        }
+
+        if (embeddedTracks.isEmpty && externalSubs.isEmpty) {
+          children.add(shadcn.MenuButton(
+            child: const Text('无可用字幕'),
+            onPressed: null,
+          ));
+        }
+
+        return shadcn.DropdownMenu(children: children);
+      },
     );
   }
 

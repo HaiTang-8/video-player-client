@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pull_down_button/pull_down_button.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -649,32 +649,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
             child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
           ),
-        PullDownButton(
-          itemBuilder: (context) => [
-            PullDownMenuItem(
-              title: '更换海报',
-              icon: CupertinoIcons.photo,
-              onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason),
-            ),
-            PullDownMenuItem(
-              title: '重新刮削',
-              icon: CupertinoIcons.wand_stars,
-              onTap: () => _scrapeTvShow(context, widget.tvShowId),
-            ),
-            PullDownMenuItem(
-              title: '同步季度',
-              icon: CupertinoIcons.arrow_2_circlepath,
-              onTap: () => _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId),
-            ),
-            PullDownMenuItem(
-              title: '刷新',
-              icon: CupertinoIcons.refresh,
-              onTap: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
-            ),
-          ],
-          buttonBuilder: (context, showMenu) => CupertinoButton(
+        Builder(
+          builder: (menuContext) => CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            onPressed: showMenu,
+            onPressed: () => _showMobileActionsMenu(menuContext, tvShow, selectedSeason),
             child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
           ),
         ),
@@ -709,41 +687,97 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           icon: const Icon(CupertinoIcons.cloud_download),
           onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
         ),
-      PullDownButton(
-        itemBuilder: (context) => [
-          PullDownMenuItem(
-            title: '更换海报',
-            icon: CupertinoIcons.photo,
-            onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.poster),
-          ),
-          PullDownMenuItem(
-            title: '更换背景图',
-            icon: CupertinoIcons.photo_on_rectangle,
-            onTap: () => _showImageSelector(context, tvShow, ImageSelectorType.backdrop),
-          ),
-          PullDownMenuItem(
-            title: '重新刮削',
-            icon: CupertinoIcons.wand_stars,
-            onTap: () => _scrapeTvShow(context, widget.tvShowId),
-          ),
-          PullDownMenuItem(
-            title: '同步季度',
-            icon: CupertinoIcons.arrow_2_circlepath,
-            onTap: () => _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId),
-          ),
-          PullDownMenuItem(
-            title: '刷新',
-            icon: CupertinoIcons.refresh,
-            onTap: () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
-          ),
-        ],
-        buttonBuilder: (context, showMenu) => IconButton(
+      Builder(
+        builder: (menuContext) => IconButton(
           tooltip: '更多',
           icon: const Icon(CupertinoIcons.ellipsis),
-          onPressed: showMenu,
+          onPressed: () => _showDesktopActionsMenu(menuContext, tvShow),
         ),
       ),
     ];
+  }
+
+  void _showMobileActionsMenu(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo, size: 18),
+            child: const Text('更换海报'),
+            onPressed: (_) {
+              _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+            child: const Text('重新刮削'),
+            onPressed: (_) {
+              _scrapeTvShow(context, widget.tvShowId);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+            child: const Text('同步季度'),
+            onPressed: (_) {
+              _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.refresh, size: 18),
+            child: const Text('刷新'),
+            onPressed: (_) {
+              ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDesktopActionsMenu(BuildContext context, TvShow tvShow) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo, size: 18),
+            child: const Text('更换海报'),
+            onPressed: (_) {
+              _showImageSelector(context, tvShow, ImageSelectorType.poster);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+            child: const Text('更换背景图'),
+            onPressed: (_) {
+              _showImageSelector(context, tvShow, ImageSelectorType.backdrop);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+            child: const Text('重新刮削'),
+            onPressed: (_) {
+              _scrapeTvShow(context, widget.tvShowId);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+            child: const Text('同步季度'),
+            onPressed: (_) {
+              _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.refresh, size: 18),
+            child: const Text('刷新'),
+            onPressed: (_) {
+              ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   /// 构建播放按钮

@@ -3,7 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:pull_down_button/pull_down_button.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -538,27 +538,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             onPressed: () => _downloadMovie(context, movie),
             child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
           ),
-        PullDownButton(
-          itemBuilder: (context) => [
-            PullDownMenuItem(
-              title: '更换海报',
-              icon: CupertinoIcons.photo,
-              onTap: () => _showImageSelector(context, movie, ImageSelectorType.poster),
-            ),
-            PullDownMenuItem(
-              title: '重新刮削',
-              icon: CupertinoIcons.wand_stars,
-              onTap: () => _scrapeMovie(context, movie.id),
-            ),
-            PullDownMenuItem(
-              title: '刷新',
-              icon: CupertinoIcons.refresh,
-              onTap: () => ref.invalidate(movieDetailProvider(widget.movieId)),
-            ),
-          ],
-          buttonBuilder: (context, showMenu) => CupertinoButton(
+        Builder(
+          builder: (menuContext) => CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            onPressed: showMenu,
+            onPressed: () => _showMobileActionsMenu(menuContext, movie),
             child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
           ),
         ),
@@ -590,36 +573,83 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           icon: const Icon(CupertinoIcons.cloud_download),
           onPressed: () => _downloadMovie(context, movie),
         ),
-      PullDownButton(
-        itemBuilder: (context) => [
-          PullDownMenuItem(
-            title: '更换海报',
-            icon: CupertinoIcons.photo,
-            onTap: () => _showImageSelector(context, movie, ImageSelectorType.poster),
-          ),
-          PullDownMenuItem(
-            title: '更换背景图',
-            icon: CupertinoIcons.photo_on_rectangle,
-            onTap: () => _showImageSelector(context, movie, ImageSelectorType.backdrop),
-          ),
-          PullDownMenuItem(
-            title: '重新刮削',
-            icon: CupertinoIcons.wand_stars,
-            onTap: () => _scrapeMovie(context, movie.id),
-          ),
-          PullDownMenuItem(
-            title: '刷新',
-            icon: CupertinoIcons.refresh,
-            onTap: () => ref.invalidate(movieDetailProvider(widget.movieId)),
-          ),
-        ],
-        buttonBuilder: (context, showMenu) => IconButton(
+      Builder(
+        builder: (menuContext) => IconButton(
           tooltip: '更多',
           icon: const Icon(CupertinoIcons.ellipsis),
-          onPressed: showMenu,
+          onPressed: () => _showDesktopActionsMenu(menuContext, movie),
         ),
       ),
     ];
+  }
+
+  void _showMobileActionsMenu(BuildContext context, Movie movie) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo, size: 18),
+            child: const Text('更换海报'),
+            onPressed: (_) {
+              _showImageSelector(context, movie, ImageSelectorType.poster);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+            child: const Text('重新刮削'),
+            onPressed: (_) {
+              _scrapeMovie(context, movie.id);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.refresh, size: 18),
+            child: const Text('刷新'),
+            onPressed: (_) {
+              ref.invalidate(movieDetailProvider(widget.movieId));
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDesktopActionsMenu(BuildContext context, Movie movie) {
+    shadcn.showDropdown(
+      context: context,
+      builder: (dropdownContext) => shadcn.DropdownMenu(
+        children: [
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo, size: 18),
+            child: const Text('更换海报'),
+            onPressed: (_) {
+              _showImageSelector(context, movie, ImageSelectorType.poster);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+            child: const Text('更换背景图'),
+            onPressed: (_) {
+              _showImageSelector(context, movie, ImageSelectorType.backdrop);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+            child: const Text('重新刮削'),
+            onPressed: (_) {
+              _scrapeMovie(context, movie.id);
+            },
+          ),
+          shadcn.MenuButton(
+            leading: const Icon(CupertinoIcons.refresh, size: 18),
+            child: const Text('刷新'),
+            onPressed: (_) {
+              ref.invalidate(movieDetailProvider(widget.movieId));
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   /// 构建播放按钮
