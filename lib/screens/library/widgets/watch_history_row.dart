@@ -45,12 +45,6 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.history,
-                  size: 20,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 8),
                 Text(
                   '最近观看',
                   style: theme.textTheme.titleMedium?.copyWith(

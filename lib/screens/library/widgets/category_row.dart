@@ -77,6 +77,23 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
 
     final itemsState = ref.watch(categoryItemsProvider(widget.category.id));
 
+    // 优先使用缓存数据，避免 widget 回收后重建时闪烁 loading 状态
+    if (itemsState.items.isNotEmpty) {
+      return MediaPosterRow(
+        title: widget.category.displayName,
+        count: widget.category.count,
+        onTitleTap: _navigateToCategory,
+        items: itemsState.items,
+        isLoading: itemsState.isLoading,
+        error: itemsState.error,
+        onRetry: _retry,
+        onItemTap: _navigateToDetail,
+        itemKeyPrefix: 'poster',
+        useDesktopGrid: WindowControls.isDesktop,
+      );
+    }
+
+    // 缓存无数据，需要加载
     if (WindowControls.isDesktop && !_loaded) {
       return LayoutBuilder(
         builder: (context, constraints) {

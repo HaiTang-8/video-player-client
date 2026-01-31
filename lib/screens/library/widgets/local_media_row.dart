@@ -12,7 +12,6 @@ class LocalMediaRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final state = ref.watch(downloadManagerProvider);
     final completedTasks = state.completedTasks;
 
@@ -34,8 +33,6 @@ class LocalMediaRow extends ConsumerWidget {
     return MediaPosterRow(
       title: '本地影片',
       count: tasks.length,
-      icon: Icons.download_done,
-      iconColor: theme.colorScheme.primary,
       onTitleTap: () => context.push('/downloads'),
       itemCount: tasks.length,
       itemBuilder: (index, width) => _LocalMediaCardWrapper(

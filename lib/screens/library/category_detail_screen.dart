@@ -38,8 +38,10 @@ class _CategoryDetailScreenState extends ConsumerState<CategoryDetailScreen> {
 
   bool _onScrollNotification(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification) {
-      if (notification.metrics.pixels >=
-          notification.metrics.maxScrollExtent - 200) {
+      final scrollDelta = notification.scrollDelta ?? 0;
+      if (scrollDelta > 0 &&
+          notification.metrics.pixels >=
+              notification.metrics.maxScrollExtent - 200) {
         loadMoreCategoryItems(ref, widget.categoryId, pageSize: 30);
       }
     }
