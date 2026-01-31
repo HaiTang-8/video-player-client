@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -1103,8 +1105,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   }
 
   void _showSpeedMenu(BuildContext context, List<double> speeds) {
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final padding = MediaQuery.of(context).padding;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.7;
+
     shadcn.showDropdown(
       context: context,
+      margin: isMobile
+          ? EdgeInsets.only(
+              left: padding.left,
+              right: padding.right,
+              top: padding.top,
+              bottom: padding.bottom,
+            )
+          : null,
       builder: (dropdownContext) {
         final children = <shadcn.MenuItem>[];
         for (var i = 0; i < speeds.length; i++) {
@@ -1127,7 +1142,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             children.add(const shadcn.MenuDivider());
           }
         }
-        return shadcn.DropdownMenu(children: children);
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: shadcn.DropdownMenu(children: children),
+        );
       },
     );
   }
@@ -1153,8 +1171,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   void _showAudioTrackMenu(BuildContext context) {
     final tracks = _audioTracks.where((t) => t.id != 'no').toList();
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final padding = MediaQuery.of(context).padding;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.7;
+
     shadcn.showDropdown(
       context: context,
+      margin: isMobile
+          ? EdgeInsets.only(
+              left: padding.left,
+              right: padding.right,
+              top: padding.top,
+              bottom: padding.bottom,
+            )
+          : null,
       builder: (dropdownContext) {
         if (tracks.isEmpty) {
           return shadcn.DropdownMenu(
@@ -1184,7 +1215,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
             children.add(const shadcn.MenuDivider());
           }
         }
-        return shadcn.DropdownMenu(children: children);
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: shadcn.DropdownMenu(children: children),
+        );
       },
     );
   }
@@ -1212,9 +1246,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
     final externalSubs = widget.externalSubtitles;
     final currentId = _currentSubtitleTrack?.id;
+    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+    final padding = MediaQuery.of(context).padding;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final maxHeight = screenHeight * 0.7;
 
     shadcn.showDropdown(
       context: context,
+      margin: isMobile
+          ? EdgeInsets.only(
+              left: padding.left,
+              right: padding.right,
+              top: padding.top,
+              bottom: padding.bottom,
+            )
+          : null,
       builder: (dropdownContext) {
         final closeSelected = currentId == 'no' || currentId == null;
         final children = <shadcn.MenuItem>[
@@ -1284,7 +1330,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ));
         }
 
-        return shadcn.DropdownMenu(children: children);
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: shadcn.DropdownMenu(children: children),
+        );
       },
     );
   }
