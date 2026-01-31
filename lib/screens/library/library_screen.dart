@@ -7,6 +7,7 @@ import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../providers/providers.dart';
 import 'widgets/category_row.dart';
+import 'widgets/local_media_row.dart';
 import 'widgets/watch_history_row.dart';
 
 /// 媒体库页面 - 分类横向滚动展示
@@ -109,7 +110,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final watchHistoryState = ref.watch(watchHistoryProvider);
     final hasWatchHistory = watchHistoryState.items.isNotEmpty;
 
-    if (nonEmptyCategories.isEmpty && !hasWatchHistory) {
+    final downloadState = ref.watch(downloadManagerProvider);
+    final hasLocalMedia = downloadState.completedTasks.isNotEmpty;
+
+    if (nonEmptyCategories.isEmpty && !hasWatchHistory && !hasLocalMedia) {
       return const EmptyWidget(
         message: '暂无媒体内容\n请先添加存储源并扫描',
         icon: Icons.movie_outlined,
@@ -117,16 +121,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       );
     }
 
+    // 计算特殊行数量：最近观看 + 本地影片
+    int specialRowCount = 0;
+    if (hasWatchHistory) specialRowCount++;
+    if (hasLocalMedia) specialRowCount++;
+
     return ListView.builder(
       primary: true,
       padding: const EdgeInsets.only(top: 8, bottom: 16),
-      itemCount: nonEmptyCategories.length + (hasWatchHistory ? 1 : 0),
+      itemCount: nonEmptyCategories.length + specialRowCount,
       itemBuilder: (context, index) {
         // 第一项显示最近观看
         if (hasWatchHistory && index == 0) {
           return const WatchHistoryRow();
         }
-        final categoryIndex = hasWatchHistory ? index - 1 : index;
+        // 第二项（或第一项如果没有观看历史）显示本地影片
+        final localMediaIndex = hasWatchHistory ? 1 : 0;
+        if (hasLocalMedia && index == localMediaIndex) {
+          return const LocalMediaRow();
+        }
+        final categoryIndex = index - specialRowCount;
         return CategoryRow(
           key: ValueKey('category_${nonEmptyCategories[categoryIndex].id}'),
           category: nonEmptyCategories[categoryIndex],
