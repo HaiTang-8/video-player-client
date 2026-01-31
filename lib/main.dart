@@ -148,6 +148,8 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
               : shadcn.ThemeMode.light),
       materialTheme: AppTheme.lightTheme,
       routerConfig: router,
+      popoverHandler: const shadcn.PopoverOverlayHandler(),
+      menuHandler: const shadcn.PopoverOverlayHandler(),
       actions: {
         ...WidgetsApp.defaultActions,
         ScrollIntent: AnimatedScrollAction(),
