@@ -1615,30 +1615,33 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
   Widget _buildList(double itemWidth) {
     return SizedBox(
       height: 140,
-      child: ListView.separated(
-        controller: widget.scrollController,
-        physics: ScrollableRowWithArrows.disableManualScroll
-            ? const NeverScrollableScrollPhysics()
-            : null,
-        padding: const EdgeInsets.symmetric(
-            horizontal: _EpisodesCarouselDirect._horizontalPadding),
-        scrollDirection: Axis.horizontal,
-        itemCount: widget.episodes.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
-        itemBuilder: (context, index) {
-          final episode = widget.episodes[index];
-          return _EpisodeCard(
-            episode: episode,
-            tvShowId: widget.tvShowId,
-            seasonId: widget.seasonId,
-            tvShowName: widget.tvShowName,
-            serverBaseUrl: widget.serverBaseUrl,
-            fallbackImageUrl: widget.fallbackImageUrl,
-            episodes: widget.episodes,
-            width: itemWidth,
-          );
-        },
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: ListView.separated(
+          controller: widget.scrollController,
+          physics: ScrollableRowWithArrows.disableManualScroll
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          padding: const EdgeInsets.symmetric(
+              horizontal: _EpisodesCarouselDirect._horizontalPadding),
+          scrollDirection: Axis.horizontal,
+          itemCount: widget.episodes.length,
+          separatorBuilder: (_, __) =>
+              const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
+          itemBuilder: (context, index) {
+            final episode = widget.episodes[index];
+            return _EpisodeCard(
+              episode: episode,
+              tvShowId: widget.tvShowId,
+              seasonId: widget.seasonId,
+              tvShowName: widget.tvShowName,
+              serverBaseUrl: widget.serverBaseUrl,
+              fallbackImageUrl: widget.fallbackImageUrl,
+              episodes: widget.episodes,
+              width: itemWidth,
+            );
+          },
+        ),
       ),
     );
   }
@@ -1776,30 +1779,33 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
       List<Episode> episodes, String? serverBaseUrl, double itemWidth) {
     return SizedBox(
       height: 140,
-      child: ListView.separated(
-        controller: widget.scrollController,
-        physics: ScrollableRowWithArrows.disableManualScroll
-            ? const NeverScrollableScrollPhysics()
-            : null,
-        padding: const EdgeInsets.symmetric(
-            horizontal: _EpisodesCarousel._horizontalPadding),
-        scrollDirection: Axis.horizontal,
-        itemCount: episodes.length,
-        separatorBuilder: (_, __) =>
-            const SizedBox(width: _EpisodesCarousel._itemSpacing),
-        itemBuilder: (context, index) {
-          final episode = episodes[index];
-          return _EpisodeCard(
-            episode: episode,
-            tvShowId: widget.tvShowId,
-            seasonId: widget.seasonId,
-            tvShowName: widget.tvShowName,
-            serverBaseUrl: serverBaseUrl,
-            fallbackImageUrl: widget.fallbackImageUrl,
-            episodes: episodes,
-            width: itemWidth,
-          );
-        },
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: ListView.separated(
+          controller: widget.scrollController,
+          physics: ScrollableRowWithArrows.disableManualScroll
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          padding: const EdgeInsets.symmetric(
+              horizontal: _EpisodesCarousel._horizontalPadding),
+          scrollDirection: Axis.horizontal,
+          itemCount: episodes.length,
+          separatorBuilder: (_, __) =>
+              const SizedBox(width: _EpisodesCarousel._itemSpacing),
+          itemBuilder: (context, index) {
+            final episode = episodes[index];
+            return _EpisodeCard(
+              episode: episode,
+              tvShowId: widget.tvShowId,
+              seasonId: widget.seasonId,
+              tvShowName: widget.tvShowName,
+              serverBaseUrl: serverBaseUrl,
+              fallbackImageUrl: widget.fallbackImageUrl,
+              episodes: episodes,
+              width: itemWidth,
+            );
+          },
+        ),
       ),
     );
   }
@@ -1894,7 +1900,7 @@ class _EpisodeCard extends ConsumerWidget {
                   Positioned.fill(
                     child: Center(
                       child: Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
@@ -1902,7 +1908,7 @@ class _EpisodeCard extends ConsumerWidget {
                         child: const Icon(
                           Icons.play_arrow,
                           color: Colors.white,
-                          size: 24,
+                          size: 16,
                         ),
                       ),
                     ),
