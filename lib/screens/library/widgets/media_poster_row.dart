@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../../core/widgets/tap_feedback.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/models.dart';
@@ -123,17 +124,7 @@ class MediaPosterRow extends ConsumerWidget {
       if (error != null && actualItemCount == 0) {
         return SizedBox(
           height: listHeight,
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
-                const SizedBox(height: 8),
-                if (onRetry != null)
-                  TextButton(onPressed: onRetry, child: const Text('重试')),
-              ],
-            ),
-          ),
+          child: Center(child: _buildInlineError(shadcn.Theme.of(context))),
         );
       }
       if (actualItemCount == 0) {
@@ -194,17 +185,7 @@ class MediaPosterRow extends ConsumerWidget {
         if (error != null && actualItemCount == 0) {
           return SizedBox(
             height: 180,
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('加载失败', style: TextStyle(color: theme.colorScheme.error)),
-                  const SizedBox(height: 8),
-                  if (onRetry != null)
-                    TextButton(onPressed: onRetry, child: const Text('重试')),
-                ],
-              ),
-            ),
+            child: Center(child: _buildInlineError(shadcn.Theme.of(context))),
           );
         }
         if (actualItemCount == 0) {
@@ -254,6 +235,49 @@ class MediaPosterRow extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildInlineError(shadcn.ThemeData theme) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.destructive.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            shadcn.LucideIcons.circleAlert,
+            size: 24,
+            color: theme.colorScheme.destructive,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          '加载失败',
+          style: theme.typography.small.copyWith(
+            color: theme.colorScheme.mutedForeground,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (onRetry != null)
+          shadcn.OutlineButton(
+            onPressed: onRetry,
+            size: shadcn.ButtonSize.small,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(shadcn.LucideIcons.refreshCw, size: 14),
+                const SizedBox(width: 6),
+                const Text('重试'),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
