@@ -8,9 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
+import 'widgets/player_top_bar.dart';
 import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
@@ -427,8 +427,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
     ]);
     if (mounted && !_isDisposing) {
       setState(() {
@@ -826,73 +824,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     return widget.title ?? '';
   }
 
-  Widget _buildPlayerTopBar(String title) {
-    const horizontalPadding = 12.0;
-    final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
-    const barHeight = 44.0;
-
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        color: Colors.black,
-        padding: EdgeInsets.only(
-          left: leftPadding,
-          right: WindowControls.isWindows ? 0 : horizontalPadding,
-        ),
-        height: barHeight,
-        child: Stack(
-          children: [
-            if (WindowControls.isDesktop)
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onPanStart: (_) => WindowControls.startDrag(),
-                  onDoubleTap: () => WindowControls.toggleMaximize(),
-                ),
-              ),
-            Positioned.fill(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  AppBackButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    color: Colors.white,
-                    leftPadding: 0,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (WindowControls.isWindows) ...[
-                    const SizedBox(width: 16),
-                    _buildCaptionButton(Icons.remove, () => WindowControls.minimize()),
-                    _buildCaptionButton(Icons.crop_square, () => WindowControls.toggleMaximize()),
-                    _buildCaptionButton(Icons.close, () => WindowControls.close(), hoverColor: const Color(0xFFE81123)),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCaptionButton(IconData icon, VoidCallback onPressed, {Color? hoverColor}) {
-    return _CaptionButton(icon: icon, onPressed: onPressed, hoverColor: hoverColor);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -915,7 +846,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ],
               ),
             ),
-            _buildPlayerTopBar(_displayTitle.isNotEmpty ? _displayTitle : '加载中...'),
+            PlayerTopBar(
+              title: _displayTitle.isNotEmpty ? _displayTitle : '加载中...',
+              onBack: () => Navigator.of(context).pop(),
+              useGradient: false,
+              useSafeArea: true,
+            ),
           ],
         ),
       );
@@ -953,7 +889,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                 ),
               ),
             ),
-            _buildPlayerTopBar('播放失败'),
+            PlayerTopBar(
+              title: '播放失败',
+              onBack: () => Navigator.of(context).pop(),
+              useGradient: false,
+              useSafeArea: false,
+            ),
           ],
         ),
       );
@@ -996,45 +937,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _CaptionButton extends StatefulWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? hoverColor;
-
-  const _CaptionButton({
-    required this.icon,
-    required this.onPressed,
-    this.hoverColor,
-  });
-
-  @override
-  State<_CaptionButton> createState() => _CaptionButtonState();
-}
-
-class _CaptionButtonState extends State<_CaptionButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = _hovered ? (widget.hoverColor ?? Colors.white24) : Colors.transparent;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          width: 46,
-          height: 44,
-          color: bg,
-          child: Center(child: Icon(widget.icon, size: 16, color: Colors.white)),
-        ),
       ),
     );
   }

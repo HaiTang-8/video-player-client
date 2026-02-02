@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:scroll_animator/scroll_animator.dart';
@@ -27,6 +28,14 @@ void main() async {
 
   // 初始化 MediaKit
   MediaKit.ensureInitialized();
+
+  // 移动端默认锁定竖屏（播放器场景除外）
+  if (Platform.isIOS || Platform.isAndroid) {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   // 初始化 SharedPreferences
   final prefs = await SharedPreferences.getInstance();

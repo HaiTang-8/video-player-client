@@ -8,10 +8,10 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem;
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapIcons;
-import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
+import 'player_top_bar.dart';
 
 class CustomVideoControls extends StatefulWidget {
   final Player player;
@@ -745,7 +745,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           if (_showMediaInfo) _buildMediaInfoPanel(),
           // 控制栏
           if (_visible) ...[
-            _buildTopBar(),
+            PlayerTopBar(
+              title: widget.title ?? '',
+              onBack: widget.onBack ?? () => Navigator.of(context).maybePop(),
+              isLocked: _isLocked,
+            ),
             if (!_isLocked) _buildBottomBar(),
             _buildProgressBar(),
           ],
@@ -900,97 +904,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  Widget _buildTopBar() {
-    final onBack =
-        widget.onBack ??
-        () {
-          Navigator.of(context).maybePop();
-        };
-    final padding = MediaQuery.of(context).padding;
-    const horizontalPadding = 12.0;
-    final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
-    const barHeight = 44.0;
-
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [Colors.black54, Colors.transparent],
-          ),
-        ),
-        child: Padding(
-          padding: EdgeInsets.only(
-            top: WindowControls.isDesktop ? 0 : (padding.top + 10),
-            left: padding.left + leftPadding,
-            right: padding.right + (WindowControls.isWindows ? 0 : horizontalPadding),
-            bottom: WindowControls.isDesktop ? 0 : 10,
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: SizedBox(
-              height: barHeight,
-              child: Stack(
-                children: [
-                  if (WindowControls.isDesktop)
-                    Positioned.fill(
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.translucent,
-                        onPanStart: (_) => WindowControls.startDrag(),
-                        onDoubleTap: () => WindowControls.toggleMaximize(),
-                      ),
-                    ),
-                  Positioned.fill(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        if (!_isLocked) ...[
-                          AppBackButton(onPressed: onBack, color: Colors.white, leftPadding: 0),
-                          const SizedBox(width: 8),
-                        ],
-                        Expanded(
-                          child: Text(
-                            widget.title ?? '',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (WindowControls.isWindows) ...[
-                          const SizedBox(width: 16),
-                          _WindowCaptionButton(
-                            icon: LucideIcons.minus,
-                            onPressed: () => WindowControls.minimize(),
-                          ),
-                          _WindowCaptionButton(
-                            icon: LucideIcons.square,
-                            onPressed: () => WindowControls.toggleMaximize(),
-                          ),
-                          _WindowCaptionButton(
-                            icon: LucideIcons.x,
-                            hoverColor: const Color(0xFFE81123),
-                            onPressed: () => WindowControls.close(),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildProgressBar() {
     final padding = MediaQuery.of(context).padding;
@@ -1731,44 +1644,5 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       widget.onSelectEpisode?.call(result);
     }
     _startHideTimer();
-  }
-}
-
-class _WindowCaptionButton extends StatefulWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final Color? hoverColor;
-
-  const _WindowCaptionButton({
-    required this.icon,
-    required this.onPressed,
-    this.hoverColor,
-  });
-
-  @override
-  State<_WindowCaptionButton> createState() => _WindowCaptionButtonState();
-}
-
-class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = _hovered ? (widget.hoverColor ?? Colors.white24) : Colors.transparent;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onPressed,
-        child: Container(
-          width: 46,
-          height: 44,
-          color: bg,
-          child: Center(child: Icon(widget.icon, color: Colors.white)),
-        ),
-      ),
-    );
   }
 }
