@@ -105,6 +105,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   double _originalSpeed = 1.0;
   Timer? _longPressTimer;
 
+  // 倍速切换提示
+  bool _showSpeedHint = false;
+  double _hintSpeed = 1.0;
+  Timer? _speedHintTimer;
+
   // D键二倍速锁定
   bool _isDoubleSpeedLocked = false;
   double _speedBeforeDoubleLock = 1.0;
@@ -214,6 +219,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
+    _speedHintTimer?.cancel();
     // 确保长按倍速状态被重置
     if (_isLongPressSpeed) {
       widget.player.setRate(_originalSpeed);
@@ -505,6 +511,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     setState(() => _isLongPressSpeed = false);
   }
 
+  void _showSpeedChangeHint(double speed) {
+    _speedHintTimer?.cancel();
+    setState(() {
+      _hintSpeed = speed;
+      _showSpeedHint = true;
+    });
+    _speedHintTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _showSpeedHint = false);
+    });
+  }
+
   void _toggleDoubleSpeedLock() {
     if (_isDoubleSpeedLocked) {
       widget.player.setRate(_speedBeforeDoubleLock);
@@ -789,6 +806,29 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   child: const Text(
                     '倍速中 2x',
                     style: TextStyle(color: Colors.white, fontSize: 14),
+                  ),
+                ),
+              ),
+            ),
+          // 菜单切换倍速提示
+          if (_showSpeedHint && !_isLongPressSpeed)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${_hintSpeed}x',
+                    style: const TextStyle(color: Colors.white, fontSize: 14),
                   ),
                 ),
               ),
@@ -1144,6 +1184,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               onPressed: (_) {
                 widget.player.setRate(s);
                 widget.onSpeedChanged?.call(s);
+                _showSpeedChangeHint(s);
                 _startHideTimer();
               },
             ),

@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/constants/app_constants.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../providers/version_provider.dart';
@@ -314,9 +315,24 @@ class SettingsScreen extends ConsumerWidget {
       context: context,
       title: '选择主题',
       options: [
-        SelectionOption(value: ThemeMode.system, label: '跟随系统'),
-        SelectionOption(value: ThemeMode.light, label: '浅色'),
-        SelectionOption(value: ThemeMode.dark, label: '深色'),
+        SelectionOption(
+          value: ThemeMode.system,
+          label: '跟随系统',
+          icon: shadcn.LucideIcons.monitor,
+          description: '自动匹配系统主题',
+        ),
+        SelectionOption(
+          value: ThemeMode.light,
+          label: '浅色',
+          icon: shadcn.LucideIcons.sun,
+          description: '明亮的界面风格',
+        ),
+        SelectionOption(
+          value: ThemeMode.dark,
+          label: '深色',
+          icon: shadcn.LucideIcons.moon,
+          description: '护眼的深色风格',
+        ),
       ],
       currentValue: current,
     );

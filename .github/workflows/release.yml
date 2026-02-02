@@ -254,6 +254,14 @@ jobs:
             </channel>
           </rss>
           EOF
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          for file in *.exe *.dmg *.apk *.ipa *.zip; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" | awk '{print $1}' > "${file}.sha256"
+            fi
+          done
       - uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*

@@ -189,13 +189,20 @@ class AppTheme {
   );
 
   // shadcn_flutter 主题配置
+  static final shadcn.Typography _shadcnTypography =
+      const shadcn.Typography.geist().copyWith(
+    sans: () => const TextStyle(fontFamily: _fontFamily),
+  );
+
   static shadcn.ThemeData shadcnLightTheme = shadcn.ThemeData(
     colorScheme: shadcn.ColorSchemes.lightDefaultColor,
     radius: 0.5,
+    typography: _shadcnTypography,
   );
 
   static shadcn.ThemeData shadcnDarkTheme = shadcn.ThemeData(
     colorScheme: shadcn.ColorSchemes.darkDefaultColor,
     radius: 0.5,
+    typography: _shadcnTypography,
   );
 }

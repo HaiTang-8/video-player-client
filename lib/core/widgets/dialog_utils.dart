@@ -174,34 +174,32 @@ class DialogUtils {
       return await shadcn.showDialog<T>(
         context: context,
         barrierDismissible: false,
-        builder: (context) => shadcn.AlertDialog(
-          title: Text(title),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: options.map((option) {
-              final isSelected = option.value == currentValue;
-              return InkWell(
-                onTap: () => Navigator.pop(context, option.value),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(option.label)),
-                      if (isSelected)
-                        const Icon(Icons.check, size: 18),
-                    ],
+        builder: (context) {
+          final theme = shadcn.Theme.of(context);
+          return shadcn.AlertDialog(
+            title: Text(title),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: options.map((option) {
+                final isSelected = option.value == currentValue;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _SelectionOptionCard<T>(
+                    option: option,
+                    isSelected: isSelected,
+                    theme: theme,
                   ),
-                ),
-              );
-            }).toList(),
-          ),
-          actions: [
-            shadcn.OutlineButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+                );
+              }).toList(),
             ),
-          ],
-        ),
+            actions: [
+              shadcn.OutlineButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('取消'),
+              ),
+            ],
+          );
+        },
       );
     } finally {
       container.read(windowBorderVisibleProvider.notifier).show();
@@ -270,10 +268,107 @@ class DialogUtils {
   }
 }
 
+class _SelectionOptionCard<T> extends StatelessWidget {
+  final SelectionOption<T> option;
+  final bool isSelected;
+  final shadcn.ThemeData theme;
+
+  const _SelectionOptionCard({
+    required this.option,
+    required this.isSelected,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = theme.colorScheme;
+
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.pop(context, option.value),
+        hoverColor: colorScheme.muted.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isSelected ? colorScheme.primary.withValues(alpha: 0.08) : null,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isSelected ? colorScheme.primary : colorScheme.border.withValues(alpha: 0.5),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            children: [
+              if (option.icon != null) ...[
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? colorScheme.primary.withValues(alpha: 0.15)
+                        : colorScheme.muted,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    option.icon,
+                    size: 18,
+                    color: isSelected ? colorScheme.primary : colorScheme.mutedForeground,
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      option.label,
+                      style: theme.typography.base.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: colorScheme.foreground,
+                      ),
+                    ),
+                    if (option.description != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        option.description!,
+                        style: theme.typography.small.copyWith(
+                          color: colorScheme.mutedForeground,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (isSelected)
+                Icon(
+                  shadcn.LucideIcons.check,
+                  size: 18,
+                  color: colorScheme.primary,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 选项
 class SelectionOption<T> {
   final T value;
   final String label;
+  final IconData? icon;
+  final String? description;
 
-  const SelectionOption({required this.value, required this.label});
+  const SelectionOption({
+    required this.value,
+    required this.label,
+    this.icon,
+    this.description,
+  });
 }
