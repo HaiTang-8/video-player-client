@@ -193,8 +193,6 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
       return;
     }
     if (!mounted) return;
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 }

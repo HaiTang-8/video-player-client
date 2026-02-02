@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import 'media_provider.dart';
@@ -30,10 +32,21 @@ class WatchHistoryState {
 final watchHistoryProvider = NotifierProvider<WatchHistoryNotifier, WatchHistoryState>(WatchHistoryNotifier.new);
 
 class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
+  Timer? _debounceTimer;
+  static const _debounceDuration = Duration(milliseconds: 500);
+
   @override
   WatchHistoryState build() {
     ref.watch(serverUrlProvider);
+    ref.onDispose(() => _debounceTimer?.cancel());
     return WatchHistoryState();
+  }
+
+  void scheduleRefresh({int limit = 20}) {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_debounceDuration, () {
+      refresh(limit: limit);
+    });
   }
 
   Future<void> load({int limit = 20}) async {

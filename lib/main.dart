@@ -19,6 +19,7 @@ import 'data/services/log_service.dart';
 import 'data/services/update_service.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
+import 'providers/watch_history_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,6 +122,8 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached) {
       Aria2Manager.instance.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      ref.read(watchHistoryProvider.notifier).scheduleRefresh();
     }
   }
 

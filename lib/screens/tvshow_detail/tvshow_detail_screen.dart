@@ -1961,9 +1961,6 @@ class _EpisodeCard extends ConsumerWidget {
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
       extra: {'position': position, 'title': title, 'episodes': episodes},
     );
-    debugPrint('[_playEpisode] after push, waiting 500ms');
-    await Future.delayed(const Duration(milliseconds: 500));
-    debugPrint('[_playEpisode] calling refresh');
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 

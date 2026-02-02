@@ -162,7 +162,7 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
         children: [
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => ref.read(watchHistoryProvider.notifier).load(limit: 100),
+              onRefresh: () => ref.read(watchHistoryProvider.notifier).refresh(limit: 100),
               child: _buildBody(state, groups),
             ),
           ),
@@ -269,8 +269,6 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
       context.push('/tvshow/${item.mediaId}');
       return;
     }
-    if (!mounted) return;
-    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     ref.read(watchHistoryProvider.notifier).refresh();
   }

@@ -51,7 +51,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       setState(() => _currentIndex = index);
       // 切换到媒体库时刷新最近观看
       if (index == 0) {
-        ref.read(watchHistoryProvider.notifier).refresh();
+        ref.read(watchHistoryProvider.notifier).scheduleRefresh();
       }
     }
   }
@@ -62,7 +62,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       context.go(_destinations[index].path);
       // 切换到媒体库时刷新最近观看
       if (index == 0) {
-        ref.read(watchHistoryProvider.notifier).refresh();
+        ref.read(watchHistoryProvider.notifier).scheduleRefresh();
       }
     }
   }
