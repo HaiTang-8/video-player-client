@@ -31,6 +31,7 @@ class CustomVideoControls extends StatefulWidget {
   final List<SubtitleInfo> externalSubtitles;
   final String? serverUrl;
   final void Function(double speed)? onSpeedChanged;
+  final String? sourcePath;
 
   const CustomVideoControls({
     super.key,
@@ -51,13 +52,25 @@ class CustomVideoControls extends StatefulWidget {
     this.externalSubtitles = const [],
     this.serverUrl,
     this.onSpeedChanged,
+    this.sourcePath,
   });
 
   @override
   State<CustomVideoControls> createState() => _CustomVideoControlsState();
 }
 
-class _CustomVideoControlsState extends State<CustomVideoControls> {
+class _CustomVideoControlsState extends State<CustomVideoControls>
+    with WidgetsBindingObserver {
+  // iOS 横屏下 SafeArea/viewPadding 可能是“左右对称”的（例如 Dynamic Island 机型），
+  // 仅凭 inset 无法判断刘海到底在左还是在右。为了满足“刘海在右侧才给播放列表右侧留安全距离”
+  // 的需求，这里通过原生接口读取真实的 UIInterfaceOrientation。
+  static const MethodChannel _orientationChannel =
+      MethodChannel('media_player/orientation');
+
+  // 是否判定“刘海在右侧”。用于播放列表弹层的右侧安全距离计算。
+  // - iOS：由原生 UIInterfaceOrientation 决定（landscapeRight => true）。
+  // - 其他平台：兜底使用 viewPadding 的左右大小对比。
+  final ValueNotifier<bool> _notchOnRight = ValueNotifier<bool>(false);
   bool _visible = true;
   Timer? _hideTimer;
   bool _dragging = false;
@@ -114,10 +127,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initBrightness();
     _initCurrentTracks();
     _setupListeners();
     _startHideTimer();
+
+    // 首帧后刷新一次刘海方向（避免 initState 时 MediaQuery 还没就绪）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_refreshNotchSide());
+    });
   }
 
   Future<void> _initBrightness() async {
@@ -190,6 +209,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _notchOnRight.dispose();
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
@@ -207,6 +228,56 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       } catch (_) {}
     }
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // 旋转屏幕/系统 UI 变化会触发 metrics 变化。这里刷新一次刘海方向，确保弹层也能动态更新。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(_refreshNotchSide());
+    });
+  }
+
+  bool _guessNotchOnRightByInsets(EdgeInsets vp) {
+    // Android/部分机型：刘海在右侧时 viewPadding.right 通常会大于 left。
+    // iOS（尤其 Dynamic Island 机型）可能左右相等，这个兜底无法区分左右。
+    return vp.right > vp.left;
+  }
+
+  Future<bool?> _fetchNotchOnRightFromPlatform() async {
+    if (kIsWeb || WindowControls.isDesktop) return null;
+    if (!Platform.isIOS) return null;
+    try {
+      final orientation =
+          await _orientationChannel.invokeMethod<String>('getInterfaceOrientation');
+      switch (orientation) {
+        // 注意：iOS 的 UIInterfaceOrientation 与“顶部（刘海）在屏幕哪一侧”的直觉容易相反。
+        // 以用户反馈为准：当前实现反了，因此这里对调映射：
+        // - landscapeLeft  => 刘海在右侧
+        // - landscapeRight => 刘海在左侧
+        case 'landscapeLeft':
+          return true; // 顶部（刘海）在右侧
+        case 'landscapeRight':
+          return false; // 顶部（刘海）在左侧
+        default:
+          return null;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refreshNotchSide() async {
+    if (!mounted) return;
+    final mq = MediaQuery.maybeOf(context);
+    final vp = mq?.viewPadding ?? EdgeInsets.zero;
+
+    final platformValue = await _fetchNotchOnRightFromPlatform();
+    final next = platformValue ?? _guessNotchOnRightByInsets(vp);
+    if (_notchOnRight.value != next) {
+      _notchOnRight.value = next;
+    }
   }
 
   void _startHideTimer() {
@@ -481,6 +552,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
       // 播放信息
       info['倍速'] = '${_playbackSpeed}x';
       info['音量'] = '${(_volume * 100).toInt()}%';
+
+      // 源路径
+      if (widget.sourcePath != null && widget.sourcePath!.isNotEmpty) {
+        info['源路径'] = widget.sourcePath!;
+      }
 
       if (mounted) setState(() => _mediaInfo = info);
     } catch (_) {}
@@ -1003,9 +1079,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildAudioTrackButton(),
-                    const SizedBox(width: 12),
-                    _buildSubtitleButton(
-                        isLast: !WindowControls.isDesktop && (widget.episodes == null || widget.episodes!.isEmpty)),
+                    _buildSubtitleButton(),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
                       _buildIconButton(LucideIcons.list, _showPlaylistMenu,
                           isLast: !WindowControls.isDesktop, size: 30),
@@ -1088,15 +1162,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           _hideTimer?.cancel();
           _showSpeedMenu(menuContext, speeds);
         },
-        child: Container(
-          constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
-          alignment: Alignment.center,
-          child: Text(
-            '${_playbackSpeed}x',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
+        child: Padding(
+          padding: EdgeInsets.only(right: isDesktop ? 0 : 8),
+          child: Container(
+            constraints: isDesktop ? const BoxConstraints(minWidth: 48) : null,
+            alignment: isDesktop ? Alignment.center : null,
+            child: Text(
+              '${_playbackSpeed}x',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ),
@@ -1229,7 +1306,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     );
   }
 
-  Widget _buildSubtitleButton({bool isLast = false}) {
+  Widget _buildSubtitleButton() {
     return Builder(
       builder: (menuContext) => GestureDetector(
         onTap: () {
@@ -1237,7 +1314,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           _showSubtitleMenu(menuContext);
         },
         child: Padding(
-          padding: EdgeInsets.only(left: isLast ? 6 : 0),
+          padding: const EdgeInsets.only(left: 6),
           child: const SizedBox(
             width: 30,
             height: 30,
@@ -1435,11 +1512,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.black38,
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
               _isLocked ? LucideIcons.lock : LucideIcons.lockOpen,
+              color: Colors.white,
             ),
           ),
         ),
@@ -1451,6 +1529,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final episodes = widget.episodes;
     if (episodes == null || episodes.isEmpty) return;
 
+    // 打开播放列表前先刷新一次刘海方向，确保初次展示就是正确的安全距离。
+    await _refreshNotchSide();
+    if (!mounted) return;
+
     final seasonNumber = episodes.first.seasonNumber;
     final totalEpisodes = episodes.length;
     final currentIndex = widget.currentEpisodeIndex;
@@ -1460,10 +1542,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
     final firstItemKey = GlobalKey();
     var didAutoScroll = false;
 
-    final panelWidth =
-        WindowControls.isDesktop
-            ? 280.0
-            : MediaQuery.of(context).size.width * 0.7;
     final result = await showGeneralDialog<int>(
       context: context,
       barrierDismissible: true,
@@ -1493,94 +1571,136 @@ class _CustomVideoControlsState extends State<CustomVideoControls> {
           ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOut)),
           child: Align(
             alignment: Alignment.centerRight,
-            child: Material(
-              color: const Color(0xFF1C1C1E),
-              child: SizedBox(
-                width: panelWidth,
-                height: double.infinity,
-                child: SafeArea(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-                        child: Text(
-                          '第$seasonNumber季 (共$totalEpisodes集)',
-                          style: const TextStyle(
-                            color: Colors.white60,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: ListView.builder(
-                          controller: scrollController,
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          itemCount: episodes.length,
-                          itemBuilder: (_, index) {
-                            final ep = episodes[index];
-                            final isCurrent = index == currentIndex;
-                            return Padding(
-                              key: index == 0 ? firstItemKey : null,
-                              padding: const EdgeInsets.only(
-                                bottom: itemSpacing,
-                              ),
-                              child: GestureDetector(
-                                onTap: () => Navigator.pop(ctx, index),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 14,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        isCurrent
-                                            ? const Color(0xFF3A3A3C)
-                                            : const Color(0xFF2C2C2E),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border:
-                                        isCurrent
-                                            ? Border.all(
-                                              color: Colors.white,
-                                              width: 2,
-                                            )
-                                            : null,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      if (isCurrent) ...[
-                                        const Icon(
-                                          LucideIcons.circlePlay,
-                                          color: Colors.white,
-                                        ),
-                                        const SizedBox(width: 10),
-                                      ],
-                                      Expanded(
-                                        child: Text(
-                                          '${ep.episodeNumber}. ${ep.name ?? '第 ${ep.episodeNumber} 集'}',
-                                          style: TextStyle(
-                                            color:
-                                                isCurrent
-                                                    ? Colors.white
-                                                    : Colors.white70,
-                                            fontSize: 14,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
+            child: Builder(
+              builder: (innerCtx) {
+                final mq = MediaQuery.of(innerCtx);
+                final panelWidth =
+                    WindowControls.isDesktop ? 280.0 : mq.size.width * 0.5;
+                final vp = mq.viewPadding;
+                // 这里不要直接用 SafeArea：
+                // - 在 Android 沉浸式全屏(immersiveSticky)下，MediaQuery.padding 可能被系统置为 0，
+                //   SafeArea 会“看起来失效”，导致播放列表内容贴到屏幕边缘/刘海区域。
+                // - MediaQuery.viewPadding 会保留“物理屏幕不可用区域”(刘海/圆角等)的 inset，
+                //   更适合用来做全屏播放器的安全距离计算。
+                //
+                // 需求：播放列表面板固定在屏幕右侧：
+                // - 刘海在右侧：右边需要安全距离（避免被刘海遮挡）。
+                // - 刘海在左侧：右边不需要安全距离（尽量铺满到屏幕右边）。
+                //
+                // iOS 有些机型横屏时左右 inset 可能相等（系统为了对称），仅靠 inset 不能判断刘海左右，
+                // 因此在 iOS 上通过原生 UIInterfaceOrientation 判定刘海方向。
+                return ValueListenableBuilder<bool>(
+                  valueListenable: _notchOnRight,
+                  builder: (context, notchOnRight, _) {
+                    final isLandscape = mq.orientation == Orientation.landscape;
+                    final needRightSafe = isLandscape && notchOnRight && vp.right > 0;
+                    final safePadding = EdgeInsets.only(
+                      top: vp.top,
+                      bottom: vp.bottom,
+                      right: needRightSafe ? vp.right : 0,
+                    );
+                    return Material(
+                      color: const Color(0xFF1C1C1E),
+                      child: SizedBox(
+                        width: panelWidth,
+                        height: double.infinity,
+                        child: Padding(
+                          padding: safePadding,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  12,
+                                  12,
+                                  10,
+                                ),
+                                child: Text(
+                                  '第$seasonNumber季 (共$totalEpisodes集)',
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 14,
                                   ),
                                 ),
                               ),
-                            );
-                          },
+                              Expanded(
+                                child: ListView.builder(
+                                  controller: scrollController,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  itemCount: episodes.length,
+                                  itemBuilder: (_, index) {
+                                    final ep = episodes[index];
+                                    final isCurrent = index == currentIndex;
+                                    return Padding(
+                                      key: index == 0 ? firstItemKey : null,
+                                      padding: const EdgeInsets.only(
+                                        bottom: itemSpacing,
+                                      ),
+                                      child: GestureDetector(
+                                        onTap: () => Navigator.pop(ctx, index),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 14,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                isCurrent
+                                                    ? const Color(0xFF3A3A3C)
+                                                    : const Color(0xFF2C2C2E),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border:
+                                                isCurrent
+                                                    ? Border.all(
+                                                      color: Colors.white,
+                                                      width: 2,
+                                                    )
+                                                    : null,
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              if (isCurrent) ...[
+                                                const Icon(
+                                                  LucideIcons.circlePlay,
+                                                  color: Colors.white,
+                                                ),
+                                                const SizedBox(width: 10),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  '${ep.episodeNumber}. ${ep.name ?? '第 ${ep.episodeNumber} 集'}',
+                                                  style: TextStyle(
+                                                    color:
+                                                        isCurrent
+                                                            ? Colors.white
+                                                            : Colors.white70,
+                                                    fontSize: 14,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    );
+                  },
+                );
+              },
             ),
           ),
         );

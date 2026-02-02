@@ -329,9 +329,10 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
                   : 1;
 
           if (crossAxisCount == 1) {
-            return ListView.builder(
+            return ListView.separated(
               padding: const EdgeInsets.all(16),
               itemCount: storages.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final storage = storages[index];
                 return _StorageCard(
@@ -356,7 +357,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
               crossAxisCount: crossAxisCount,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              childAspectRatio: 1.8,
+              childAspectRatio: 2.8,
             ),
             itemCount: storages.length,
             itemBuilder: (context, index) {
@@ -452,11 +453,11 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
               ),
               shadcn.OutlineButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('仅禁用'),
+                child: const Text('禁用'),
               ),
               shadcn.PrimaryButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('禁用并隐藏媒体'),
+                child: const Text('禁用并隐藏'),
               ),
             ],
           ),
@@ -598,21 +599,19 @@ class _StorageCard extends StatelessWidget {
                             ),
                           ),
                         ],
-                        if (storage.settings?['url'] != null) ...[
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              storage.settings!['url']!,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.outline,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
                       ],
                     ),
+                    if (storage.settings?['url'] != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        storage.settings!['url']!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.outline,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -839,47 +838,39 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
       children: [
         const Text('类型').semiBold().small(),
         const SizedBox(height: 8),
-        Row(
-          children:
-              StorageType.values.map((type) {
-                final isSelected = _selectedType == type;
-                return Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                      right: type != StorageType.values.last ? 8 : 0,
-                    ),
-                    child:
-                        isSelected
-                            ? shadcn.PrimaryButton(
-                              onPressed:
-                                  () => setState(() => _selectedType = type),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(type.icon, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(type.label),
-                                ],
-                              ),
-                            )
-                            : shadcn.OutlineButton(
-                              onPressed:
-                                  () => setState(() {
-                                    _selectedType = type;
-                                    _resetTypeDefaults();
-                                  }),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(type.icon, size: 16),
-                                  const SizedBox(width: 6),
-                                  Text(type.label),
-                                ],
-                              ),
-                            ),
-                  ),
-                );
-              }).toList(),
+        shadcn.Select<StorageType>(
+          value: _selectedType,
+          itemBuilder: (context, item) => Row(
+            children: [
+              Icon(item.icon, size: 18),
+              const SizedBox(width: 8),
+              Text(item.label),
+            ],
+          ),
+          onChanged: (value) {
+            if (value != null && value != _selectedType) {
+              setState(() {
+                _selectedType = value;
+                _resetTypeDefaults();
+              });
+            }
+          },
+          popup: shadcn.SelectPopup(
+            items: shadcn.SelectItemList(
+              children: StorageType.values
+                  .map((type) => shadcn.SelectItemButton(
+                        value: type,
+                        child: Row(
+                          children: [
+                            Icon(type.icon, size: 18),
+                            const SizedBox(width: 8),
+                            Text(type.label),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ),
         ),
       ],
     );

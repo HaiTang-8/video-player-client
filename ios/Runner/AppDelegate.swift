@@ -6,6 +6,35 @@ import ActivityKit
 @objc class AppDelegate: FlutterAppDelegate {
   private var eventSink: FlutterEventSink?
 
+  // 获取当前界面的方向（用于横屏时判断刘海在左还是在右）。
+  // iOS 在横屏下有时会返回左右对称的 safeArea inset，仅靠 Flutter 的 viewPadding 不能区分左右；
+  // 因此通过原生 UIInterfaceOrientation 做精确判断。
+  private func currentInterfaceOrientation() -> UIInterfaceOrientation {
+    if #available(iOS 13.0, *) {
+      let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+      let active = scenes.first { $0.activationState == .foregroundActive }
+      return (active ?? scenes.first)?.interfaceOrientation ?? .unknown
+    } else {
+      // iOS 13 之前使用 statusBarOrientation（已废弃，但作为兼容兜底）。
+      return UIApplication.shared.statusBarOrientation
+    }
+  }
+
+  private func interfaceOrientationString() -> String {
+    switch currentInterfaceOrientation() {
+    case .portrait:
+      return "portraitUp"
+    case .portraitUpsideDown:
+      return "portraitDown"
+    case .landscapeLeft:
+      return "landscapeLeft"
+    case .landscapeRight:
+      return "landscapeRight"
+    default:
+      return "unknown"
+    }
+  }
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -50,6 +79,24 @@ import ActivityKit
           result(false)
         }
       } else {
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    // Orientation channel (for notch-side detection in landscape).
+    let orientationChannel = FlutterMethodChannel(
+      name: "media_player/orientation",
+      binaryMessenger: controller.binaryMessenger
+    )
+
+    orientationChannel.setMethodCallHandler { [weak self] (call, result) in
+      guard let self = self else { return }
+      switch call.method {
+      case "getInterfaceOrientation":
+        DispatchQueue.main.async {
+          result(self.interfaceOrientationString())
+        }
+      default:
         result(FlutterMethodNotImplemented)
       }
     }

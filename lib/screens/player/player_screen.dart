@@ -53,6 +53,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _isLoading = true;
   String? _error;
   String? _currentStreamUrl; // 当前播放地址，用于错误显示
+  String? _currentFilePath; // 当前文件的存储源路径
   bool _isFullscreen = false;
   bool _isDisposing = false;
   bool _isExiting = false;
@@ -459,6 +460,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _isLoading = true;
       _error = null;
       _currentStreamUrl = null;
+      _currentFilePath = null;
       _externalSubtitles = [];
       // 无条件重置，确保重试时也能正确 seek 和设置倍速
       _hasSeekToInitialPosition = false;
@@ -582,6 +584,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       };
 
       _currentStreamUrl = playUrl;
+      _currentFilePath = filePath;
       await _player.open(Media(playUrl, httpHeaders: headers));
 
       if (!mounted) return;
@@ -983,6 +986,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             externalSubtitles: _externalSubtitles,
             serverUrl: ref.read(serverUrlProvider),
             onSpeedChanged: _onSpeedChanged,
+            sourcePath: _currentFilePath,
           ),
           if (_isExiting)
             Container(
