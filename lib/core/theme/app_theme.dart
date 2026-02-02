@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../widgets/ios_page_transition.dart';
+import 'app_colors.dart';
 
 /// 应用主题配置
 class AppTheme {
@@ -59,6 +60,7 @@ class AppTheme {
     fontFamily: _fontFamily,
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
     cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
+    extensions: const [AppColors.light],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.light,
@@ -125,6 +127,7 @@ class AppTheme {
     brightness: Brightness.dark,
     fontFamily: _fontFamily,
     cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
+    extensions: const [AppColors.dark],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
       brightness: Brightness.dark,

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -60,12 +61,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Widget build(BuildContext context) {
     final movieAsync = ref.watch(movieDetailProvider(widget.movieId));
     final theme = Theme.of(context);
+    final colors = context.appColors;
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.cardBackground,
       appBar:
           isDesktop
               ? movieAsync.when(

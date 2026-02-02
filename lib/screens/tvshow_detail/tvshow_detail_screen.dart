@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -145,12 +146,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget build(BuildContext context) {
     final tvShowAsync = ref.watch(tvShowDetailProvider(widget.tvShowId));
     final theme = Theme.of(context);
+    final colors = context.appColors;
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.cardBackground,
       appBar:
           isDesktop
               ? tvShowAsync.when(
@@ -420,21 +422,26 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           right: 0,
           bottom: 0,
           height: gradientHeight,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.white.withValues(alpha: 0.0),
-                  Colors.white.withValues(alpha: 0.2),
-                  Colors.white.withValues(alpha: 0.5),
-                  Colors.white.withValues(alpha: 0.8),
-                  Colors.white,
-                ],
-                stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-              ),
-            ),
+          child: Builder(
+            builder: (context) {
+              final bgColor = context.appColors.cardBackground;
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      bgColor.withValues(alpha: 0.0),
+                      bgColor.withValues(alpha: 0.2),
+                      bgColor.withValues(alpha: 0.5),
+                      bgColor.withValues(alpha: 0.8),
+                      bgColor,
+                    ],
+                    stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                  ),
+                ),
+              );
+            },
           ),
         ),
 
@@ -457,6 +464,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     TvShow tvShow,
     Season? selectedSeason,
   ) {
+    final colors = context.appColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -467,8 +475,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 28,
             fontWeight: FontWeight.bold,
             height: 1.2,
@@ -491,7 +499,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     Text(
                       selectedSeason.overview!,
                       style: TextStyle(
-                        color: Colors.black.withValues(alpha: 0.8),
+                        color: colors.textPrimary.withValues(alpha: 0.8),
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -504,7 +512,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     Text(
                       tvShow.overview!,
                       style: TextStyle(
-                        color: Colors.black.withValues(alpha: 0.8),
+                        color: colors.textPrimary.withValues(alpha: 0.8),
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -526,6 +534,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     TvShow tvShow,
     Season? selectedSeason,
   ) {
+    final colors = context.appColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -537,8 +546,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
@@ -595,43 +604,49 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   Widget _buildOverviewSection(TvShow tvShow) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '剧情简介',
-            style: TextStyle(
-              color: Colors.black,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '剧情简介',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OverviewPreviewText(
+                title: tvShow.name,
+                overview: tvShow.overview!,
+                maxLines: 3,
+                style: TextStyle(
+                  color: colors.textPrimary.withValues(alpha: 0.7),
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          OverviewPreviewText(
-            title: tvShow.name,
-            overview: tvShow.overview!,
-            maxLines: 3,
-            style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.7),
-              fontSize: 13,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   /// 构建顶部导航栏
   Widget _buildAppBar(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+    final colors = context.appColors;
     final hasDownloadableEpisodes = selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
 
     return SliverAppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: colors.cardBackground,
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
@@ -640,7 +655,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       leadingWidth: kAppBackButtonWidth,
       leading: AppBackButton(
         onPressed: () => context.pop(),
-        color: Colors.black,
+        color: colors.textPrimary,
       ),
       title: Text(tvShow.name),
       actions: [
@@ -648,13 +663,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
-            child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
+            child: Icon(CupertinoIcons.cloud_download, color: colors.textPrimary, size: 22),
           ),
         Builder(
           builder: (menuContext) => CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             onPressed: () => _showMobileActionsMenu(menuContext, tvShow, selectedSeason),
-            child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
+            child: Icon(CupertinoIcons.ellipsis, color: colors.textPrimary, size: 22),
           ),
         ),
       ],
@@ -908,27 +923,32 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     Color? color, {
     bool forOverlay = false,
   }) {
-    final defaultColor =
-        forOverlay
-            ? Colors.white.withValues(alpha: 0.85)
-            : Colors.black.withValues(alpha: 0.7);
-    return Text(
-      text,
-      style: TextStyle(
-        color: color ?? defaultColor,
-        fontSize: 14,
-        fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
-        shadows:
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        final defaultColor =
             forOverlay
-                ? const [
-                  Shadow(
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                    color: Colors.black45,
-                  ),
-                ]
-                : null,
-      ),
+                ? Colors.white.withValues(alpha: 0.85)
+                : colors.textPrimary.withValues(alpha: 0.7);
+        return Text(
+          text,
+          style: TextStyle(
+            color: color ?? defaultColor,
+            fontSize: 14,
+            fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
+            shadows:
+                forOverlay
+                    ? const [
+                      Shadow(
+                        offset: Offset(0, 1),
+                        blurRadius: 2,
+                        color: Colors.black45,
+                      ),
+                    ]
+                    : null,
+          ),
+        );
+      },
     );
   }
 
@@ -1020,6 +1040,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     String? serverBaseUrl, {
     String title = '相关演员',
   }) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: ScrollableRowWithArrows(
@@ -1028,8 +1049,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         itemSpacing: 8,
         title: Text(
           title,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -1093,6 +1114,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     String? serverBaseUrl, {
     String title = '职员',
   }) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: ScrollableRowWithArrows(
@@ -1101,8 +1123,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         itemSpacing: 8,
         title: Text(
           title,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -1138,56 +1160,61 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final role = job ?? dept;
     final profileUrl = member.profilePath;
 
-    return SizedBox(
-      width: 80,
-      child: Column(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.1),
-              border: Border.all(
-                color: Colors.black.withValues(alpha: 0.2),
-                width: 2,
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        return SizedBox(
+          width: 80,
+          child: Column(
+            children: [
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.textPrimary.withValues(alpha: 0.1),
+                  border: Border.all(
+                    color: colors.textPrimary.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: ClipOval(
+                  child: CastAvatar(
+                    size: 64,
+                    imageUrl: profileUrl,
+                    serverBaseUrl: serverBaseUrl,
+                    iconColor: colors.textPrimary.withValues(alpha: 0.5),
+                    iconSize: 32,
+                  ),
+                ),
               ),
-            ),
-            child: ClipOval(
-              child: CastAvatar(
-                size: 64,
-                imageUrl: profileUrl,
-                serverBaseUrl: serverBaseUrl,
-                iconColor: Colors.black.withValues(alpha: 0.5),
-                iconSize: 32,
+              const SizedBox(height: 8),
+              Text(
+                name,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
-            ),
+              if (role != null && role.isNotEmpty)
+                Text(
+                  role,
+                  style: TextStyle(
+                    color: colors.textPrimary.withValues(alpha: 0.5),
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-          if (role != null && role.isNotEmpty)
-            Text(
-              role,
-              style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.5),
-                fontSize: 10,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1197,61 +1224,66 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final role = member.character;
     final profileUrl = member.profilePath;
 
-    return SizedBox(
-      width: 80,
-      child: Column(
-        children: [
-          // 圆形头像
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.1),
-              border: Border.all(
-                color: Colors.black.withValues(alpha: 0.2),
-                width: 2,
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        return SizedBox(
+          width: 80,
+          child: Column(
+            children: [
+              // 圆形头像
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.textPrimary.withValues(alpha: 0.1),
+                  border: Border.all(
+                    color: colors.textPrimary.withValues(alpha: 0.2),
+                    width: 2,
+                  ),
+                ),
+                child: ClipOval(
+                  child: CastAvatar(
+                    size: 64,
+                    imageUrl: profileUrl,
+                    serverBaseUrl: serverBaseUrl,
+                    iconColor: colors.textPrimary.withValues(alpha: 0.5),
+                    iconSize: 32,
+                  ),
+                ),
               ),
-            ),
-            child: ClipOval(
-              child: CastAvatar(
-                size: 64,
-                imageUrl: profileUrl,
-                serverBaseUrl: serverBaseUrl,
-                iconColor: Colors.black.withValues(alpha: 0.5),
-                iconSize: 32,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
+              const SizedBox(height: 8),
 
-          // 姓名
-          Text(
-            name,
-            style: const TextStyle(
-              color: Colors.black,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-          ),
-
-          // 角色信息（TMDB credits 可提供 character；其它来源可能为空）
-          if (role != null && role.isNotEmpty)
-            Text(
-              '饰 $role',
-              style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.5),
-                fontSize: 10,
+              // 姓名
+              Text(
+                name,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-        ],
-      ),
+
+              // 角色信息（TMDB credits 可提供 character；其它来源可能为空）
+              if (role != null && role.isNotEmpty)
+                Text(
+                  '饰 $role',
+                  style: TextStyle(
+                    color: colors.textPrimary.withValues(alpha: 0.5),
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1431,6 +1463,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     ThemeData theme,
     TvShow tvShow,
   ) {
+    final colors = context.appColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1438,7 +1471,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Divider(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: colors.textPrimary.withValues(alpha: 0.1),
             height: 48,
           ),
         ),
@@ -1452,7 +1485,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: Colors.black.withValues(alpha: 0.5),
+                  color: colors.textPrimary.withValues(alpha: 0.5),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1461,7 +1494,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 'TMDB ID: ${tvShow.tmdbId ?? "未知"} | IMDB: ${tvShow.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: colors.textPrimary.withValues(alpha: 0.3),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -1472,7 +1505,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '类型: ${tvShow.genres!.join(", ")}',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
@@ -1483,7 +1516,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '存储: ${tvShow.storageName}',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
@@ -1496,7 +1529,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     child: Text(
                       '路径: $folder',
                       style: TextStyle(
-                        color: Colors.black.withValues(alpha: 0.3),
+                        color: colors.textPrimary.withValues(alpha: 0.3),
                         fontSize: 11,
                         fontFamily: 'monospace',
                       ),
@@ -1712,10 +1745,10 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
 
     return episodesAsync.when(
       loading:
-          () => const SizedBox(
+          () => SizedBox(
             height: 140,
             child: Center(
-              child: CircularProgressIndicator(color: Colors.black),
+              child: CircularProgressIndicator(color: context.appColors.textPrimary),
             ),
           ),
       error:
@@ -1723,7 +1756,7 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             padding: const EdgeInsets.all(24),
             child: Text(
               '加载失败: $error',
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+              style: TextStyle(color: context.appColors.textPrimary.withValues(alpha: 0.7)),
             ),
           ),
       data: (episodes) {
@@ -1732,7 +1765,7 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             padding: const EdgeInsets.all(24),
             child: Text(
               '暂无剧集',
-              style: TextStyle(color: Colors.black.withValues(alpha: 0.7)),
+              style: TextStyle(color: context.appColors.textPrimary.withValues(alpha: 0.7)),
             ),
           );
         }
@@ -1836,6 +1869,7 @@ class _EpisodeCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
     final thumbnailHeight = width * 90 / 160; // 保持 16:9 比例
     return GestureDetector(
       onTap: episode.hasFile ? () => _playEpisode(context, ref) : null,
@@ -1849,7 +1883,7 @@ class _EpisodeCard extends ConsumerWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: _buildThumbnail(thumbnailHeight),
+                  child: _buildThumbnail(context, thumbnailHeight),
                 ),
 
                 // 时长标签
@@ -1922,8 +1956,8 @@ class _EpisodeCard extends ConsumerWidget {
             Expanded(
               child: Text(
                 '${episode.episodeNumber}. ${episode.name ?? "第${episode.episodeNumber}集"}',
-                style: const TextStyle(
-                  color: Colors.black,
+                style: TextStyle(
+                  color: colors.textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1965,7 +1999,7 @@ class _EpisodeCard extends ConsumerWidget {
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 
-  Widget _buildThumbnail(double height) {
+  Widget _buildThumbnail(BuildContext context, double height) {
     final hasStill = episode.stillPath != null && episode.stillPath!.isNotEmpty;
     final imageUrl = hasStill ? episode.stillPath! : fallbackImageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
@@ -1974,23 +2008,24 @@ class _EpisodeCard extends ConsumerWidget {
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _buildPlaceholder(height),
+        errorWidget: (_, __, ___) => _buildPlaceholder(context, height),
       );
     }
-    return _buildPlaceholder(height);
+    return _buildPlaceholder(context, height);
   }
 
-  Widget _buildPlaceholder(double height) {
+  Widget _buildPlaceholder(BuildContext context, double height) {
+    final colors = context.appColors;
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.1),
+        color: colors.textPrimary.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Icon(
         Icons.play_circle_outline,
-        color: Colors.black.withValues(alpha: 0.3),
+        color: colors.textPrimary.withValues(alpha: 0.3),
         size: 32,
       ),
     );
@@ -2025,6 +2060,7 @@ class _SeasonTabLabel extends ConsumerWidget {
   }
 
   Widget _buildLabel(BuildContext context, List<SourceGroup>? groups) {
+    final colors = context.appColors;
     final hasMultipleSources = groups != null && groups.length > 1;
     final sourceCount = groups?.length ?? 0;
 
@@ -2034,7 +2070,7 @@ class _SeasonTabLabel extends ConsumerWidget {
         Text(
           '第 ${season.seasonNumber} 季',
           style: TextStyle(
-            color: isSelected ? Colors.black : Colors.grey,
+            color: isSelected ? colors.textPrimary : Colors.grey,
             fontSize: 18.0,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.normal,
           ),
@@ -2047,7 +2083,7 @@ class _SeasonTabLabel extends ConsumerWidget {
             child: Text(
               '$sourceCount',
               style: TextStyle(
-                color: isSelected ? Colors.black : Colors.grey,
+                color: isSelected ? colors.textPrimary : Colors.grey,
                 fontSize: 11.0,
                 fontWeight: FontWeight.w500,
               ),
@@ -2059,7 +2095,7 @@ class _SeasonTabLabel extends ConsumerWidget {
             onTap: () => _showSourceGroupsDialog(context, groups),
             child: Icon(
               Icons.arrow_drop_down,
-              color: isSelected ? Colors.black : Colors.grey,
+              color: isSelected ? colors.textPrimary : Colors.grey,
               size: 20,
             ),
           ),
@@ -2073,9 +2109,10 @@ class _SeasonTabLabel extends ConsumerWidget {
     List<SourceGroup>? groups,
   ) {
     if (groups == null || groups.isEmpty) return;
+    final colors = context.appColors;
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: colors.cardBackground,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
@@ -2106,6 +2143,7 @@ class _SourceGroupsSheet extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = context.appColors;
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2118,10 +2156,10 @@ class _SourceGroupsSheet extends ConsumerWidget {
               children: [
                 Text(
                   '$seasonName 播放源',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black,
+                    color: colors.textPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -2198,6 +2236,7 @@ class _SourceGroupTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
       title: Text(
@@ -2205,7 +2244,7 @@ class _SourceGroupTile extends StatelessWidget {
         style: TextStyle(
           fontSize: 15,
           fontWeight: group.isPrimary ? FontWeight.w500 : FontWeight.w500,
-          color: group.isPrimary ? Colors.blue : Colors.black,
+          color: group.isPrimary ? Colors.blue : colors.textPrimary,
         ),
       ),
       subtitle: Column(
@@ -2216,11 +2255,11 @@ class _SourceGroupTile extends StatelessWidget {
           if (group.storageName != null && group.storageName!.isNotEmpty)
             Row(
               children: [
-                Icon(Icons.storage, size: 14, color: Colors.grey[600]),
+                Icon(Icons.storage, size: 14, color: colors.textSecondary),
                 const SizedBox(width: 4),
                 Text(
                   group.storageName!,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
                 ),
               ],
             ),
@@ -2228,12 +2267,12 @@ class _SourceGroupTile extends StatelessWidget {
           // 文件夹路径
           Row(
             children: [
-              Icon(Icons.folder_outlined, size: 14, color: Colors.grey[600]),
+              Icon(Icons.folder_outlined, size: 14, color: colors.textSecondary),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
                   group.folderPath,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -2247,17 +2286,17 @@ class _SourceGroupTile extends StatelessWidget {
               Icon(
                 Icons.video_file_outlined,
                 size: 14,
-                color: Colors.grey[600],
+                color: colors.textSecondary,
               ),
               const SizedBox(width: 4),
               Text(
                 '${group.fileCount} 个文件',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
               const SizedBox(width: 12),
               Text(
                 group.formattedSize,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: colors.textSecondary),
               ),
             ],
           ),
@@ -2344,14 +2383,15 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildButton(Icons.chevron_left, _canScrollLeft, () => _scroll(false)),
+        _buildButton(context, Icons.chevron_left, _canScrollLeft, () => _scroll(false)),
         const SizedBox(width: 4),
-        _buildButton(Icons.chevron_right, _canScrollRight, () => _scroll(true)),
+        _buildButton(context, Icons.chevron_right, _canScrollRight, () => _scroll(true)),
       ],
     );
   }
 
-  Widget _buildButton(IconData icon, bool enabled, VoidCallback onTap) {
+  Widget _buildButton(BuildContext context, IconData icon, bool enabled, VoidCallback onTap) {
+    final colors = context.appColors;
     return GestureDetector(
       onTap: enabled ? onTap : null,
       child: Container(
@@ -2359,15 +2399,15 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
         height: 28,
         decoration: BoxDecoration(
           color: enabled
-              ? Colors.black.withValues(alpha: 0.1)
-              : Colors.black.withValues(alpha: 0.05),
+              ? colors.textPrimary.withValues(alpha: 0.1)
+              : colors.textPrimary.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Icon(
           icon,
           color: enabled
-              ? Colors.black.withValues(alpha: 0.7)
-              : Colors.black.withValues(alpha: 0.3),
+              ? colors.textPrimary.withValues(alpha: 0.7)
+              : colors.textPrimary.withValues(alpha: 0.3),
           size: 20,
         ),
       ),

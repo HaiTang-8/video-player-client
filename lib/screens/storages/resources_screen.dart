@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
@@ -105,7 +106,6 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     final hasActiveDownloads = downloadState.downloadingTasks.isNotEmpty;
     final isDesktop = WindowControls.isDesktop;
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
 
     // 监听扫描状态变化，自动管理弹窗
     ref.listen<GlobalScanState>(globalScanStateProvider, (prev, next) {
@@ -124,7 +124,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     });
 
     return Scaffold(
-      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
+      backgroundColor: context.appColors.groupedBackground,
       appBar:
           isDesktop
               ? DesktopTitleBar(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/window/window_controls.dart';
@@ -43,10 +44,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     final categoriesState = ref.watch(categoriesProvider);
     final isDesktop = WindowControls.isDesktop;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.appColors;
 
     return Scaffold(
-      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
+      backgroundColor: colors.groupedBackground,
       appBar: isDesktop
           ? DesktopTitleBar(
               title: const Text('媒体库'),

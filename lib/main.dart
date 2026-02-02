@@ -147,6 +147,16 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
       }
     });
 
+    // 根据当前主题模式选择 Material 主题
+    final effectiveThemeMode = themeMode == ThemeMode.system
+        ? (WidgetsBinding.instance.platformDispatcher.platformBrightness == Brightness.dark
+            ? ThemeMode.dark
+            : ThemeMode.light)
+        : themeMode;
+    final materialTheme = effectiveThemeMode == ThemeMode.dark
+        ? AppTheme.darkTheme
+        : AppTheme.lightTheme;
+
     return shadcn.ShadcnApp.router(
       title: 'Media Player',
       debugShowCheckedModeBanner: false,
@@ -158,7 +168,7 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
           : (themeMode == ThemeMode.dark
               ? shadcn.ThemeMode.dark
               : shadcn.ThemeMode.light),
-      materialTheme: AppTheme.lightTheme,
+      materialTheme: materialTheme,
       routerConfig: router,
       popoverHandler: const shadcn.PopoverOverlayHandler(),
       menuHandler: const shadcn.PopoverOverlayHandler(),

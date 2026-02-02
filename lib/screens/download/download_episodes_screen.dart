@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/download_indicators.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -89,9 +90,10 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
     final downloadableEpisodes = episodes.where((e) => e.hasFile).toList();
     final isDesktop = WindowControls.isDesktop;
     final title = '${widget.tvShowName} 第 ${widget.seasonNumber} 季';
+    final colors = context.appColors;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
+      backgroundColor: colors.groupedBackground,
       appBar: isDesktop
           ? DesktopAppBar(
               title: Text(title),
@@ -107,7 +109,7 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colors.cardBackground,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: ListView.separated(

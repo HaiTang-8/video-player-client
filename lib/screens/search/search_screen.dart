@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/loading_widget.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
 import '../../core/widgets/tap_feedback.dart';
@@ -100,10 +101,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   Widget build(BuildContext context) {
     final searchState = ref.watch(searchProvider);
     final isDesktop = WindowControls.isDesktop;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = context.appColors;
 
     return Scaffold(
-      backgroundColor: isDark ? null : Colors.white,
+      backgroundColor: colors.cardBackground,
       appBar: isDesktop ? _buildDesktopTitleBar(context) : null,
       body: SafeArea(
         top: !isDesktop,

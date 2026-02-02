@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/theme/app_colors.dart';
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../providers/providers.dart';
@@ -14,10 +15,11 @@ class ProfileScreen extends ConsumerWidget {
     final theme = Theme.of(context);
     final isDesktop = WindowControls.isDesktop;
     final isDark = theme.brightness == Brightness.dark;
+    final colors = context.appColors;
     final playbackSettings = ref.watch(playbackSettingsProvider);
 
     return Scaffold(
-      backgroundColor: isDark ? null : const Color(0xFFF2F2F7),
+      backgroundColor: colors.groupedBackground,
       appBar: isDesktop
           ? const DesktopTitleBar(
               title: Text('我的'),
@@ -94,12 +96,17 @@ class ProfileScreen extends ConsumerWidget {
     bool isDark, {
     required List<Widget> children,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(children: children),
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        return Container(
+          decoration: BoxDecoration(
+            color: colors.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(children: children),
+        );
+      },
     );
   }
 
