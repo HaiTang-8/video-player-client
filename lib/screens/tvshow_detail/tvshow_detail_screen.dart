@@ -85,7 +85,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
         : minItemWidth;
 
-    final targetOffset = targetIndex * (itemWidth + itemSpacing);
+    final adjustedIndex = targetIndex > 0 ? targetIndex - 1 : 0;
+    final targetOffset = adjustedIndex * (itemWidth + itemSpacing);
 
     return targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
   }
