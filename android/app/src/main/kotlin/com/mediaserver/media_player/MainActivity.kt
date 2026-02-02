@@ -10,6 +10,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.StatFs
 import android.util.Log
+import android.view.View
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -23,6 +24,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "media_player/downloader"
         private const val EVENT_CHANNEL = "media_player/downloader/progress"
         private const val STORAGE_CHANNEL = "media_player/storage"
+        private const val ORIENTATION_CHANNEL = "media_player/orientation"
     }
 
     private var downloadService: DownloadService? = null
@@ -105,6 +107,16 @@ class MainActivity : FlutterActivity() {
             }
         }
 
+        // Orientation channel (for notch-side detection in landscape).
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ORIENTATION_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getNotchSide" -> {
+                    result.success(getNotchSide())
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "isAvailable" -> {
@@ -168,6 +180,43 @@ class MainActivity : FlutterActivity() {
                 }
             }
         )
+    }
+
+    // 根据当前 DisplayCutout 的位置判断刘海在左/右侧。
+    //
+    // 为什么不直接用 Flutter 的 viewPadding？
+    // - 部分机型/系统在横屏下可能给出左右对称的 inset（或左右都非 0），仅靠 inset 大小无法判断刘海方向；
+    // - 播放列表面板固定在屏幕右侧，我们需要准确知道刘海是否在右侧，来决定是否给右侧留安全距离。
+    private fun getNotchSide(): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            return "unknown"
+        }
+
+        val decorView: View = window?.decorView ?: return "unknown"
+        val insets = decorView.rootWindowInsets ?: return "unknown"
+        val cutout = insets.displayCutout ?: return "none"
+
+        val rects = cutout.boundingRects
+        if (rects.isNullOrEmpty()) return "none"
+
+        // 只在横屏时才有“左/右侧”的意义；竖屏时直接返回 unknown，让 Flutter 侧用兜底逻辑处理。
+        val metrics = resources.displayMetrics
+        val width = metrics.widthPixels
+        val height = metrics.heightPixels
+        if (width <= 0 || height <= 0 || width < height) {
+            return "unknown"
+        }
+
+        val leftInset = cutout.safeInsetLeft
+        val rightInset = cutout.safeInsetRight
+        if (rightInset > leftInset) return "right"
+        if (leftInset > rightInset) return "left"
+        if (leftInset == 0 && rightInset == 0) return "none"
+
+        // inset 相等时（系统可能为了对称），用 cutout 的实际位置兜底判断。
+        val rect = rects.maxByOrNull { r -> r.width() * r.height() } ?: rects[0]
+        val centerX = (rect.left + rect.right) / 2.0
+        return if (centerX >= width / 2.0) "right" else "left"
     }
 
     private fun ensureServiceStarted(onReady: (DownloadService) -> Unit, onError: (String) -> Unit) {

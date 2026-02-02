@@ -247,24 +247,44 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Future<bool?> _fetchNotchOnRightFromPlatform() async {
     if (kIsWeb || WindowControls.isDesktop) return null;
-    if (!Platform.isIOS) return null;
+    if (!Platform.isIOS && !Platform.isAndroid) return null;
+
+    // 优先使用原生直接返回“刘海在左/右”的判断：
+    // - iOS：通过 UIInterfaceOrientation 推断（并按用户实测修正映射）
+    // - Android：优先从 DisplayCutout 的位置推断（部分机型 viewPadding 可能左右对称，无法区分）
     try {
-      final orientation =
-          await _orientationChannel.invokeMethod<String>('getInterfaceOrientation');
-      switch (orientation) {
-        // 注意：iOS 的 UIInterfaceOrientation 与“顶部（刘海）在屏幕哪一侧”的直觉容易相反。
-        // 以用户反馈为准：当前实现反了，因此这里对调映射：
-        // - landscapeLeft  => 刘海在右侧
-        // - landscapeRight => 刘海在左侧
-        case 'landscapeLeft':
-          return true; // 顶部（刘海）在右侧
-        case 'landscapeRight':
-          return false; // 顶部（刘海）在左侧
+      final side = await _orientationChannel.invokeMethod<String>('getNotchSide');
+      switch (side) {
+        case 'right':
+          return true;
+        case 'left':
+          return false;
+        case 'none':
+          return false;
         default:
           return null;
       }
     } catch (_) {
-      return null;
+      // 兼容旧版本：iOS 先前只实现了 getInterfaceOrientation。
+      if (!Platform.isIOS) return null;
+      try {
+        final orientation =
+            await _orientationChannel.invokeMethod<String>('getInterfaceOrientation');
+        switch (orientation) {
+          // 注意：iOS 的 UIInterfaceOrientation 与“顶部（刘海）在屏幕哪一侧”的直觉容易相反。
+          // 以用户反馈为准：当前实现反了，因此这里对调映射：
+          // - landscapeLeft  => 刘海在右侧
+          // - landscapeRight => 刘海在左侧
+          case 'landscapeLeft':
+            return true; // 顶部（刘海）在右侧
+          case 'landscapeRight':
+            return false; // 顶部（刘海）在左侧
+          default:
+            return null;
+        }
+      } catch (_) {
+        return null;
+      }
     }
   }
 

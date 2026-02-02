@@ -92,6 +92,19 @@ import ActivityKit
     orientationChannel.setMethodCallHandler { [weak self] (call, result) in
       guard let self = self else { return }
       switch call.method {
+      case "getNotchSide":
+        DispatchQueue.main.async {
+          // 按用户实测修正：UIInterfaceOrientation 的 landscapeLeft/Right
+          // 与“刘海在屏幕左/右”的直觉容易相反，这里返回最终用于 UI 的左右侧。
+          switch self.currentInterfaceOrientation() {
+          case .landscapeLeft:
+            result("right")
+          case .landscapeRight:
+            result("left")
+          default:
+            result("unknown")
+          }
+        }
       case "getInterfaceOrientation":
         DispatchQueue.main.async {
           result(self.interfaceOrientationString())
