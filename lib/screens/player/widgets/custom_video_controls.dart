@@ -11,6 +11,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapI
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
+import '../../../data/services/log_service.dart';
 import 'player_top_bar.dart';
 
 class CustomVideoControls extends StatefulWidget {
@@ -148,7 +149,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     if (WindowControls.isDesktop) return;
     try {
       _brightness = await ScreenBrightness().application;
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('VideoControls', 'Failed to get brightness: $e');
+    }
   }
 
   void _initCurrentTracks() {
@@ -231,7 +234,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     if (_brightnessChanged && !WindowControls.isDesktop) {
       try {
         ScreenBrightness().resetApplicationScreenBrightness();
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('VideoControls', 'Failed to reset brightness: $e');
+      }
     }
     super.dispose();
   }
@@ -376,7 +381,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           _brightnessChanged = true;
           try {
             ScreenBrightness().setApplicationScreenBrightness(_brightness);
-          } catch (_) {}
+          } catch (e) {
+            LogService.instance.warn('VideoControls', 'Failed to set brightness: $e');
+          }
         } else {
           _volume = (_volume + delta).clamp(0.0, 1.0);
           _showVolumeOverlay = true;
@@ -596,7 +603,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }
 
       if (mounted) setState(() => _mediaInfo = info);
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('VideoControls', 'Failed to fetch media info: $e');
+    }
   }
 
   void _toggleMediaInfo() {

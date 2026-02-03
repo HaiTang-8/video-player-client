@@ -13,6 +13,7 @@ import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/services/aria2_manager.dart';
 import '../../data/services/aria2_service.dart';
+import '../../data/services/log_service.dart';
 import '../../providers/aria2_provider.dart';
 import '../../providers/download_settings_provider.dart';
 
@@ -56,7 +57,9 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
           setState(() => _builtinVersion = version);
           _startRefreshTimer();
         }
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('Aria2Settings', 'Failed to get version: $e');
+      }
     }
   }
 
@@ -88,7 +91,9 @@ class _Aria2SettingsScreenState extends ConsumerState<Aria2SettingsScreen> {
           _stoppedCount = stopped.length;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Aria2Settings', 'Failed to refresh status: $e');
+    }
   }
 
   bool get _isDesktopPlatform => Platform.isWindows || Platform.isMacOS;

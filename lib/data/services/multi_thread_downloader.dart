@@ -2,7 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
+
+import 'log_service.dart';
 
 class DownloadProgress {
   final int downloadedBytes;
@@ -67,7 +68,7 @@ class MultiThreadDownloader {
   Future<bool> _supportsRangeRequest(String url, Map<String, String>? headers) async {
     // 115 链接支持 Range 请求，但不支持 HEAD 请求
     if (_is115Link(url)) {
-      debugPrint('[MultiThreadDownloader] 115 link detected, assuming range support');
+      LogService.instance.debug('MultiThreadDownloader', '115 link detected, assuming range support');
       return true;
     }
     try {
@@ -79,7 +80,7 @@ class MultiThreadDownloader {
       final contentLength = response.headers.value('content-length');
       return acceptRanges == 'bytes' && contentLength != null;
     } catch (e) {
-      debugPrint('[MultiThreadDownloader] HEAD request failed: $e');
+      LogService.instance.warn('MultiThreadDownloader', 'HEAD request failed: $e');
       return false;
     }
   }
@@ -99,7 +100,7 @@ class MultiThreadDownloader {
         return int.tryParse(contentLength);
       }
     } catch (e) {
-      debugPrint('[MultiThreadDownloader] Failed to get file size: $e');
+      LogService.instance.warn('MultiThreadDownloader', 'Failed to get file size: $e');
     }
     return null;
   }
@@ -123,14 +124,14 @@ class MultiThreadDownloader {
         final match = RegExp(r'/(\d+)').firstMatch(contentRange);
         if (match != null) {
           final size = int.tryParse(match.group(1)!);
-          debugPrint('[MultiThreadDownloader] Got file size via Range: $size');
+          LogService.instance.debug('MultiThreadDownloader', 'Got file size via Range: $size');
           await (response.data as ResponseBody).stream.drain();
           return size;
         }
       }
       await (response.data as ResponseBody).stream.drain();
     } catch (e) {
-      debugPrint('[MultiThreadDownloader] Failed to get file size via Range: $e');
+      LogService.instance.warn('MultiThreadDownloader', 'Failed to get file size via Range: $e');
     }
     return null;
   }
@@ -165,7 +166,10 @@ class MultiThreadDownloader {
       final supportsRange = await _supportsRangeRequest(url, effectiveHeaders);
       final is115 = _is115Link(url);
 
-      debugPrint('[MultiThreadDownloader] File size: $fileSize, Supports range: $supportsRange, Threads: $threadCount, is115: $is115');
+      LogService.instance.debug(
+        'MultiThreadDownloader',
+        'File size: $fileSize, Supports range: $supportsRange, Threads: $threadCount, is115: $is115',
+      );
 
       if (fileSize == null || !supportsRange || fileSize < minChunkSize * 2) {
         await _singleThreadDownload(
@@ -207,7 +211,7 @@ class MultiThreadDownloader {
     void Function()? onComplete,
     void Function(String error)? onError,
   }) async {
-    debugPrint('[MultiThreadDownloader] Using single thread download');
+    LogService.instance.debug('MultiThreadDownloader', 'Using single thread download');
 
     final cancelToken = CancelToken();
     _cancelTokens.add(cancelToken);
@@ -248,17 +252,23 @@ class MultiThreadDownloader {
           if (start == null || start != downloadedBytes) {
             try {
               await file.delete();
-            } catch (_) {}
+            } catch (e) {
+              LogService.instance.warn('MultiThreadDownloader', 'Failed to delete file on resume mismatch: $e');
+            }
             throw Exception('Resume validation failed (Content-Range mismatch)');
           }
         } else if (statusCode == 416) {
           // Local partial is invalid; restart from scratch.
           try {
             await response.data?.stream.drain();
-          } catch (_) {}
+          } catch (e) {
+            LogService.instance.warn('MultiThreadDownloader', 'Failed to drain stream: $e');
+          }
           try {
             if (await file.exists()) await file.delete();
-          } catch (_) {}
+          } catch (e) {
+            LogService.instance.warn('MultiThreadDownloader', 'Failed to delete invalid partial file: $e');
+          }
           effectiveDownloadedBytes = 0;
           response = await _dio.get<ResponseBody>(
             url,
@@ -329,7 +339,9 @@ class MultiThreadDownloader {
     } finally {
       try {
         await sink?.close();
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('MultiThreadDownloader', 'Failed to close file sink: $e');
+      }
     }
   }
 
@@ -347,7 +359,10 @@ class MultiThreadDownloader {
     // 115 链接有时效性，必须确保所有分片同时开始下载
     // 使用较少的分片数，确保所有连接在链接过期前建立
     final effectiveThreadCount = is115 ? threadCount : threadCount;
-    debugPrint('[MultiThreadDownloader] Using $effectiveThreadCount threads for download (is115: $is115)');
+    LogService.instance.debug(
+      'MultiThreadDownloader',
+      'Using $effectiveThreadCount threads for download (is115: $is115)',
+    );
 
     final tempDir = '$savePath.parts';
     final tempDirFile = Directory(tempDir);
@@ -370,7 +385,7 @@ class MultiThreadDownloader {
       index++;
     }
 
-    debugPrint('[MultiThreadDownloader] Created ${chunks.length} chunks');
+    LogService.instance.debug('MultiThreadDownloader', 'Created ${chunks.length} chunks');
 
     for (final chunk in chunks) {
       final partFile = File('$tempDir/part_${chunk.index}');
@@ -428,7 +443,10 @@ class MultiThreadDownloader {
       // 对于 115 链接，所有分片同时开始下载（不使用信号量排队）
       // 这样所有 TCP 连接在链接过期前就能建立
       if (is115) {
-        debugPrint('[MultiThreadDownloader] 115 link: starting all ${pendingChunks.length} chunks simultaneously');
+        LogService.instance.debug(
+          'MultiThreadDownloader',
+          '115 link: starting all ${pendingChunks.length} chunks simultaneously',
+        );
         for (final chunk in pendingChunks) {
           if (_cancelled) break;
           activeThreads++;
@@ -482,7 +500,7 @@ class MultiThreadDownloader {
         return;
       }
 
-      debugPrint('[MultiThreadDownloader] All chunks downloaded, merging...');
+      LogService.instance.info('MultiThreadDownloader', 'All chunks downloaded, merging...');
 
       final outputFile = File(savePath);
       final outputSink = outputFile.openWrite();
@@ -499,7 +517,7 @@ class MultiThreadDownloader {
 
       await tempDirFile.delete(recursive: true);
 
-      debugPrint('[MultiThreadDownloader] Download completed');
+      LogService.instance.info('MultiThreadDownloader', 'Download completed');
       onComplete?.call();
     } catch (e) {
       progressTimer.cancel();
@@ -530,7 +548,10 @@ class MultiThreadDownloader {
       return;
     }
 
-    debugPrint('[MultiThreadDownloader] Downloading chunk ${chunk.index}: $startPosition-$endPosition');
+    LogService.instance.debug(
+      'MultiThreadDownloader',
+      'Downloading chunk ${chunk.index}: $startPosition-$endPosition',
+    );
 
     try {
       final response = await _dio.get<ResponseBody>(
@@ -568,13 +589,13 @@ class MultiThreadDownloader {
 
       if (!_cancelled && chunk.downloaded >= chunk.length) {
         chunk.completed = true;
-        debugPrint('[MultiThreadDownloader] Chunk ${chunk.index} completed');
+        LogService.instance.debug('MultiThreadDownloader', 'Chunk ${chunk.index} completed');
       }
     } on DioException catch (e) {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
-      debugPrint('[MultiThreadDownloader] Chunk ${chunk.index} error: $e');
+      LogService.instance.error('MultiThreadDownloader', 'Chunk ${chunk.index} error: $e');
       rethrow;
     }
   }

@@ -1,7 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/services/log_service.dart';
 import '../utils/image_proxy.dart';
 
 /// 演员头像组件：
@@ -42,9 +42,8 @@ class CastAvatar extends StatelessWidget {
       fit: BoxFit.cover,
       placeholder: (_, __) => _buildFallbackIcon(),
       errorWidget: (_, __, error) {
-        if (kDebugMode) {
-          debugPrint('Cast avatar load failed: $proxied, error: $error');
-        }
+        // 图片加载失败一般不影响主流程，按 debug 级别记录，避免在 release 下刷屏。
+        LogService.instance.debug('CastAvatar', 'load failed: $proxied, error: $error');
 
         return _buildFallbackIcon();
       },

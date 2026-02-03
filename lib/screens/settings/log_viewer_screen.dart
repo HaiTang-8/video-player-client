@@ -634,7 +634,9 @@ class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
           const SnackBar(content: Text('日志已复制到剪贴板')),
         );
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('LogViewer', 'Failed to copy logs: $e');
+    }
   }
 
   Color _getLevelColor(String level) {

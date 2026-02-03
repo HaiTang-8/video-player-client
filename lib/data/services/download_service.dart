@@ -10,11 +10,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/constants/api_constants.dart';
 import '../../core/utils/file_name_sanitizer.dart';
+import '../../core/utils/http_utils.dart';
 import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
 import '../models/storage.dart';
 import 'aria2_manager.dart';
+import 'log_service.dart';
 import 'multi_thread_downloader.dart';
 import 'native_downloader.dart';
 
@@ -207,7 +209,7 @@ class DownloadService {
       final queryParams = userAgent != null ? '?user_agent=${Uri.encodeComponent(userAgent)}' : '';
       final fullUrl = '$url$queryParams';
       if (kDebugMode) {
-        debugPrint('[DownloadService] requesting download url via apiPath=$apiPath');
+        LogService.instance.debug('DownloadService', 'requesting download url via apiPath=$apiPath');
       }
       final response = await _dio.get(fullUrl);
       if (response.statusCode == 200 && response.data != null) {
@@ -218,7 +220,7 @@ class DownloadService {
         }
       }
     } catch (e) {
-      debugPrint('[DownloadService] _fetchDownloadUrl error: $e');
+      LogService.instance.warn('DownloadService', '_fetchDownloadUrl error: $e');
     }
     return null;
   }
@@ -244,30 +246,6 @@ class DownloadService {
     }
 
     return _storageCache[storageId];
-  }
-
-  String _basicAuthHeader(String username, String password) {
-    final token = base64Encode(utf8.encode('$username:$password'));
-    return 'Basic $token';
-  }
-
-  int _effectivePort(Uri uri) {
-    if (uri.hasPort && uri.port > 0) return uri.port;
-    switch (uri.scheme.toLowerCase()) {
-      case 'https':
-        return 443;
-      case 'http':
-        return 80;
-      default:
-        return uri.port;
-    }
-  }
-
-  bool _sameOrigin(Uri? a, Uri? b) {
-    if (a == null || b == null) return false;
-    if (a.scheme.toLowerCase() != b.scheme.toLowerCase()) return false;
-    if (a.host.toLowerCase() != b.host.toLowerCase()) return false;
-    return _effectivePort(a) == _effectivePort(b);
   }
 
   Future<DownloadTask> createTask({
@@ -373,12 +351,15 @@ class DownloadService {
       final safeUrlText = safeUrl == null
           ? '<invalid-url>'
           : '${safeUrl.scheme}://${safeUrl.host}${safeUrl.path}';
-      debugPrint('[DownloadService] ========== DOWNLOAD DEBUG ==========');
-      debugPrint('[DownloadService] Download URL: $safeUrlText');
-      debugPrint('[DownloadService] File: ${task.fileName}');
-      debugPrint('[DownloadService] Multi-thread: $useMultiThread, Threads: $threadCount');
-      debugPrint('[DownloadService] Native downloader: $useNativeDownloader');
-      debugPrint('[DownloadService] =====================================');
+      LogService.instance.debug('DownloadService', '========== DOWNLOAD DEBUG ==========');
+      LogService.instance.debug('DownloadService', 'Download URL: $safeUrlText');
+      LogService.instance.debug('DownloadService', 'File: ${task.fileName}');
+      LogService.instance.debug(
+        'DownloadService',
+        'Multi-thread: $useMultiThread, Threads: $threadCount',
+      );
+      LogService.instance.debug('DownloadService', 'Native downloader: $useNativeDownloader');
+      LogService.instance.debug('DownloadService', '=====================================');
     }
 
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
@@ -400,8 +381,8 @@ class DownloadService {
             username.isNotEmpty) {
           final webdavUri = Uri.tryParse(webdavUrl);
           final targetUri = Uri.tryParse(streamUrl);
-          if (_sameOrigin(webdavUri, targetUri)) {
-            headers['Authorization'] = _basicAuthHeader(username, password);
+          if (HttpUtils.sameOrigin(webdavUri, targetUri)) {
+            headers['Authorization'] = HttpUtils.basicAuthHeader(username, password);
           }
         }
       }
@@ -411,7 +392,7 @@ class DownloadService {
     if (useNativeDownloader && (Platform.isIOS || Platform.isAndroid)) {
       final nativeAvailable = await NativeDownloader.instance.isAvailable();
       if (nativeAvailable) {
-        debugPrint('[DownloadService] Using native downloader');
+        LogService.instance.info('DownloadService', 'Using native downloader');
         await _startNativeDownload(
           task: updatedTask,
           url: streamUrl,
@@ -428,7 +409,7 @@ class DownloadService {
     if (useAria2 && (Platform.isWindows || Platform.isMacOS)) {
       final aria2 = Aria2Manager.instance;
       if (aria2.isRunning && aria2.service != null) {
-        debugPrint('[DownloadService] Using aria2 downloader');
+        LogService.instance.info('DownloadService', 'Using aria2 downloader');
         await _startAria2Download(
           task: updatedTask,
           url: streamUrl,
@@ -712,7 +693,9 @@ class DownloadService {
           if (start == null || start != downloadedBytes) {
             try {
               await file.delete();
-            } catch (_) {}
+            } catch (e) {
+              LogService.instance.warn('DownloadService', 'Failed to delete file on resume mismatch: $e');
+            }
             onError(updatedTask, 'Resume validation failed (Content-Range mismatch)');
             return;
           }
@@ -720,10 +703,14 @@ class DownloadService {
           // Local partial is invalid (e.g. remote changed). Restart download from scratch.
           try {
             await response.data?.stream.drain();
-          } catch (_) {}
+          } catch (e) {
+            LogService.instance.warn('DownloadService', 'Failed to drain stream: $e');
+          }
           try {
             if (await file.exists()) await file.delete();
-          } catch (_) {}
+          } catch (e) {
+            LogService.instance.warn('DownloadService', 'Failed to delete invalid partial file: $e');
+          }
           effectiveDownloadedBytes = 0;
           response = await _dio.get<ResponseBody>(
             url,
@@ -797,16 +784,18 @@ class DownloadService {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
-      debugPrint('[DownloadService] DioException: ${e.type}, message=${e.message}');
+      LogService.instance.error('DownloadService', 'DioException: ${e.type}, message=${e.message}');
       onError(updatedTask, e.message ?? '下载失败');
     } catch (e) {
-      debugPrint('[DownloadService] Exception: $e');
+      LogService.instance.error('DownloadService', 'Exception: $e');
       onError(updatedTask, e.toString());
     } finally {
       try {
         await sink?.flush();
         await sink?.close();
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('DownloadService', 'Failed to close file sink: $e');
+      }
       _cancelTokens.remove(task.id);
     }
   }
@@ -898,12 +887,14 @@ class DownloadService {
     if (await file.exists()) {
       try {
         await file.delete();
-      } catch (_) {
-        // 文件可能仍被占用，稍后重试
+      } catch (e) {
+        LogService.instance.warn('DownloadService', 'Delete failed, retrying: $e');
         await Future.delayed(const Duration(milliseconds: 200));
         try {
           await file.delete();
-        } catch (_) {}
+        } catch (e2) {
+          LogService.instance.warn('DownloadService', 'Delete retry failed: $e2');
+        }
       }
     }
 
@@ -912,7 +903,9 @@ class DownloadService {
     if (await partsDir.exists()) {
       try {
         await partsDir.delete(recursive: true);
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('DownloadService', 'Failed to delete parts dir: $e');
+      }
     }
 
     final parentDir = file.parent;
@@ -974,7 +967,7 @@ class DownloadService {
 
       return reconciled;
     } catch (e) {
-      debugPrint('Failed to load download tasks: $e');
+      LogService.instance.warn('DownloadService', 'Failed to load download tasks: $e');
       return [];
     }
   }
@@ -985,7 +978,7 @@ class DownloadService {
       final jsonStr = jsonEncode(tasks.map((t) => t.toJson()).toList());
       await prefs.setString(tasksKey, jsonStr);
     } catch (e) {
-      debugPrint('Failed to save download tasks: $e');
+      LogService.instance.warn('DownloadService', 'Failed to save download tasks: $e');
     }
   }
 
@@ -1046,8 +1039,8 @@ class DownloadService {
             username.isNotEmpty) {
           final webdavUri = Uri.tryParse(webdavUrl);
           final targetUri = Uri.tryParse(streamUrl);
-          if (_sameOrigin(webdavUri, targetUri)) {
-            headers['Authorization'] = _basicAuthHeader(username, password);
+          if (HttpUtils.sameOrigin(webdavUri, targetUri)) {
+            headers['Authorization'] = HttpUtils.basicAuthHeader(username, password);
           }
         }
       }

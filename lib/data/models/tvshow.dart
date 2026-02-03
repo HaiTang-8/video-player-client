@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'season.dart';
 import 'cast_member.dart';
+import '../services/log_service.dart';
 
 /// 剧集模型
 class TvShow {
@@ -166,7 +168,9 @@ class TvShow {
         if (decoded is List) {
           return decoded.map((e) => e.toString()).toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('TvShow', 'Failed to parse genres: $e');
+      }
     }
     return null;
   }
@@ -186,7 +190,9 @@ class TvShow {
               .map((e) => Season.fromJson(e as Map<String, dynamic>))
               .toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('TvShow', 'Failed to parse seasons: $e');
+      }
     }
     return null;
   }

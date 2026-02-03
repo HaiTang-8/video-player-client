@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'download_service.dart';
+import 'log_service.dart';
 
 class StorageCategory {
   final String id;
@@ -117,7 +118,9 @@ class StorageManagementService {
           size += await entity.length();
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('StorageManagement', 'Failed to calculate directory size: $e');
+    }
     return size;
   }
 
@@ -150,7 +153,9 @@ class StorageManagementService {
       // Keep persistent records consistent with the filesystem.
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(DownloadService.tasksKey);
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('StorageManagement', 'Failed to clear downloads: $e');
+    }
   }
 
   Future<void> _clearImageCache() async {
@@ -160,7 +165,9 @@ class StorageManagementService {
       if (await imageCacheDir.exists()) {
         await imageCacheDir.delete(recursive: true);
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('StorageManagement', 'Failed to clear image cache: $e');
+    }
   }
 
   Future<void> _clearLogs() async {
@@ -174,7 +181,9 @@ class StorageManagementService {
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('StorageManagement', 'Failed to clear logs: $e');
+    }
   }
 
   String formatSize(int bytes) {

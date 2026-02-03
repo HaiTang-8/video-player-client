@@ -47,10 +47,14 @@ class Aria2Manager {
       if (pid != null) {
         Process.killPid(pid);
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Aria2Manager', 'Failed to kill previous process: $e');
+    }
     try {
       await pidFile.delete();
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Aria2Manager', 'Failed to delete pid file: $e');
+    }
   }
 
   Future<String> get _binaryPath async {
@@ -353,13 +357,17 @@ try {
       if (await pidFile.exists()) {
         aria2Pid = int.tryParse(await pidFile.readAsString());
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Aria2Manager', 'Failed to read pid file: $e');
+    }
 
     // 尝试优雅关闭 aria2（避免 wrapper 被 kill 后残留子进程）。
     if (service != null) {
       try {
         await service.shutdown();
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('Aria2Manager', 'Failed to shutdown service: $e');
+      }
       service.dispose();
     }
 
@@ -368,10 +376,14 @@ try {
       if (aria2Pid != null) {
         try {
           Process.killPid(aria2Pid);
-        } catch (_) {}
+        } catch (e) {
+          LogService.instance.warn('Aria2Manager', 'Failed to kill aria2 process: $e');
+        }
       }
       if (await pidFile.exists()) await pidFile.delete();
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Aria2Manager', 'Failed to cleanup pid file: $e');
+    }
 
     _process?.kill();
     _process = null;

@@ -33,7 +33,8 @@ class LogService {
       await _rotateIfNeeded();
       _sink = _logFile!.openWrite(mode: FileMode.append);
     } catch (e) {
-      debugPrint('[LogService] init failed: $e');
+      // 初始化失败时 _sink 可能还不存在，依然通过 LogService 统一输出（仅控制台）。
+      log('ERROR', 'LogService', 'init failed: $e', printToConsole: true);
     }
   }
 
@@ -102,7 +103,7 @@ class LogService {
         if (entry != null) entries.add(entry);
       }
     } catch (e) {
-      debugPrint('[LogService] readLogs failed: $e');
+      log('ERROR', 'LogService', 'readLogs failed: $e', printToConsole: true);
     }
     return entries;
   }

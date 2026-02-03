@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../data/services/api_client.dart';
+import '../data/services/log_service.dart';
 import '../data/services/storage_service.dart';
 import 'server_provider.dart';
 
@@ -418,7 +419,9 @@ void _updateBrowseState(int storageId, BrowseState state) {
 void _safeInvalidate(WidgetRef ref, provider) {
   try {
     ref.invalidate(provider);
-  } catch (_) {}
+  } catch (e) {
+    LogService.instance.warn('StorageProvider', 'Failed to invalidate provider: $e');
+  }
 }
 
 Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {

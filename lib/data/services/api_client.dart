@@ -25,6 +25,11 @@ class ApiClient {
     _dio.options.baseUrl = baseUrl;
   }
 
+  /// 关闭 Dio 客户端，释放资源
+  void close() {
+    _dio.close();
+  }
+
   /// GET 请求
   Future<ApiResponse<T>> get<T>(
     String path, {
@@ -128,13 +133,14 @@ class ApiClient {
       // 1. 标准格式: {"success": true, "data": ...}
       // 2. 健康检查格式: {"status": "ok", "message": ...}
       final success =
-          data['success'] as bool? ??
-          (data['status'] == 'ok') ||
-              (response.statusCode != null &&
-                  response.statusCode! >= 200 &&
-                  response.statusCode! < 300);
-      final message = data['message'] as String?;
-      final error = data['error'] as String?;
+          data['success'] == true ||
+          data['status'] == 'ok' ||
+          (response.statusCode != null &&
+              response.statusCode! >= 200 &&
+              response.statusCode! < 300 &&
+              data['success'] != false);
+      final message = data['message']?.toString();
+      final error = data['error']?.toString();
 
       if (success) {
         final responseData = data['data'];

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'cast_member.dart';
+import '../services/log_service.dart';
 
 /// 电影模型
 class Movie {
@@ -151,7 +152,9 @@ class Movie {
         if (decoded is List) {
           return decoded.map((e) => e.toString()).toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        LogService.instance.warn('Movie', 'Failed to parse genres: $e');
+      }
     }
     return null;
   }
@@ -162,7 +165,8 @@ class Movie {
     if (value is String && value.isNotEmpty) {
       try {
         decoded = jsonDecode(value);
-      } catch (_) {
+      } catch (e) {
+        LogService.instance.warn('Movie', 'Failed to parse cast detail: $e');
         return null;
       }
     }

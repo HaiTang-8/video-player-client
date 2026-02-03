@@ -17,6 +17,7 @@ import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../data/services/api_client.dart';
+import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
 
 /// Emby 风格剧集详情页面
@@ -1991,7 +1992,7 @@ class _EpisodeCard extends ConsumerWidget {
         tvShowName != null
             ? '$tvShowName - ${episode.displayTitle}'
             : episode.displayTitle;
-    debugPrint('[_playEpisode] before push');
+    LogService.instance.debug('TvShowDetail', '_playEpisode before push');
     await context.push(
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
       extra: {'position': position, 'title': title, 'episodes': episodes},

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -8,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../../core/utils/http_utils.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import 'widgets/player_top_bar.dart';
@@ -154,7 +154,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (response.success && response.data != null && !response.data!.completed) {
         _pendingSeekPosition = response.data!.position;
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('PlayerScreen', 'Failed to load episode progress: $e');
+    }
   }
 
   Future<void> _prepareInitialPlayback() async {
@@ -185,7 +187,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // 返回服务端最新记录（包含 position/duration/completed）
         return response.data;
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('PlayerScreen', 'Failed to fetch episode progress: $e');
+    }
     return null;
   }
 
@@ -326,13 +330,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       // 优先使用 _pendingSeekPosition（切换视频时设置），否则使用初始位置
       final targetPosition = _pendingSeekPosition ?? widget.initialPosition;
-      debugPrint(
-        '[PlayerScreen] duration=${duration.inSeconds}s, pendingSeek=$_pendingSeekPosition, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition',
+      LogService.instance.debug(
+        'PlayerScreen',
+        'duration=${duration.inSeconds}s, pendingSeek=$_pendingSeekPosition, initialPosition=${widget.initialPosition}, hasSeek=$_hasSeekToInitialPosition',
       );
       if (!_hasSeekToInitialPosition && targetPosition != null && targetPosition > 0) {
         _hasSeekToInitialPosition = true;
         _pendingSeekPosition = null;
-        debugPrint('[PlayerScreen] Seeking to $targetPosition seconds');
+        LogService.instance.debug('PlayerScreen', 'Seeking to $targetPosition seconds');
         _player.seek(Duration(seconds: targetPosition));
       }
     }));
@@ -391,7 +396,39 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         );
       }
     } catch (e) {
-      debugPrint('[PlayerScreen] Failed to save progress: $e');
+      LogService.instance.warn('PlayerScreen', 'Failed to save progress: $e');
+    }
+  }
+
+  /// 等待下载管理器加载完成（使用 listener 模式，最多等待 5 秒）
+  Future<DownloadManagerState> _waitForDownloadManagerReady() async {
+    final completer = Completer<DownloadManagerState>();
+    const timeout = Duration(seconds: 5);
+
+    // 使用 listenManual 监听状态变化
+    final subscription = ref.listenManual<DownloadManagerState>(
+      downloadManagerProvider,
+      (previous, next) {
+        if (!next.isLoading && !completer.isCompleted) {
+          completer.complete(next);
+        }
+      },
+      fireImmediately: true,
+    );
+
+    // 设置超时
+    final timer = Timer(timeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(ref.read(downloadManagerProvider));
+      }
+    });
+
+    try {
+      final result = await completer.future;
+      return result;
+    } finally {
+      timer.cancel();
+      subscription.close();
     }
   }
 
@@ -403,12 +440,47 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       sub.cancel();
     }
 
-    unawaited(_saveProgress()); // 退出时保存最终进度
+    // 同步保存进度（最后一次尝试，不阻塞dispose）
+    _saveProgressSync();
     if (_isFullscreen) {
       _exitFullscreen();
     }
+    _dio.close();
     _player.dispose();
     super.dispose();
+  }
+
+  /// 同步版本的进度保存，用于 dispose 时的最后尝试
+  void _saveProgressSync() {
+    try {
+      final position = _player.state.position;
+      final duration = _player.state.duration;
+      if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
+
+      final service = _mediaService;
+      if (service == null) return;
+
+      // dispose 阶段不 await：用 ignore() 明确表示“故意不等待”的 Future。
+      if (widget.type == 'movie') {
+        service.updateWatchProgress(
+          mediaType: 'movie',
+          mediaId: widget.id,
+          position: position.inSeconds,
+          duration: duration.inSeconds,
+        ).ignore();
+      } else if (widget.type == 'episode' && widget.tvShowId != null) {
+        final episodeId = _currentEpisode?.id ?? widget.id;
+        service.updateWatchProgress(
+          mediaType: 'tv',
+          mediaId: widget.tvShowId!,
+          episodeId: episodeId,
+          position: position.inSeconds,
+          duration: duration.inSeconds,
+        ).ignore();
+      }
+    } catch (_) {
+      // 静默失败，不阻塞 dispose
+    }
   }
 
   void _enterFullscreen() {
@@ -479,17 +551,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
 
     try {
-      // 等待下载任务加载完成后再检查本地缓存（最多等待 5 秒）
+      // 等待下载任务加载完成后再检查本地缓存
       var downloadState = ref.read(downloadManagerProvider);
       if (downloadState.isLoading) {
-        var waitCount = 0;
-        const maxWait = 100; // 100 * 50ms = 5 秒超时
-        await Future.doWhile(() async {
-          await Future.delayed(const Duration(milliseconds: 50));
-          if (!mounted || ++waitCount >= maxWait) return false;
-          downloadState = ref.read(downloadManagerProvider);
-          return downloadState.isLoading;
-        });
+        downloadState = await _waitForDownloadManagerReady();
       }
 
       // 检查是否有本地缓存
@@ -627,50 +692,23 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           return Uri.parse(url).resolve(loc.trim()).toString();
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('PlayerScreen', 'Failed to resolve redirect: $e');
+    }
     return null;
   }
 
   Future<Storage?> _getStorageById(int storageId) async {
     final current = ref.read(storagesProvider).value;
     if (current != null) {
-      try {
-        return current.firstWhere((s) => s.id == storageId);
-      } catch (_) {}
+      final found = current.where((s) => s.id == storageId).firstOrNull;
+      if (found != null) return found;
     }
 
     await ref.read(storagesProvider.notifier).loadStorages();
     final loaded = ref.read(storagesProvider).value;
     if (loaded == null) return null;
-    try {
-      return loaded.firstWhere((s) => s.id == storageId);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  String _basicAuthHeader(String username, String password) {
-    final token = base64Encode(utf8.encode('$username:$password'));
-    return 'Basic $token';
-  }
-
-  int _effectivePort(Uri uri) {
-    if (uri.hasPort && uri.port > 0) return uri.port;
-    switch (uri.scheme.toLowerCase()) {
-      case 'https':
-        return 443;
-      case 'http':
-        return 80;
-      default:
-        return uri.port;
-    }
-  }
-
-  bool _sameOrigin(Uri? a, Uri? b) {
-    if (a == null || b == null) return false;
-    if (a.scheme.toLowerCase() != b.scheme.toLowerCase()) return false;
-    if (a.host.toLowerCase() != b.host.toLowerCase()) return false;
-    return _effectivePort(a) == _effectivePort(b);
+    return loaded.where((s) => s.id == storageId).firstOrNull;
   }
 
   Future<Map<String, String>?> _buildAuthHeadersForPlayUrl(
@@ -695,8 +733,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final playUri = Uri.tryParse(playUrl);
 
     // 仅当目标 origin 与 WebDAV origin 一致时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
-    if (!_sameOrigin(webdavUri, playUri)) return null;
-    return {'Authorization': _basicAuthHeader(username, password)};
+    if (!HttpUtils.sameOrigin(webdavUri, playUri)) return null;
+    return {'Authorization': HttpUtils.basicAuthHeader(username, password)};
   }
 
   Future<void> _loadExternalSubtitles(int? storageId, String? filePath) async {
@@ -743,7 +781,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         }
       }
     } catch (e) {
-      debugPrint('[PlayerScreen] Failed to load external subtitles: $e');
+      LogService.instance.warn('PlayerScreen', 'Failed to load external subtitles: $e');
     }
   }
 

@@ -134,10 +134,15 @@ final apiClientProvider = Provider<ApiClient?>((ref) {
   if (serverUrl == null || serverUrl.isEmpty) {
     return null;
   }
-  return ApiClient(
+  final client = ApiClient(
     baseUrl: serverUrl,
     onError: (msg) => ref.read(errorNotificationProvider.notifier).notify(msg),
   );
+  // 当 Provider 被销毁时关闭 Dio 客户端
+  ref.onDispose(() {
+    client.close();
+  });
+  return client;
 });
 
 enum ServerConnectionState {

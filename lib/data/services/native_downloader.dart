@@ -1,6 +1,8 @@
 import 'dart:async';
-import 'package:flutter/foundation.dart';
+
 import 'package:flutter/services.dart';
+
+import 'log_service.dart';
 
 class NativeDownloadProgress {
   final String taskId;
@@ -62,7 +64,7 @@ class NativeDownloader {
             _cleanupCallbacks(progress.taskId);
           } else if (progress.status == 'failed') {
             final error = event['error'] as String? ?? 'Download failed';
-            debugPrint('[NativeDownloader] Download failed: $error');
+            LogService.instance.error('NativeDownloader', 'Download failed: $error');
             _errorCallbacks[progress.taskId]?.call(error);
             _cleanupCallbacks(progress.taskId);
           } else {
@@ -71,7 +73,7 @@ class NativeDownloader {
         }
       },
       onError: (error) {
-        debugPrint('[NativeDownloader] Progress stream error: $error');
+        LogService.instance.warn('NativeDownloader', 'Progress stream error: $error');
       },
     );
   }
@@ -87,7 +89,7 @@ class NativeDownloader {
       final result = await _channel.invokeMethod<bool>('isAvailable');
       return result ?? false;
     } catch (e) {
-      debugPrint('[NativeDownloader] isAvailable error: $e');
+      LogService.instance.warn('NativeDownloader', 'isAvailable error: $e');
       return false;
     }
   }
@@ -118,7 +120,7 @@ class NativeDownloader {
       });
       return result;
     } catch (e) {
-      debugPrint('[NativeDownloader] startDownload error: $e');
+      LogService.instance.error('NativeDownloader', 'startDownload error: $e');
       _cleanupCallbacks(taskId);
       onError?.call(e.toString());
       return null;
@@ -129,7 +131,7 @@ class NativeDownloader {
     try {
       await _channel.invokeMethod('pauseDownload', {'taskId': taskId});
     } catch (e) {
-      debugPrint('[NativeDownloader] pauseDownload error: $e');
+      LogService.instance.warn('NativeDownloader', 'pauseDownload error: $e');
     }
   }
 
@@ -137,7 +139,7 @@ class NativeDownloader {
     try {
       await _channel.invokeMethod('resumeDownload', {'taskId': taskId});
     } catch (e) {
-      debugPrint('[NativeDownloader] resumeDownload error: $e');
+      LogService.instance.warn('NativeDownloader', 'resumeDownload error: $e');
     }
   }
 
@@ -146,7 +148,7 @@ class NativeDownloader {
       await _channel.invokeMethod('cancelDownload', {'taskId': taskId});
       _cleanupCallbacks(taskId);
     } catch (e) {
-      debugPrint('[NativeDownloader] cancelDownload error: $e');
+      LogService.instance.warn('NativeDownloader', 'cancelDownload error: $e');
     }
   }
 
@@ -155,7 +157,7 @@ class NativeDownloader {
       final result = await _channel.invokeMethod<bool>('isLiveActivityEnabled');
       return result ?? false;
     } catch (e) {
-      debugPrint('[NativeDownloader] isLiveActivityEnabled error: $e');
+      LogService.instance.warn('NativeDownloader', 'isLiveActivityEnabled error: $e');
       return false;
     }
   }
@@ -167,7 +169,7 @@ class NativeDownloader {
         'status': status,
       });
     } catch (e) {
-      debugPrint('[NativeDownloader] endLiveActivity error: $e');
+      LogService.instance.warn('NativeDownloader', 'endLiveActivity error: $e');
     }
   }
 

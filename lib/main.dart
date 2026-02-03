@@ -68,14 +68,12 @@ void main() {
       );
     },
     (error, stackTrace) {
-      // Keep the console readable even for uncaught async errors.
-      ConsolePrinter.write('Unhandled error: $error\n$stackTrace');
-      // Also persist to log file if available.
+      // 未捕获的异步异常：统一交给 LogService（可落盘，必要时也能输出到控制台）。
       LogService.instance.log(
         'ERROR',
         'Zone',
         'Unhandled error: $error\n$stackTrace',
-        printToConsole: false,
+        printToConsole: true,
       );
     },
     zoneSpecification: ConsolePrinter.zoneSpecification,
@@ -88,7 +86,9 @@ Future<void> _initAria2() async {
   try {
     await aria2.ensureBinary();
     await aria2.start();
-  } catch (_) {}
+  } catch (e) {
+    LogService.instance.warn('Main', 'Failed to initialize aria2: $e');
+  }
 }
 
 String? _getCurrentServerUrl(SharedPreferences prefs) {
@@ -106,7 +106,9 @@ String? _getCurrentServerUrl(SharedPreferences prefs) {
       if (list.isNotEmpty) {
         return list.first['url'] as String?;
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('Main', 'Failed to parse server list: $e');
+    }
   }
 
   return prefs.getString(AppConstants.serverUrlKey);

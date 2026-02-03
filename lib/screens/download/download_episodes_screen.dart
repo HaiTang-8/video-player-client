@@ -14,6 +14,7 @@ import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/season.dart';
+import '../../data/services/log_service.dart';
 import '../../providers/download_provider.dart';
 
 class DownloadEpisodesScreen extends ConsumerStatefulWidget {
@@ -70,7 +71,9 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
           }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      LogService.instance.warn('DownloadEpisodes', 'Failed to load available space: $e');
+    }
   }
 
   Future<int?> _getIOSAvailableSpace(String path) async {
@@ -78,7 +81,8 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
       const channel = MethodChannel('media_player/storage');
       final result = await channel.invokeMethod<int>('getAvailableSpace');
       return result;
-    } catch (_) {
+    } catch (e) {
+      LogService.instance.warn('DownloadEpisodes', 'Failed to get iOS available space: $e');
       return null;
     }
   }
