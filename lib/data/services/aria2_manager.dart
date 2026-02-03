@@ -3,10 +3,10 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'aria2_service.dart';
+import 'log_service.dart';
 
 class Aria2Manager {
   static final Aria2Manager instance = Aria2Manager._();
@@ -277,11 +277,11 @@ try {
 
     process.stdout.transform(const SystemEncoding().decoder).listen((data) {
       addOutput(data, isError: false);
-      debugPrint('[aria2] $data');
+      LogService.instance.debug('aria2', data.trim());
     });
     process.stderr.transform(const SystemEncoding().decoder).listen((data) {
       addOutput(data, isError: true);
-      debugPrint('[aria2 err] $data');
+      LogService.instance.warn('aria2', data.trim());
     });
 
     final exitCompleter = Completer<int>();
@@ -314,11 +314,11 @@ try {
       }
       try {
         final version = await service.getVersion();
-        debugPrint('[Aria2Manager] Started aria2 $version on port $_rpcPort');
+        LogService.instance.info('Aria2Manager', 'Started aria2 $version on port $_rpcPort');
         _startTime = DateTime.now();
         return;
       } catch (_) {
-        debugPrint('[Aria2Manager] Waiting for aria2 RPC... ($i)');
+        LogService.instance.debug('Aria2Manager', 'Waiting for aria2 RPC... ($i)');
       }
     }
     final logs = recentOutput.isEmpty ? '' : '\nRecent output:\n${recentOutput.join('\n')}';

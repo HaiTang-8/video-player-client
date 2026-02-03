@@ -3,12 +3,14 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:scroll_animator/scroll_animator.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants/app_constants.dart';
+import 'core/localization/shadcn_zh_localizations.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/smooth_scroll_behavior.dart';
@@ -170,6 +172,14 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
               : shadcn.ThemeMode.light),
       materialTheme: materialTheme,
       routerConfig: router,
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+      localizationsDelegates: const [
+        ShadcnZhLocalizationsDelegate(),
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       popoverHandler: const shadcn.PopoverOverlayHandler(),
       menuHandler: const shadcn.PopoverOverlayHandler(),
       actions: {

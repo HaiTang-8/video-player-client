@@ -12,6 +12,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/constants/app_constants.dart';
+import 'log_service.dart';
 
 class SecurityException implements Exception {
   final String message;
@@ -91,7 +92,7 @@ class UpdateService {
 
   Future<ReleaseInfo?> checkForUpdate() async {
     if (_serverUrl == null || _serverUrl!.isEmpty) {
-      debugPrint('[UpdateService] No server URL configured');
+      LogService.instance.log('warn', 'UpdateService', 'No server URL configured');
       return null;
     }
 
@@ -102,13 +103,13 @@ class UpdateService {
       });
 
       if (response.statusCode != 200) {
-        debugPrint('[UpdateService] API error: ${response.statusCode}');
+        LogService.instance.log('error', 'UpdateService', 'API error: ${response.statusCode}');
         return null;
       }
 
       final json = jsonDecode(response.body) as Map<String, dynamic>;
       if (json['success'] != true) {
-        debugPrint('[UpdateService] API returned error: ${json['error']}');
+        LogService.instance.log('error', 'UpdateService', 'API returned error: ${json['error']}');
         return null;
       }
 
@@ -147,7 +148,7 @@ class UpdateService {
 
       return null;
     } catch (e) {
-      debugPrint('[UpdateService] Check update error: $e');
+      LogService.instance.log('error', 'UpdateService', 'Check update error: $e');
       return null;
     }
   }
@@ -281,16 +282,16 @@ class UpdateService {
       ]);
 
       final isValid = result.stdout.toString().trim().toLowerCase() == 'true';
-      debugPrint('[UpdateService] Signature verification: ${isValid ? "passed" : "failed"}');
+      LogService.instance.log('info', 'UpdateService', 'Signature verification: ${isValid ? "passed" : "failed"}');
       return isValid;
     } catch (e) {
-      debugPrint('[UpdateService] Signature verification error: $e');
+      LogService.instance.log('error', 'UpdateService', 'Signature verification error: $e');
       return false;
     }
   }
 
   Future<void> _installAndroid(String apkPath) async {
     final result = await OpenFilex.open(apkPath, type: 'application/vnd.android.package-archive');
-    debugPrint('[UpdateService] Install result: ${result.message}');
+    LogService.instance.log('info', 'UpdateService', 'Install result: ${result.message}');
   }
 }

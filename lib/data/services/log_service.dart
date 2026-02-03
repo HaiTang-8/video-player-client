@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
+import '../models/log_entry.dart';
 
 class LogService {
   static LogService? _instance;
@@ -11,6 +12,10 @@ class LogService {
   File? _logFile;
   IOSink? _sink;
   static const int _maxLogSize = 5 * 1024 * 1024; // 5MB
+
+  // 日志级别：debug < info < warn < error
+  static const _levelPriority = {'DEBUG': 0, 'INFO': 1, 'WARN': 2, 'ERROR': 3};
+  final String _minLevel = kDebugMode ? 'DEBUG' : 'INFO';
 
   Future<void> init() async {
     try {
@@ -39,12 +44,18 @@ class LogService {
   }
 
   void log(String level, String tag, String message) {
+    final upperLevel = level.toUpperCase();
+    final minPriority = _levelPriority[_minLevel] ?? 1;
+    final currentPriority = _levelPriority[upperLevel] ?? 1;
+    if (currentPriority < minPriority) return;
+
     final timestamp = DateTime.now().toIso8601String();
-    final line = '[$timestamp] [$level] [$tag] $message\n';
-    debugPrint(line.trim());
+    final line = '[$timestamp] [$upperLevel] [$tag] $message\n';
+    if (kDebugMode) debugPrint(line.trim());
     _sink?.write(line);
   }
 
+  void debug(String tag, String message) => log('DEBUG', tag, message);
   void info(String tag, String message) => log('INFO', tag, message);
   void warn(String tag, String message) => log('WARN', tag, message);
   void error(String tag, String message) => log('ERROR', tag, message);
@@ -55,5 +66,36 @@ class LogService {
     await _sink?.flush();
     await _sink?.close();
     _sink = null;
+  }
+
+  Future<String?> getLogPath() async {
+    if (_logFile != null) return _logFile!.path;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      return '${dir.path}/logs/player.log';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<LogEntry>> readLogs() async {
+    await flush();
+    final entries = <LogEntry>[];
+    try {
+      final path = await getLogPath();
+      if (path == null) return entries;
+
+      final file = File(path);
+      if (!await file.exists()) return entries;
+
+      final lines = await file.readAsLines();
+      for (final line in lines) {
+        final entry = LogEntry.parse(line);
+        if (entry != null) entries.add(entry);
+      }
+    } catch (e) {
+      debugPrint('[LogService] readLogs failed: $e');
+    }
+    return entries;
   }
 }

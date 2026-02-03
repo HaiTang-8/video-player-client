@@ -8,6 +8,7 @@ import '../data/models/episode.dart';
 import '../data/models/movie.dart';
 import '../data/services/aria2_service.dart';
 import '../data/services/download_service.dart';
+import '../data/services/log_service.dart';
 import 'aria2_provider.dart';
 import 'download_settings_provider.dart';
 import 'server_provider.dart';
@@ -152,7 +153,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     final service = _service;
     if (service == null) return;
     if (state.tasks.any((t) => t.episodeId == episode.id)) {
-      debugPrint('Episode ${episode.id} already in download list');
+      LogService.instance.debug('Download', 'Episode ${episode.id} already in download list');
       return;
     }
 
@@ -204,7 +205,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     final service = _service;
     if (service == null) return;
     if (state.tasks.any((t) => t.movieId == movie.id)) {
-      debugPrint('Movie ${movie.id} already in download list');
+      LogService.instance.debug('Download', 'Movie ${movie.id} already in download list');
       return;
     }
 
@@ -255,7 +256,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
       final filename = file.substring(file.lastIndexOf('/') + 1);
 
       if (kDebugMode) {
-        debugPrint('[Aria2] Adding download taskId=${task.id}, dir=$dir, filename=$filename, headerKeys=${info.headers.keys.toList()}');
+        LogService.instance.debug('Aria2', 'Adding download taskId=${task.id}, dir=$dir, filename=$filename, headerKeys=${info.headers.keys.toList()}');
       }
 
       final gid = await aria2.addUri(
@@ -275,7 +276,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
 
       _pollAria2Status(gid, updatedTask);
     } catch (e) {
-      debugPrint('[Aria2] Error: $e');
+      LogService.instance.error('Aria2', 'Error: $e');
       _startingTaskIds.remove(task.id);
       final updatedTask = task.copyWith(
         status: DownloadStatus.failed,
@@ -310,7 +311,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
         final downloadSpeed = double.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
         final aria2Status = status['status'] as String?;
 
-        debugPrint('[Aria2] Status: $aria2Status, Progress: $downloadedBytes/$totalBytes, Speed: ${(downloadSpeed / 1024 / 1024).toStringAsFixed(2)} MB/s');
+        LogService.instance.debug('Aria2', 'Status: $aria2Status, Progress: $downloadedBytes/$totalBytes, Speed: ${(downloadSpeed / 1024 / 1024).toStringAsFixed(2)} MB/s');
 
         if (aria2Status == 'complete') {
           final updatedTask = currentTask.copyWith(
@@ -347,7 +348,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
         }
       }
     } catch (e) {
-      debugPrint('[Aria2] Poll error: $e');
+      LogService.instance.error('Aria2', 'Poll error: $e');
     }
   }
 

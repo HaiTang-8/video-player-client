@@ -21,6 +21,7 @@ import '../../screens/playback_settings/playback_settings_screen.dart';
 import '../../screens/settings/database_backup_screen.dart';
 import '../../screens/settings/aria2_settings_screen.dart';
 import '../../screens/settings/storage_management_screen.dart';
+import '../../screens/settings/log_viewer_screen.dart';
 import '../../screens/tvshow_detail/overview_screen.dart';
 import '../../screens/download/download_episodes_screen.dart';
 import '../../screens/download/download_manager_screen.dart';
@@ -257,6 +258,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/storage-management',
         builder: (context, state) => const StorageManagementScreen(),
+      ),
+
+      // 日志查看页面
+      GoRoute(
+        path: '/log-viewer',
+        builder: (context, state) => const LogViewerScreen(),
       ),
 
       // 服务器管理页面（从设置进入）

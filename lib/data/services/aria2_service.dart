@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'log_service.dart';
 
 class Aria2Service {
   final String rpcUrl;
@@ -28,7 +29,7 @@ class Aria2Service {
       body['params'] = ['token:$secret', ...(params ?? [])];
     }
 
-    debugPrint('[Aria2] RPC call: $method');
+    LogService.instance.debug('Aria2', 'RPC call: $method');
     final response = await _dio.post(rpcUrl, data: jsonEncode(body));
 
     if (response.statusCode == 200) {
@@ -87,7 +88,7 @@ class Aria2Service {
         }
         return line;
       }).toList();
-      debugPrint('[Aria2] Headers: $redacted');
+      LogService.instance.debug('Aria2', 'Headers: $redacted');
     }
 
     final result = await _call('aria2.addUri', [
@@ -95,7 +96,7 @@ class Aria2Service {
       options,
     ]);
     final gid = result['result'] as String;
-    debugPrint('[Aria2] Task added, gid=$gid');
+    LogService.instance.info('Aria2', 'Task added, gid=$gid');
     return gid;
   }
 

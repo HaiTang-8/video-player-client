@@ -120,6 +120,14 @@ class SettingsScreen extends ConsumerWidget {
                 title: '存储空间',
                 onTap: () => context.push('/storage-management'),
               ),
+              _buildDivider(isDark),
+              _buildListTile(
+                context, theme, isDark,
+                icon: CupertinoIcons.doc_text_search,
+                iconColor: Colors.indigo,
+                title: '应用日志',
+                onTap: () => context.push('/log-viewer'),
+              ),
             ],
           ),
           const SizedBox(height: 24),
@@ -387,7 +395,8 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
         subtitle = '已是最新版本';
         break;
       case UpdateStatus.error:
-        subtitle = '检查失败';
+        final msg = updateState.errorMessage;
+        subtitle = msg != null && msg.isNotEmpty ? '失败: $msg' : '更新失败';
         break;
       default:
         subtitle = '点击检查';
