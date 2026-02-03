@@ -20,11 +20,17 @@ class LogEntry {
     final timestamp = DateTime.tryParse(match.group(1)!);
     if (timestamp == null) return null;
 
+    String decodeSingleLineEscapes(String s) {
+      // LogService persists multi-line/CR content as visible escapes so each log
+      // entry stays on one line. Convert them back for display.
+      return s.replaceAll(r'\r', '\n').replaceAll(r'\n', '\n');
+    }
+
     return LogEntry(
       timestamp: timestamp,
       level: match.group(2)!,
-      tag: match.group(3)!,
-      message: match.group(4)!,
+      tag: decodeSingleLineEscapes(match.group(3)!),
+      message: decodeSingleLineEscapes(match.group(4)!),
     );
   }
 }

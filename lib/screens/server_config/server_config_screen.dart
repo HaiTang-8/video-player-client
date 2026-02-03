@@ -47,6 +47,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
   void _showAddServerDialog() {
     final nameController = TextEditingController();
     final hostController = TextEditingController();
+    final hostFocusNode = FocusNode();
     String protocol = 'http';
 
     shadcn.showDialog(
@@ -64,6 +65,8 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   shadcn.TextField(
                     controller: nameController,
                     placeholder: const Text('名称（如：家里、公司）'),
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) => hostFocusNode.requestFocus(),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -96,8 +99,11 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   const SizedBox(height: 12),
                   shadcn.TextField(
                     controller: hostController,
+                    focusNode: hostFocusNode,
                     placeholder: const Text('192.168.1.100:8080'),
                     keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => hostFocusNode.unfocus(),
                   ),
                 ],
               ),
@@ -137,6 +143,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     final hostController = TextEditingController(
       text: uri != null ? '${uri.host}${uri.hasPort ? ':${uri.port}' : ''}' : server.url,
     );
+    final hostFocusNode = FocusNode();
     String protocol = uri?.scheme ?? 'http';
 
     shadcn.showDialog(
@@ -154,6 +161,8 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   shadcn.TextField(
                     controller: nameController,
                     placeholder: const Text('名称（如：家里、公司）'),
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) => hostFocusNode.requestFocus(),
                   ),
                   const SizedBox(height: 12),
                   Row(
@@ -186,8 +195,11 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   const SizedBox(height: 12),
                   shadcn.TextField(
                     controller: hostController,
+                    focusNode: hostFocusNode,
                     placeholder: const Text('192.168.1.100:8080'),
                     keyboardType: TextInputType.url,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => hostFocusNode.unfocus(),
                   ),
                 ],
               ),

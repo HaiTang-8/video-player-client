@@ -13,6 +13,11 @@ class LogService {
   IOSink? _sink;
   static const int _maxLogSize = 5 * 1024 * 1024; // 5MB
 
+  static final RegExp _ansiCsi = RegExp(r'\x1B\[[0-?]*[ -/]*[@-~]');
+  static final RegExp _ansiOsc = RegExp(r'\x1B\][^\x07]*(?:\x07|\x1B\\)');
+  static final RegExp _ansiSingle = RegExp(r'\x1B[@-Z\\-_]');
+  static final RegExp _controlChars = RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]');
+
   // 日志级别：debug < info < warn < error
   static const _levelPriority = {'DEBUG': 0, 'INFO': 1, 'WARN': 2, 'ERROR': 3};
   final String _minLevel = kDebugMode ? 'DEBUG' : 'INFO';
@@ -43,15 +48,18 @@ class LogService {
     }
   }
 
-  void log(String level, String tag, String message) {
+  void log(String level, String tag, String message, {bool printToConsole = kDebugMode}) {
     final upperLevel = level.toUpperCase();
     final minPriority = _levelPriority[_minLevel] ?? 1;
     final currentPriority = _levelPriority[upperLevel] ?? 1;
     if (currentPriority < minPriority) return;
 
+    final safeTag = _sanitizeSingleLine(tag);
+    final safeMessage = _sanitizeSingleLine(message);
+
     final timestamp = DateTime.now().toIso8601String();
-    final line = '[$timestamp] [$upperLevel] [$tag] $message\n';
-    if (kDebugMode) debugPrint(line.trim());
+    final line = '[$timestamp] [$upperLevel] [$safeTag] $safeMessage\n';
+    if (printToConsole) debugPrint(line.trimRight());
     _sink?.write(line);
   }
 
@@ -97,5 +105,25 @@ class LogService {
       debugPrint('[LogService] readLogs failed: $e');
     }
     return entries;
+  }
+
+  /// Ensures each log entry stays on a single line and won't corrupt terminals.
+  static String _sanitizeSingleLine(String input) {
+    var s = input;
+    // Normalize newline controls early.
+    s = s.replaceAll('\r\n', '\n');
+
+    // Strip ANSI escape sequences.
+    s = s.replaceAll(_ansiOsc, '');
+    s = s.replaceAll(_ansiCsi, '');
+    s = s.replaceAll(_ansiSingle, '');
+
+    // Preserve the original content while keeping one-line logs.
+    s = s.replaceAll('\r', r'\r');
+    s = s.replaceAll('\n', r'\n');
+
+    // Remove other control characters (keep tabs, since they are useful in logs).
+    s = s.replaceAll(_controlChars, '');
+    return s;
   }
 }

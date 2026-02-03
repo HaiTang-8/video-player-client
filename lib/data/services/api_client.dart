@@ -1,10 +1,9 @@
 import 'package:dio/dio.dart';
-import 'package:logger/logger.dart';
+import 'log_service.dart';
 
 /// API 客户端封装
 class ApiClient {
   final Dio _dio;
-  final Logger _logger = Logger();
   final void Function(String)? onError;
 
   ApiClient({required String baseUrl, this.onError})
@@ -204,7 +203,8 @@ class ApiClient {
         errorMessage = e.message ?? '网络错误';
     }
 
-    _logger.e('API Error: $errorMessage', error: e);
+    // Avoid pretty/ANSI console output. Keep messages single-line & stable.
+    LogService.instance.error('ApiClient', 'API Error: $errorMessage (${e.type})');
 
     onError?.call(errorMessage);
 

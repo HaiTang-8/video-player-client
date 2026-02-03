@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:auto_updater/auto_updater.dart';
 import 'package:crypto/crypto.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';

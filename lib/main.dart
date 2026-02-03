@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,6 +12,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants/app_constants.dart';
 import 'core/localization/shadcn_zh_localizations.dart';
+import 'core/logging/console_printer.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/smooth_scroll_behavior.dart';
@@ -21,47 +23,62 @@ import 'data/services/log_service.dart';
 import 'data/services/update_service.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
-import 'providers/watch_history_provider.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+void main() {
+  runZonedGuarded(
+    () async {
+      WidgetsFlutterBinding.ensureInitialized();
 
-  // 初始化日志服务
-  await LogService.instance.init();
+      // 初始化日志服务
+      await LogService.instance.init();
 
-  // 初始化 MediaKit
-  MediaKit.ensureInitialized();
+      // 初始化 MediaKit
+      MediaKit.ensureInitialized();
 
-  // 移动端默认锁定竖屏（播放器场景除外）
-  if (Platform.isIOS || Platform.isAndroid) {
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
-  }
+      // 移动端默认锁定竖屏（播放器场景除外）
+      if (Platform.isIOS || Platform.isAndroid) {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      }
 
-  // 初始化 SharedPreferences
-  final prefs = await SharedPreferences.getInstance();
+      // 初始化 SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
 
-  // PC端自动启动aria2
-  if (Platform.isWindows || Platform.isMacOS) {
-    final engine = prefs.getString(AppConstants.downloadEngineKey) ?? 'aria2Builtin';
-    if (engine == 'aria2Builtin') {
-      _initAria2();
-    }
-  }
+      // PC端自动启动aria2
+      if (Platform.isWindows || Platform.isMacOS) {
+        final engine = prefs.getString(AppConstants.downloadEngineKey) ?? 'aria2Builtin';
+        if (engine == 'aria2Builtin') {
+          _initAria2();
+        }
+      }
 
-  // 初始化更新服务（macOS Sparkle）
-  final serverUrl = _getCurrentServerUrl(prefs);
-  await UpdateService.instance.init(serverUrl);
+      // 初始化更新服务（macOS Sparkle）
+      final serverUrl = _getCurrentServerUrl(prefs);
+      await UpdateService.instance.init(serverUrl);
 
-  runApp(
-    ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWithValue(prefs),
-      ],
-      child: const MediaPlayerApp(),
-    ),
+      runApp(
+        ProviderScope(
+          overrides: [
+            sharedPreferencesProvider.overrideWithValue(prefs),
+          ],
+          child: const MediaPlayerApp(),
+        ),
+      );
+    },
+    (error, stackTrace) {
+      // Keep the console readable even for uncaught async errors.
+      ConsolePrinter.write('Unhandled error: $error\n$stackTrace');
+      // Also persist to log file if available.
+      LogService.instance.log(
+        'ERROR',
+        'Zone',
+        'Unhandled error: $error\n$stackTrace',
+        printToConsole: false,
+      );
+    },
+    zoneSpecification: ConsolePrinter.zoneSpecification,
   );
 }
 
