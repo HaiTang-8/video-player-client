@@ -4,42 +4,56 @@
       "title": "## 🚀 Features",
       "labels": ["feat", "feature"],
       "rules": [
-        {"pattern": "^feat(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*feat(\\(.+\\))?(!)?:"}
       ]
     },
     {
       "title": "## 🐛 Bug Fixes",
       "labels": ["fix", "bug"],
       "rules": [
-        {"pattern": "^fix(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*fix(\\(.+\\))?(!)?:"}
       ]
     },
     {
       "title": "## ♻️ Refactoring",
       "labels": ["refactor"],
       "rules": [
-        {"pattern": "^refactor(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*refactor(\\(.+\\))?(!)?:"}
       ]
     },
     {
       "title": "## ⚡ Performance",
       "labels": ["perf"],
       "rules": [
-        {"pattern": "^perf(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*perf(\\(.+\\))?(!)?:"}
+      ]
+    },
+    {
+      "title": "## 📚 Documentation",
+      "labels": ["docs", "documentation"],
+      "rules": [
+        {"pattern": "^\\s*docs(\\(.+\\))?(!)?:"}
+      ]
+    },
+    {
+      "title": "## 🎨 Styles",
+      "labels": ["style", "ui"],
+      "rules": [
+        {"pattern": "^\\s*style(\\(.+\\))?(!)?:"}
       ]
     },
     {
       "title": "## 🧪 Tests",
       "labels": ["test"],
       "rules": [
-        {"pattern": "^test(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*test(\\(.+\\))?(!)?:"}
       ]
     },
     {
       "title": "## 📦 Build & CI",
       "labels": ["build", "ci", "chore"],
       "rules": [
-        {"pattern": "^(build|ci|chore)(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*(build|ci|chore)(\\(.+\\))?(!)?:"}
       ]
     },
     {
@@ -60,7 +74,7 @@
   "empty_template": "- No changes found",
   "transformers": [
     {
-      "pattern": "^(feat|fix|refactor|perf|test|build|ci|chore)(\\(.+\\))?(!)?:\\s*",
+      "pattern": "^\\s*(feat|fix|refactor|perf|docs|style|test|build|ci|chore)(\\(.+\\))?(!)?:\\s*",
       "target": ""
     }
   ]
