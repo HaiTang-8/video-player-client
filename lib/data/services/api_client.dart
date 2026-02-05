@@ -210,7 +210,7 @@ class ApiClient {
     }
 
     // Avoid pretty/ANSI console output. Keep messages single-line & stable.
-    LogService.instance.error('ApiClient', 'API Error: $errorMessage (${e.type})');
+    LogService.instance.error('ApiClient', 'API Error: $errorMessage (${e.type}) [${e.requestOptions.method} ${e.requestOptions.path}]');
 
     onError?.call(errorMessage);
 
