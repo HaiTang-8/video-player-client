@@ -66,6 +66,10 @@ jobs:
           brew install create-dmg
           create-dmg \
             --volname "观影" \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "观影.app" 150 200 \
+            --app-drop-link 450 200 \
             --no-internet-enable \
             "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" \
             "build/macos/Build/Products/Release/观影.app"
