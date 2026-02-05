@@ -4,56 +4,56 @@
       "title": "## 🚀 Features",
       "labels": ["feat", "feature"],
       "rules": [
-        {"pattern": "^\\s*feat(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*feat(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## 🐛 Bug Fixes",
       "labels": ["fix", "bug"],
       "rules": [
-        {"pattern": "^\\s*fix(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*fix(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## ♻️ Refactoring",
       "labels": ["refactor"],
       "rules": [
-        {"pattern": "^\\s*refactor(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*refactor(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## ⚡ Performance",
       "labels": ["perf"],
       "rules": [
-        {"pattern": "^\\s*perf(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*perf(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## 📚 Documentation",
       "labels": ["docs", "documentation"],
       "rules": [
-        {"pattern": "^\\s*docs(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*docs(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## 🎨 Styles",
       "labels": ["style", "ui"],
       "rules": [
-        {"pattern": "^\\s*style(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*style(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## 🧪 Tests",
       "labels": ["test"],
       "rules": [
-        {"pattern": "^\\s*test(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*test(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
       "title": "## 📦 Build & CI",
       "labels": ["build", "ci", "chore"],
       "rules": [
-        {"pattern": "^\\s*(build|ci|chore)(\\(.+\\))?(!)?:"}
+        {"pattern": "^\\s*(build|ci|chore)(\\(.+\\))?(!)?:", "on_property": "TITLE"}
       ]
     },
     {
