@@ -73,13 +73,17 @@ jobs:
           if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
             echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key
             SIGNATURE=$(./bin/sign_update "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" -f /tmp/sparkle_private_key | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
-            echo "SPARKLE_SIGNATURE=$SIGNATURE" >> $GITHUB_ENV
+            echo "$SIGNATURE" > sparkle_signature.txt
             rm /tmp/sparkle_private_key
+          else
+            echo "" > sparkle_signature.txt
           fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
+          path: |
+            guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
+            sparkle_signature.txt
 
   build-android:
     runs-on: ubuntu-latest
@@ -194,8 +198,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate appcast.xml
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           REPO="HaiTang-8/video-player-client"
@@ -208,14 +210,10 @@ jobs:
           DMG_URL="https://github.com/${REPO}/releases/download/v${VERSION}/guanying-macos-${VERSION}.dmg"
           DMG_SIZE=$(stat -c%s "artifacts/guanying-macos-${VERSION}.dmg" 2>/dev/null || echo "0")
 
-          # Sign macOS DMG if key is available
+          # Read signature from artifact (signed on macOS runner)
           MACOS_SIGNATURE=""
-          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-            curl -L "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-for-Swift-Package-Manager.zip" -o Sparkle.zip
-            unzip -q Sparkle.zip
-            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key
-            MACOS_SIGNATURE=$(./bin/sign_update "artifacts/guanying-macos-${VERSION}.dmg" -f /tmp/sparkle_private_key 2>/dev/null | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2 || echo "")
-            rm -f /tmp/sparkle_private_key
+          if [ -f "artifacts/sparkle_signature.txt" ]; then
+            MACOS_SIGNATURE=$(cat "artifacts/sparkle_signature.txt")
           fi
 
           cat > artifacts/appcast.xml << EOF
