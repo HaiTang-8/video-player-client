@@ -57,7 +57,19 @@ class UpdateService {
   bool _isTrustedDownloadUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null) return false;
-    return _trustedDomains.any((d) => uri.host == d || uri.host.endsWith('.$d'));
+
+    if (_trustedDomains.any((d) => uri.host == d || uri.host.endsWith('.$d'))) {
+      return true;
+    }
+
+    if (_serverUrl != null && _serverUrl!.isNotEmpty) {
+      final serverUri = Uri.tryParse(_serverUrl!);
+      if (serverUri != null && uri.host == serverUri.host) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   Future<void> init(String? serverUrl) async {
