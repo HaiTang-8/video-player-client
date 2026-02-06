@@ -90,6 +90,8 @@ class _BlacklistManagerDialogState
     );
 
     return shadcn.AlertDialog(
+      barrierColor: Colors.transparent,
+      surfaceOpacity: 1,
       title: Row(
         children: [
           Icon(

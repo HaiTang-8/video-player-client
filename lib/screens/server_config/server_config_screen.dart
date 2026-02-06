@@ -50,10 +50,12 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     final hostFocusNode = FocusNode();
     String protocol = 'http';
 
-    shadcn.showDialog(
+    DialogUtils.showCustomDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => shadcn.AlertDialog(
+          barrierColor: Colors.transparent,
+          surfaceOpacity: 1,
           title: const Text('添加服务器'),
           content: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 160, minWidth: 300),
@@ -146,10 +148,12 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
     final hostFocusNode = FocusNode();
     String protocol = uri?.scheme ?? 'http';
 
-    shadcn.showDialog(
+    DialogUtils.showCustomDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => shadcn.AlertDialog(
+          barrierColor: Colors.transparent,
+          surfaceOpacity: 1,
           title: const Text('编辑服务器'),
           content: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 300),

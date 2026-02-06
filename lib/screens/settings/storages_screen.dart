@@ -232,11 +232,12 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     final passwordController = TextEditingController();
     var hasData = false;
 
-    return shadcn.showDialog<({String data, String password})>(
+    return DialogUtils.showCustomDialog<({String data, String password})>(
       context: context,
-      barrierDismissible: false,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => shadcn.AlertDialog(
+          barrierColor: Colors.transparent,
+          surfaceOpacity: 1,
           title: const Text('导入存储源'),
           content: SizedBox(
             width: 400,
@@ -427,10 +428,12 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   }
 
   Future<bool?> _showDisableOptionsDialog(Storage storage) async {
-    return shadcn.showDialog<bool>(
+    return DialogUtils.showCustomDialog<bool>(
       context: context,
       builder:
           (context) => shadcn.AlertDialog(
+            barrierColor: Colors.transparent,
+            surfaceOpacity: 1,
             title: const Text('禁用存储源'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -465,7 +468,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   }
 
   void _showAddStorageDialog(BuildContext context) {
-    shadcn.showDialog(
+    DialogUtils.showCustomDialog(
       context: context,
       builder:
           (context) => _StorageFormDialog(
@@ -487,7 +490,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   }
 
   void _showEditStorageDialog(BuildContext context, Storage storage) {
-    shadcn.showDialog(
+    DialogUtils.showCustomDialog(
       context: context,
       builder:
           (context) => _StorageFormDialog(
@@ -777,6 +780,8 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
         isDesktop ? 480.0 : MediaQuery.of(context).size.width * 0.9;
 
     return shadcn.AlertDialog(
+      barrierColor: Colors.transparent,
+      surfaceOpacity: 1,
       title: Text(isEditing ? '编辑存储源' : '添加存储源'),
       content: SizedBox(
         width: dialogWidth,

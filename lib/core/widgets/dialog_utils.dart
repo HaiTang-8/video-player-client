@@ -9,6 +9,27 @@ import 'password_text_field.dart';
 class DialogUtils {
   DialogUtils._();
 
+  static const _barrierColor = Color.fromRGBO(0, 0, 0, 0.8);
+
+  static Future<T?> showCustomDialog<T>({
+    required BuildContext context,
+    required WidgetBuilder builder,
+    bool barrierDismissible = false,
+  }) async {
+    final container = ProviderScope.containerOf(context);
+    container.read(windowBorderVisibleProvider.notifier).hide();
+    try {
+      return await shadcn.showDialog<T>(
+        context: context,
+        barrierColor: _barrierColor,
+        barrierDismissible: barrierDismissible,
+        builder: builder,
+      );
+    } finally {
+      container.read(windowBorderVisibleProvider.notifier).show();
+    }
+  }
+
   /// 显示确认对话框
   static Future<bool?> showConfirmDialog({
     required BuildContext context,
@@ -20,79 +41,69 @@ class DialogUtils {
     String confirmText = '确定',
     bool isDestructive = false,
     bool barrierDismissible = false,
-  }) async {
-    final container = ProviderScope.containerOf(context);
-    container.read(windowBorderVisibleProvider.notifier).hide();
-    try {
-      return await shadcn.showDialog<bool>(
-        context: context,
-        // 控制是否允许点击遮罩层关闭，用于必须做出选择的场景
-        barrierDismissible: barrierDismissible,
-        builder: (context) {
-          final theme = shadcn.Theme.of(context);
-          // shadcn_flutter 的 destructive 默认会用较低 alpha（0.5），在弹窗里看起来像“灰色遮罩”。
-          // 这里把默认/hover/focus 的背景都改成不透明 destructive 色，避免鼠标移入移出时颜色突变。
-          final destructiveStyle = shadcn.ButtonVariance.destructive.withBackgroundColor(
-            color: theme.colorScheme.destructive,
-            hoverColor: theme.colorScheme.destructive,
-            focusColor: theme.colorScheme.destructive,
-          );
+  }) {
+    return showCustomDialog<bool>(
+      context: context,
+      barrierDismissible: barrierDismissible,
+      builder: (context) {
+        final theme = shadcn.Theme.of(context);
+        // shadcn_flutter 的 destructive 默认会用较低 alpha（0.5），在弹窗里看起来像"灰色遮罩"。
+        // 这里把默认/hover/focus 的背景都改成不透明 destructive 色，避免鼠标移入移出时颜色突变。
+        final destructiveStyle = shadcn.ButtonVariance.destructive.withBackgroundColor(
+          color: theme.colorScheme.destructive,
+          hoverColor: theme.colorScheme.destructive,
+          focusColor: theme.colorScheme.destructive,
+        );
 
-          return shadcn.AlertDialog(
-            title: Text(title),
-            // 优先使用自定义内容组件，未提供时回退为纯文本
-            content: contentWidget ?? Text(content),
-            actions: [
-              shadcn.OutlineButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text(cancelText),
+        return shadcn.AlertDialog(
+          barrierColor: Colors.transparent,
+          surfaceOpacity: 1,
+          title: Text(title),
+          // 优先使用自定义内容组件，未提供时回退为纯文本
+          content: contentWidget ?? Text(content),
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(cancelText),
+            ),
+            if (isDestructive)
+              shadcn.Button.destructive(
+                style: destructiveStyle,
+                disableFocusOutline: true,
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(confirmText),
+              )
+            else
+              shadcn.PrimaryButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(confirmText),
               ),
-              if (isDestructive)
-                shadcn.Button.destructive(
-                  style: destructiveStyle,
-                  disableFocusOutline: true,
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(confirmText),
-                )
-              else
-                shadcn.PrimaryButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(confirmText),
-                ),
-            ],
-          );
-        },
-      );
-    } finally {
-      container.read(windowBorderVisibleProvider.notifier).show();
-    }
+          ],
+        );
+      },
+    );
   }
 
   /// 显示加载对话框
   static Future<void> showLoadingDialog({
     required BuildContext context,
     required String message,
-  }) async {
-    final container = ProviderScope.containerOf(context);
-    container.read(windowBorderVisibleProvider.notifier).hide();
-    try {
-      return await shadcn.showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => shadcn.AlertDialog(
-          content: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const shadcn.CircularProgressIndicator(),
-              const SizedBox(width: 16),
-              Flexible(child: Text(message)),
-            ],
-          ),
+  }) {
+    return showCustomDialog<void>(
+      context: context,
+      builder: (context) => shadcn.AlertDialog(
+        barrierColor: Colors.transparent,
+        surfaceOpacity: 1,
+        content: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const shadcn.CircularProgressIndicator(),
+            const SizedBox(width: 16),
+            Flexible(child: Text(message)),
+          ],
         ),
-      );
-    } finally {
-      container.read(windowBorderVisibleProvider.notifier).show();
-    }
+      ),
+    );
   }
 
   /// 显示 Toast 提示
@@ -167,43 +178,38 @@ class DialogUtils {
     required String title,
     required List<SelectionOption<T>> options,
     T? currentValue,
-  }) async {
-    final container = ProviderScope.containerOf(context);
-    container.read(windowBorderVisibleProvider.notifier).hide();
-    try {
-      return await shadcn.showDialog<T>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) {
-          final theme = shadcn.Theme.of(context);
-          return shadcn.AlertDialog(
-            title: Text(title),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: options.map((option) {
-                final isSelected = option.value == currentValue;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _SelectionOptionCard<T>(
-                    option: option,
-                    isSelected: isSelected,
-                    theme: theme,
-                  ),
-                );
-              }).toList(),
+  }) {
+    return showCustomDialog<T>(
+      context: context,
+      builder: (context) {
+        final theme = shadcn.Theme.of(context);
+        return shadcn.AlertDialog(
+          barrierColor: Colors.transparent,
+          surfaceOpacity: 1,
+          title: Text(title),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: options.map((option) {
+              final isSelected = option.value == currentValue;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _SelectionOptionCard<T>(
+                  option: option,
+                  isSelected: isSelected,
+                  theme: theme,
+                ),
+              );
+            }).toList(),
+          ),
+          actions: [
+            shadcn.OutlineButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('取消'),
             ),
-            actions: [
-              shadcn.OutlineButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('取消'),
-              ),
-            ],
-          );
-        },
-      );
-    } finally {
-      container.read(windowBorderVisibleProvider.notifier).show();
-    }
+          ],
+        );
+      },
+    );
   }
 
   /// 显示输入对话框
@@ -218,53 +224,48 @@ class DialogUtils {
     bool obscureText = false,
     double maxWidth = 400,
     int? maxLength,
-  }) async {
-    final container = ProviderScope.containerOf(context);
-    container.read(windowBorderVisibleProvider.notifier).hide();
+  }) {
     final controller = TextEditingController(text: initialValue);
-    try {
-      return await shadcn.showDialog<String>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => shadcn.AlertDialog(
-          title: Text(title),
-          content: SizedBox(
-            width: maxWidth,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: obscureText
-                  ? PasswordTextField(
-                      controller: controller,
-                      placeholder: placeholder != null ? Text(placeholder) : null,
-                      autofocus: true,
-                      maxLength: maxLength,
-                    )
-                  : shadcn.TextField(
-                      controller: controller,
-                      placeholder: placeholder != null ? Text(placeholder) : null,
-                      keyboardType: keyboardType,
-                      autofocus: true,
-                      inputFormatters: maxLength != null
-                          ? [LengthLimitingTextInputFormatter(maxLength)]
-                          : null,
-                    ),
-            ),
+    return showCustomDialog<String>(
+      context: context,
+      builder: (context) => shadcn.AlertDialog(
+        barrierColor: Colors.transparent,
+        surfaceOpacity: 1,
+        title: Text(title),
+        content: SizedBox(
+          width: maxWidth,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: obscureText
+                ? PasswordTextField(
+                    controller: controller,
+                    placeholder: placeholder != null ? Text(placeholder) : null,
+                    autofocus: true,
+                    maxLength: maxLength,
+                  )
+                : shadcn.TextField(
+                    controller: controller,
+                    placeholder: placeholder != null ? Text(placeholder) : null,
+                    keyboardType: keyboardType,
+                    autofocus: true,
+                    inputFormatters: maxLength != null
+                        ? [LengthLimitingTextInputFormatter(maxLength)]
+                        : null,
+                  ),
           ),
-          actions: [
-            shadcn.OutlineButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(cancelText),
-            ),
-            shadcn.PrimaryButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: Text(confirmText),
-            ),
-          ],
         ),
-      );
-    } finally {
-      container.read(windowBorderVisibleProvider.notifier).show();
-    }
+        actions: [
+          shadcn.OutlineButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(cancelText),
+          ),
+          shadcn.PrimaryButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: Text(confirmText),
+          ),
+        ],
+      ),
+    );
   }
 }
 
