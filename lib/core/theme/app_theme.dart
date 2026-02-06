@@ -195,13 +195,13 @@ class AppTheme {
   );
 
   static shadcn.ThemeData shadcnLightTheme = shadcn.ThemeData(
-    colorScheme: shadcn.ColorSchemes.lightDefaultColor,
+    colorScheme: shadcn.ColorSchemes.lightSlate,
     radius: 0.5,
     typography: _shadcnTypography,
   );
 
   static shadcn.ThemeData shadcnDarkTheme = shadcn.ThemeData(
-    colorScheme: shadcn.ColorSchemes.darkDefaultColor,
+    colorScheme: shadcn.ColorSchemes.darkSlate,
     radius: 0.5,
     typography: _shadcnTypography,
   );

@@ -31,9 +31,9 @@ import '../../screens/connection_error/connection_error_screen.dart';
 class RouterRefreshNotifier extends ChangeNotifier {
   RouterRefreshNotifier(Ref ref) {
     // 监听服务器 URL 变化
-    ref.listen(serverUrlProvider, (_, __) => notifyListeners());
+    ref.listen(serverUrlProvider, (_, _) => notifyListeners());
     // 监听连接状态变化
-    ref.listen(serverConnectionProvider, (_, __) => notifyListeners());
+    ref.listen(serverConnectionProvider, (_, _) => notifyListeners());
   }
 }
 

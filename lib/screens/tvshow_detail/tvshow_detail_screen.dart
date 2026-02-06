@@ -408,10 +408,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             fit: BoxFit.cover,
             alignment: Alignment.center,
             errorWidget:
-                (_, __, ___) =>
+                (_, _, _) =>
                     Container(height: imageHeight, color: Colors.grey[300]),
             placeholder:
-                (_, __) =>
+                (_, _) =>
                     Container(height: imageHeight, color: Colors.grey[300]),
           )
         else
@@ -1066,7 +1066,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: cast.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               return _buildCastCard(cast[index], serverBaseUrl);
             },
@@ -1140,7 +1140,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: crew.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
               return _buildCrewCard(crew[index], serverBaseUrl);
             },
@@ -1661,7 +1661,7 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
               horizontal: _EpisodesCarouselDirect._horizontalPadding),
           scrollDirection: Axis.horizontal,
           itemCount: widget.episodes.length,
-          separatorBuilder: (_, __) =>
+          separatorBuilder: (_, _) =>
               const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
           itemBuilder: (context, index) {
             final episode = widget.episodes[index];
@@ -1825,7 +1825,7 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
               horizontal: _EpisodesCarousel._horizontalPadding),
           scrollDirection: Axis.horizontal,
           itemCount: episodes.length,
-          separatorBuilder: (_, __) =>
+          separatorBuilder: (_, _) =>
               const SizedBox(width: _EpisodesCarousel._itemSpacing),
           itemBuilder: (context, index) {
             final episode = episodes[index];
@@ -2009,7 +2009,7 @@ class _EpisodeCard extends ConsumerWidget {
         width: width,
         height: height,
         fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _buildPlaceholder(context, height),
+        errorWidget: (_, _, _) => _buildPlaceholder(context, height),
       );
     }
     return _buildPlaceholder(context, height);
@@ -2055,7 +2055,7 @@ class _SeasonTabLabel extends ConsumerWidget {
 
     return sourceGroupsAsync.when(
       loading: () => _buildLabel(context, null),
-      error: (_, __) => _buildLabel(context, null),
+      error: (_, _) => _buildLabel(context, null),
       data: (groups) => _buildLabel(context, groups),
     );
   }
@@ -2181,7 +2181,7 @@ class _SourceGroupsSheet extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: groups.length,
               separatorBuilder:
-                  (_, __) =>
+                  (_, _) =>
                       const Divider(height: 1, indent: 20, endIndent: 20),
               itemBuilder: (context, index) {
                 final group = groups[index];

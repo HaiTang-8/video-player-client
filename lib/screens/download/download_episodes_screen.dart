@@ -119,7 +119,7 @@ class _DownloadEpisodesScreenState extends ConsumerState<DownloadEpisodesScreen>
               child: ListView.separated(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 itemCount: downloadableEpisodes.length,
-                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade100),
                 itemBuilder: (context, index) {
                   final episode = downloadableEpisodes[index];
                   return _EpisodeDownloadItem(

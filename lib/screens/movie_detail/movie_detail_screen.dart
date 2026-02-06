@@ -232,10 +232,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             fit: BoxFit.cover,
             alignment: Alignment.center,
             errorWidget:
-                (_, __, ___) =>
+                (_, _, _) =>
                     Container(height: imageHeight, color: Colors.grey[300]),
             placeholder:
-                (_, __) =>
+                (_, _) =>
                     Container(height: imageHeight, color: Colors.grey[300]),
           )
         else
@@ -832,7 +832,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: cast.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 4),
+            separatorBuilder: (_, _) => const SizedBox(width: 4),
             itemBuilder: (context, index) {
               return _buildCastCard(cast[index], serverBaseUrl);
             },

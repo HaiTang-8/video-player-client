@@ -98,7 +98,7 @@ class _MovieCardWrapper extends ConsumerWidget {
         );
       },
       loading: () => _buildPlaceholder(context),
-      error: (_, __) => _buildPlaceholder(context),
+      error: (_, _) => _buildPlaceholder(context),
     );
   }
 
@@ -152,7 +152,7 @@ class _TvShowCardWrapper extends ConsumerWidget {
         );
       },
       loading: () => _buildPlaceholder(context),
-      error: (_, __) => _buildPlaceholder(context),
+      error: (_, _) => _buildPlaceholder(context),
     );
   }
 

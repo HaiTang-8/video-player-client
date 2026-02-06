@@ -917,9 +917,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     final m = abs.inMinutes.remainder(60);
     final s = abs.inSeconds.remainder(60);
     final prefix = isNegative ? '-' : '+';
-    if (h > 0) return '$prefix${h}小时${m}分钟${s}秒';
-    if (m > 0) return '$prefix${m}分钟${s}秒';
-    return '$prefix${s}秒';
+    if (h > 0) return '$prefix$h小时$m分钟$s秒';
+    if (m > 0) return '$prefix$m分钟$s秒';
+    return '$prefix$s秒';
   }
 
   Widget _buildSeekOverlay() {
@@ -1254,8 +1254,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           return shadcn.DropdownMenu(
             children: [
               shadcn.MenuButton(
-                child: const Text('无可用音轨'),
                 onPressed: null,
+                child: const Text('无可用音轨'),
               ),
             ],
           );
@@ -1391,8 +1391,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
         if (embeddedTracks.isEmpty && externalSubs.isEmpty) {
           children.add(shadcn.MenuButton(
-            child: const Text('无可用字幕'),
             onPressed: null,
+            child: const Text('无可用字幕'),
           ));
         }
 

@@ -156,7 +156,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
               itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(width: _itemSpacing),
+              separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
               itemBuilder: (context, index) {
                 final group = groups[index];
                 return _WatchHistoryCard(

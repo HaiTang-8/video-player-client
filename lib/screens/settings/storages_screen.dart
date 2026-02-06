@@ -870,7 +870,7 @@ class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
                       ))
                   .toList(),
             ),
-          ),
+          ).call,
         ),
       ],
     );

@@ -297,7 +297,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
           final selected = index == selectedIndex;
           return TapFeedback(

@@ -25,6 +25,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.1.11"
+  animation_kit:
+    dependency: transitive
+    description:
+      name: animation_kit
+      sha256: d9b0944b3ee02fae3fedbc6cb04d9a9ea26ad1d29f3261e0b55443b1e0bfba63
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.0.2"
   archive:
     dependency: "direct main"
     description:
@@ -969,10 +977,10 @@ packages:
     dependency: "direct main"
     description:
       name: shadcn_flutter
-      sha256: "1fd4f798c39d6308dc8f7e94d9e870b5db39fbf417ea95c423c7555ce8227a1c"
+      sha256: "3a5d92981a0504dd5e42b1f08e413233dbeaa5d075253bb500fe5e71bb01aadc"
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.0.47"
+    version: "0.0.49"
   shared_preferences:
     dependency: "direct main"
     description:
@@ -1211,7 +1219,7 @@ packages:
     source: hosted
     version: "1.2.2"
   test:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: test
       sha256: "75906bf273541b676716d1ca7627a17e4c4070a3a16272b7a3dc7da3b9f3f6b7"

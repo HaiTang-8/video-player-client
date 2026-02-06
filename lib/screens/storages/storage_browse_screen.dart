@@ -709,7 +709,7 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
             Text('电影整理模式：', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _folderMode,
+              initialValue: _folderMode,
               isExpanded: true,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
@@ -739,7 +739,7 @@ class _AiTidyStartDialogState extends State<_AiTidyStartDialog> {
             Text('最大分析文件数：', style: theme.textTheme.bodyMedium),
             const SizedBox(height: 8),
             DropdownButtonFormField<int>(
-              value: _maxFiles,
+              initialValue: _maxFiles,
               decoration: InputDecoration(
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
