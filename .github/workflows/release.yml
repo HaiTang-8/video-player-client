@@ -55,13 +55,7 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
       - run: flutter build macos --release --build-name=${{ steps.version.outputs.VERSION }}
-      - name: Download Sparkle tools
-        run: |
-          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/2.8.1/Sparkle-2.8.1.tar.xz" -o Sparkle.tar.xz
-          tar -xf Sparkle.tar.xz
-      - name: Create and Sign DMG
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+      - name: Create DMG
         run: |
           brew install create-dmg
           create-dmg \
@@ -73,21 +67,10 @@ jobs:
             --no-internet-enable \
             "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" \
             "build/macos/Build/Products/Release/观影.app"
-
-          if [ -n "$SPARKLE_PRIVATE_KEY" ]; then
-            echo "$SPARKLE_PRIVATE_KEY" > /tmp/sparkle_private_key
-            SIGNATURE=$(./bin/sign_update "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" -f /tmp/sparkle_private_key | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
-            echo "$SIGNATURE" > sparkle_signature.txt
-            rm /tmp/sparkle_private_key
-          else
-            echo "" > sparkle_signature.txt
-          fi
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
-          path: |
-            guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
-            sparkle_signature.txt
+          path: guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
 
   build-android:
     runs-on: ubuntu-latest
@@ -214,12 +197,6 @@ jobs:
           DMG_URL="https://github.com/${REPO}/releases/download/v${VERSION}/guanying-macos-${VERSION}.dmg"
           DMG_SIZE=$(stat -c%s "artifacts/guanying-macos-${VERSION}.dmg" 2>/dev/null || echo "0")
 
-          # Read signature from artifact (signed on macOS runner)
-          MACOS_SIGNATURE=""
-          if [ -f "artifacts/sparkle_signature.txt" ]; then
-            MACOS_SIGNATURE=$(cat "artifacts/sparkle_signature.txt")
-          fi
-
           cat > artifacts/appcast.xml << EOF
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -236,7 +213,6 @@ jobs:
                   url="${DMG_URL}"
                   sparkle:version="${VERSION}"
                   sparkle:shortVersionString="${VERSION}"
-                  sparkle:edSignature="${MACOS_SIGNATURE}"
                   length="${DMG_SIZE}"
                   type="application/x-apple-diskimage"
                   sparkle:os="macos"/>
