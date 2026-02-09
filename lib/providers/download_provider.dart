@@ -462,6 +462,27 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     _processQueue();
   }
 
+  Future<void> pauseAllDownloads() async {
+    final service = _service;
+    if (service == null) return;
+    final activeTasks = state.tasks.where(
+      (t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending,
+    ).toList();
+    if (activeTasks.isNotEmpty) {
+      final updatedTasks = state.tasks.map((t) {
+        if (t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending) {
+          return t.copyWith(status: DownloadStatus.paused);
+        }
+        return t;
+      }).toList();
+      state = state.copyWith(tasks: updatedTasks);
+      await _saveTasks();
+    }
+    service.pauseAllAndCleanup(activeTasks);
+    _startingTaskIds.clear();
+    state = state.copyWith(tasks: []);
+  }
+
   void resumeDownload(String taskId) {
     final service = _service;
     if (service == null) return;

@@ -84,6 +84,12 @@ class NativeDownloader {
     _errorCallbacks.remove(taskId);
   }
 
+  void clearCallbacks() {
+    _progressCallbacks.clear();
+    _completeCallbacks.clear();
+    _errorCallbacks.clear();
+  }
+
   Future<bool> isAvailable() async {
     try {
       final result = await _channel.invokeMethod<bool>('isAvailable');

@@ -17,3 +17,5 @@ export 'subtitle_info.dart';
 export 'database_backup.dart';
 export 'download_task.dart';
 export 'server_config.dart';
+export 'user.dart';
+export 'auth_tokens.dart';

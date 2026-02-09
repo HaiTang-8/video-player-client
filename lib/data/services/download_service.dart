@@ -837,6 +837,23 @@ class DownloadService {
     _cancelTokens.remove(taskId);
   }
 
+  void pauseAllAndCleanup(List<DownloadTask> activeTasks) {
+    for (final task in activeTasks) {
+      pauseDownload(task.id);
+    }
+    _aria2ProgressTimer?.cancel();
+    _aria2ProgressTimer = null;
+    _cancelTokens.clear();
+    _multiThreadDownloaders.clear();
+    _aria2Tasks.clear();
+    if (Platform.isIOS || Platform.isAndroid) {
+      for (final task in activeTasks) {
+        NativeDownloader.instance.endLiveActivity(task.id, status: 'paused');
+      }
+      NativeDownloader.instance.clearCallbacks();
+    }
+  }
+
   void resumeDownload(String taskId) {
     // aria2 下载
     final gid = _aria2Tasks[taskId];

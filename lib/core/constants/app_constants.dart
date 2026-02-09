@@ -33,6 +33,10 @@ class AppConstants {
   static const String downloadMultiThreadEnabledKey = 'download_multi_thread_enabled';
   static const String downloadEngineKey = 'download_engine';
 
+  // 认证 token（按 serverId 隔离）
+  static String authTokensKey(String serverId) => 'auth_tokens_$serverId';
+  static String authUserKey(String serverId) => 'auth_user_$serverId';
+
   // 桌面端平滑滚动
   static const String smoothScrollEnabledKey = 'smooth_scroll_enabled';
 

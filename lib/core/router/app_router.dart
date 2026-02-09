@@ -26,14 +26,15 @@ import '../../screens/tvshow_detail/overview_screen.dart';
 import '../../screens/download/download_episodes_screen.dart';
 import '../../screens/download/download_manager_screen.dart';
 import '../../screens/connection_error/connection_error_screen.dart';
+import '../../screens/auth/login_screen.dart';
+import '../../screens/auth/setup_screen.dart';
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
   RouterRefreshNotifier(Ref ref) {
-    // 监听服务器 URL 变化
     ref.listen(serverUrlProvider, (_, _) => notifyListeners());
-    // 监听连接状态变化
     ref.listen(serverConnectionProvider, (_, _) => notifyListeners());
+    ref.listen(authProvider, (_, _) => notifyListeners());
   }
 }
 
@@ -52,31 +53,47 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final serverUrl = ref.read(serverUrlProvider);
       final connectionState = ref.read(serverConnectionProvider);
+      final authState = ref.read(authProvider);
 
       final isConfigured = serverUrl != null && serverUrl.isNotEmpty;
       final isConnected = connectionState == ServerConnectionState.connected;
       final isError = connectionState == ServerConnectionState.error;
       final isOnConfigPage = state.matchedLocation == '/config';
       final isOnErrorPage = state.matchedLocation == '/connection-error';
+      final isOnLoginPage = state.matchedLocation == '/login';
+      final isOnSetupPage = state.matchedLocation == '/setup';
+      final isAuthPage = isOnLoginPage || isOnSetupPage;
 
-      // 如果未配置服务器且不在配置页面，跳转到配置页面
       if (!isConfigured && !isOnConfigPage) {
         return '/config';
       }
 
-      // 如果已配置但连接失败，跳转到错误页面
       if (isConfigured && isError && !isOnErrorPage && !isOnConfigPage) {
         return '/connection-error';
       }
 
-      // 如果已配置且在配置页面且已连接，跳转到媒体库
       if (isConfigured && isOnConfigPage && isConnected) {
+        if (authState.authEnabled) {
+          if (authState.status == AuthStatus.setupRequired) return '/setup';
+          if (authState.status == AuthStatus.unauthenticated) return '/login';
+        }
         return '/library';
       }
 
-      // 如果在错误页面但已连接，跳转到媒体库
       if (isOnErrorPage && isConnected) {
         return '/library';
+      }
+
+      if (isConnected && authState.authEnabled) {
+        if (authState.status == AuthStatus.setupRequired && !isOnSetupPage) {
+          return '/setup';
+        }
+        if (authState.status == AuthStatus.unauthenticated && !isAuthPage) {
+          return '/login';
+        }
+        if (authState.status == AuthStatus.authenticated && isAuthPage) {
+          return '/library';
+        }
       }
 
       return null;
@@ -92,6 +109,18 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/connection-error',
         builder: (context, state) => const ConnectionErrorScreen(),
+      ),
+
+      // 登录页面
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => const LoginScreen(),
+      ),
+
+      // 初始设置页面
+      GoRoute(
+        path: '/setup',
+        builder: (context, state) => const SetupScreen(),
       ),
 
       // 主 Shell 路由（带底部导航栏）

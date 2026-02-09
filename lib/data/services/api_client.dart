@@ -1,6 +1,81 @@
 import 'package:dio/dio.dart';
 import 'log_service.dart';
 
+class AuthInterceptor extends Interceptor {
+  String? Function() tokenGetter;
+  Future<bool> Function()? onTokenExpired;
+
+  bool _isRefreshing = false;
+  final List<({RequestOptions options, ErrorInterceptorHandler handler})> _pendingRequests = [];
+
+  AuthInterceptor({required this.tokenGetter, this.onTokenExpired});
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    final token = tokenGetter();
+    if (token != null) {
+      options.headers['Authorization'] = 'Bearer $token';
+    }
+    handler.next(options);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) async {
+    if (err.response?.statusCode != 401 || onTokenExpired == null) {
+      handler.next(err);
+      return;
+    }
+
+    final path = err.requestOptions.path;
+    if (path.contains('/auth/refresh') || path.contains('/auth/login')) {
+      handler.next(err);
+      return;
+    }
+
+    if (_isRefreshing) {
+      _pendingRequests.add((options: err.requestOptions, handler: handler));
+      return;
+    }
+
+    _isRefreshing = true;
+    final success = await onTokenExpired!();
+    _isRefreshing = false;
+
+    if (success) {
+      try {
+        final token = tokenGetter();
+        err.requestOptions.headers['Authorization'] = 'Bearer $token';
+        final dio = Dio();
+        final response = await dio.fetch(err.requestOptions);
+        handler.resolve(response);
+      } catch (e) {
+        handler.next(err);
+      }
+
+      final pending = List.of(_pendingRequests);
+      _pendingRequests.clear();
+      for (final req in pending) {
+        final token = tokenGetter();
+        req.options.headers['Authorization'] = 'Bearer $token';
+        try {
+          final dio = Dio();
+          final response = await dio.fetch(req.options);
+          req.handler.resolve(response);
+        } catch (e) {
+          req.handler.next(DioException(requestOptions: req.options, error: e));
+        }
+      }
+    } else {
+      final pending = List.of(_pendingRequests);
+      _pendingRequests.clear();
+      handler.next(err);
+      for (final req in pending) {
+        req.handler.next(DioException(requestOptions: req.options, error: 'Token refresh failed'));
+      }
+    }
+  }
+}
+
 /// API 客户端封装
 class ApiClient {
   final Dio _dio;
@@ -19,6 +94,16 @@ class ApiClient {
           },
         ),
       );
+
+  /// 添加拦截器
+  void addInterceptor(Interceptor interceptor) {
+    _dio.interceptors.add(interceptor);
+  }
+
+  /// 移除拦截器
+  void removeInterceptor(Interceptor interceptor) {
+    _dio.interceptors.remove(interceptor);
+  }
 
   /// 更新 baseUrl
   void updateBaseUrl(String baseUrl) {
@@ -196,6 +281,10 @@ class ApiClient {
         }
         // 404 是正常业务场景（如首次播放无观看记录），不触发全局错误提示
         if (statusCode == 404) {
+          return ApiResponse<T>(success: false, error: errorMessage);
+        }
+        // auth 相关错误由调用方局部处理，不触发全局错误提示
+        if (e.requestOptions.path.contains('/auth/')) {
           return ApiResponse<T>(success: false, error: errorMessage);
         }
         break;

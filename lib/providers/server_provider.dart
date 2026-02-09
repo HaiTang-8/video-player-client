@@ -5,6 +5,7 @@ import '../core/constants/app_constants.dart';
 import '../data/models/server_config.dart';
 import '../data/services/api_client.dart';
 import '../data/services/storage_service.dart';
+import 'auth_provider.dart';
 import 'error_notification_provider.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -181,7 +182,10 @@ class ServerConnectionNotifier extends Notifier<ServerConnectionState> {
   Future<void> connectToSavedServer() async {
     final serverUrl = ref.read(serverUrlProvider);
     if (serverUrl != null && serverUrl.isNotEmpty) {
-      await testConnection(serverUrl);
+      final success = await testConnection(serverUrl);
+      if (success) {
+        ref.read(authProvider.notifier).checkAuthStatus();
+      }
     }
   }
 

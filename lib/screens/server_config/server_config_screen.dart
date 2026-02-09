@@ -34,6 +34,7 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
 
     if (success) {
       await ref.read(serverListProvider.notifier).setCurrentServer(server.id);
+      ref.read(authProvider.notifier).checkAuthStatus();
     } else {
       DialogUtils.showToast(context: context, message: '无法连接到服务器', isError: true);
     }

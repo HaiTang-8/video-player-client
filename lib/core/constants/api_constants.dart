@@ -93,6 +93,15 @@ class ApiConstants {
   static String downloadMovieUrl(int id) => '$apiPrefix/download/movie/$id/url';
   static String downloadSourceUrl(int id) => '$apiPrefix/download/source/$id/url';
 
+  // 认证
+  static const String authStatus = '$apiPrefix/auth/status';
+  static const String authSetup = '$apiPrefix/auth/setup';
+  static const String authLogin = '$apiPrefix/auth/login';
+  static const String authRefresh = '$apiPrefix/auth/refresh';
+  static const String authLogout = '$apiPrefix/auth/logout';
+  static const String authMe = '$apiPrefix/auth/me';
+  static const String authPassword = '$apiPrefix/auth/password';
+
   // 健康检查
   static const String health = '/health';
 

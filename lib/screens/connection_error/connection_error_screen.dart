@@ -23,7 +23,8 @@ class _ConnectionErrorScreenState extends ConsumerState<ConnectionErrorScreen> {
     if (serverUrl != null && serverUrl.isNotEmpty) {
       final success = await ref.read(serverConnectionProvider.notifier).testConnection(serverUrl);
       if (success && mounted) {
-        context.go('/library');
+        await ref.read(authProvider.notifier).checkAuthStatus();
+        if (mounted) context.go('/library');
         return;
       }
     }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
+import 'auth_provider.dart';
 import 'media_provider.dart';
 import 'server_provider.dart';
 
@@ -49,7 +50,13 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
     });
   }
 
+  bool get _isAuthenticated {
+    final auth = ref.read(authProvider);
+    return auth.status == AuthStatus.authenticated || !auth.authEnabled;
+  }
+
   Future<void> load({int limit = 20}) async {
+    if (!_isAuthenticated) return;
     final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
@@ -75,6 +82,7 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   }
 
   Future<void> refresh({int limit = 20}) async {
+    if (!_isAuthenticated) return;
     final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
