@@ -151,6 +151,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
 
     return Scaffold(
       backgroundColor: colors.cardBackground,
@@ -246,6 +247,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   selectedSeason,
                   screenSize,
                   serverBaseUrl,
+                  accessToken,
                   isDesktop: isDesktop,
                 ),
               ),
@@ -311,11 +313,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     theme,
                     selectedSeason,
                     serverBaseUrl,
+                    accessToken,
                   ),
                 )
               else if (cast.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _buildCastSection(context, theme, cast, serverBaseUrl),
+                  child: _buildCastSection(context, theme, cast, serverBaseUrl, accessToken),
                 ),
 
               // 文件信息区
@@ -338,7 +341,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     TvShow tvShow,
     Season? selectedSeason,
     Size screenSize,
-    String? serverBaseUrl, {
+    String? serverBaseUrl,
+    String? accessToken, {
     required bool isDesktop,
   }) {
     String? imagePathRaw;
@@ -403,6 +407,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         if (imageUrl != null && imageUrl.isNotEmpty)
           CachedNetworkImage(
             imageUrl: imageUrl,
+            httpHeaders:
+                accessToken != null
+                    ? {'Authorization': 'Bearer $accessToken'}
+                    : null,
             width: double.infinity,
             height: imageHeight,
             fit: BoxFit.cover,
@@ -1038,7 +1046,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     BuildContext context,
     ThemeData theme,
     List<CastMember> cast,
-    String? serverBaseUrl, {
+    String? serverBaseUrl,
+    String? accessToken, {
     String title = '相关演员',
   }) {
     final colors = context.appColors;
@@ -1068,7 +1077,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             itemCount: cast.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              return _buildCastCard(cast[index], serverBaseUrl);
+              return _buildCastCard(cast[index], serverBaseUrl, accessToken);
             },
           ),
         ),
@@ -1081,6 +1090,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     ThemeData theme,
     Season season,
     String? serverBaseUrl,
+    String? accessToken,
   ) {
     final cast = season.castDetail ?? const <CastMember>[];
     final crew = season.crewDetail ?? const <CrewMember>[];
@@ -1094,6 +1104,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             theme,
             crew,
             serverBaseUrl,
+            accessToken,
             title: '${season.displayName} 职员',
           ),
         if (cast.isNotEmpty)
@@ -1102,6 +1113,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             theme,
             cast,
             serverBaseUrl,
+            accessToken,
             title: '${season.displayName} 演员',
           ),
       ],
@@ -1112,7 +1124,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     BuildContext context,
     ThemeData theme,
     List<CrewMember> crew,
-    String? serverBaseUrl, {
+    String? serverBaseUrl,
+    String? accessToken, {
     String title = '职员',
   }) {
     final colors = context.appColors;
@@ -1142,7 +1155,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             itemCount: crew.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              return _buildCrewCard(crew[index], serverBaseUrl);
+              return _buildCrewCard(crew[index], serverBaseUrl, accessToken);
             },
           ),
         ),
@@ -1150,7 +1163,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  Widget _buildCrewCard(CrewMember member, String? serverBaseUrl) {
+  Widget _buildCrewCard(CrewMember member, String? serverBaseUrl, String? accessToken) {
     final name = member.name;
     final job =
         (member.job?.trim().isNotEmpty ?? false) ? member.job!.trim() : null;
@@ -1184,6 +1197,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     size: 64,
                     imageUrl: profileUrl,
                     serverBaseUrl: serverBaseUrl,
+                    accessToken: accessToken,
                     iconColor: colors.textPrimary.withValues(alpha: 0.5),
                     iconSize: 32,
                   ),
@@ -1220,7 +1234,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建演员卡片
-  Widget _buildCastCard(CastMember member, String? serverBaseUrl) {
+  Widget _buildCastCard(CastMember member, String? serverBaseUrl, String? accessToken) {
     final name = member.name;
     final role = member.character;
     final profileUrl = member.profilePath;
@@ -1249,6 +1263,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     size: 64,
                     imageUrl: profileUrl,
                     serverBaseUrl: serverBaseUrl,
+                    accessToken: accessToken,
                     iconColor: colors.textPrimary.withValues(alpha: 0.5),
                     iconSize: 32,
                   ),
@@ -1296,6 +1311,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }) async {
     final service = ref.read(mediaServiceProvider);
     final serverBaseUrl = ref.read(serverUrlProvider);
+    final accessToken = ref.read(authProvider).tokens?.accessToken;
     final isDesktop = WindowControls.isDesktop;
     if (service == null) {
       DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
@@ -1340,6 +1356,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       type: type,
       currentUrl: currentUrl,
       serverBaseUrl: serverBaseUrl,
+      accessToken: accessToken,
       onSelect: (url) async {
         DialogUtils.showLoadingDialog(context: context, message: '更新中...');
 
@@ -1871,6 +1888,7 @@ class _EpisodeCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.appColors;
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
     final thumbnailHeight = width * 90 / 160; // 保持 16:9 比例
     return GestureDetector(
       onTap: episode.hasFile ? () => _playEpisode(context, ref) : null,
@@ -1884,7 +1902,7 @@ class _EpisodeCard extends ConsumerWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: _buildThumbnail(context, thumbnailHeight),
+                  child: _buildThumbnail(context, thumbnailHeight, accessToken),
                 ),
 
                 // 时长标签
@@ -2000,12 +2018,16 @@ class _EpisodeCard extends ConsumerWidget {
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 
-  Widget _buildThumbnail(BuildContext context, double height) {
+  Widget _buildThumbnail(BuildContext context, double height, String? accessToken) {
     final hasStill = episode.stillPath != null && episode.stillPath!.isNotEmpty;
     final imageUrl = hasStill ? episode.stillPath! : fallbackImageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
       return CachedNetworkImage(
         imageUrl: ImageProxy.proxyTMDBIfNeeded(imageUrl, serverBaseUrl),
+        httpHeaders:
+            accessToken != null
+                ? {'Authorization': 'Bearer $accessToken'}
+                : null,
         width: width,
         height: height,
         fit: BoxFit.cover,

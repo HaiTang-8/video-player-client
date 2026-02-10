@@ -65,6 +65,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final screenSize = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
 
     return Scaffold(
       backgroundColor: colors.cardBackground,
@@ -134,6 +135,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   movie,
                   screenSize,
                   serverBaseUrl,
+                  accessToken,
                   isDesktop: isDesktop,
                 ),
               ),
@@ -147,7 +149,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               // 相关演员区（优先使用 cast_detail 以展示头像/角色；没有则回退 cast 姓名列表）
               if (cast.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _buildCastSection(context, theme, cast, serverBaseUrl),
+                  child: _buildCastSection(context, theme, cast, serverBaseUrl, accessToken),
                 ),
 
               // 文件信息区
@@ -169,7 +171,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     BuildContext context,
     Movie movie,
     Size screenSize,
-    String? serverBaseUrl, {
+    String? serverBaseUrl,
+    String? accessToken, {
     required bool isDesktop,
   }) {
     String? imagePathRaw;
@@ -227,6 +230,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         if (imageUrl != null && imageUrl.isNotEmpty)
           CachedNetworkImage(
             imageUrl: imageUrl,
+            httpHeaders:
+                accessToken != null
+                    ? {'Authorization': 'Bearer $accessToken'}
+                    : null,
             width: double.infinity,
             height: imageHeight,
             fit: BoxFit.cover,
@@ -807,6 +814,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     ThemeData theme,
     List<CastMember> cast,
     String? serverBaseUrl,
+    String? accessToken,
   ) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
@@ -834,7 +842,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             itemCount: cast.length,
             separatorBuilder: (_, _) => const SizedBox(width: 4),
             itemBuilder: (context, index) {
-              return _buildCastCard(cast[index], serverBaseUrl);
+              return _buildCastCard(cast[index], serverBaseUrl, accessToken);
             },
           ),
         ),
@@ -843,7 +851,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   /// 构建演员卡片
-  Widget _buildCastCard(CastMember member, String? serverBaseUrl) {
+  Widget _buildCastCard(CastMember member, String? serverBaseUrl, String? accessToken) {
     final name = member.name;
     final role = member.character;
     final profileUrl = member.profilePath;
@@ -869,6 +877,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 size: 64,
                 imageUrl: profileUrl,
                 serverBaseUrl: serverBaseUrl,
+                accessToken: accessToken,
                 iconColor: Colors.black.withValues(alpha: 0.5),
                 iconSize: 32,
               ),
@@ -913,6 +922,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   ) async {
     final service = ref.read(mediaServiceProvider);
     final serverBaseUrl = ref.read(serverUrlProvider);
+    final accessToken = ref.read(authProvider).tokens?.accessToken;
     if (service == null) {
       DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
       return;
@@ -954,6 +964,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       type: type,
       currentUrl: currentUrl,
       serverBaseUrl: serverBaseUrl,
+      accessToken: accessToken,
       onSelect: (url) async {
         DialogUtils.showLoadingDialog(context: context, message: '更新中...');
 

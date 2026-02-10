@@ -11,6 +11,7 @@ class ImageSelectorSheet extends StatefulWidget {
   final ImageSelectorType type;
   final String? currentUrl;
   final String? serverBaseUrl;
+  final String? accessToken;
   final void Function(String url) onSelect;
 
   const ImageSelectorSheet({
@@ -19,6 +20,7 @@ class ImageSelectorSheet extends StatefulWidget {
     required this.type,
     this.currentUrl,
     required this.serverBaseUrl,
+    this.accessToken,
     required this.onSelect,
   });
 
@@ -123,6 +125,10 @@ class _ImageSelectorSheetState extends State<ImageSelectorSheet> {
                           children: [
                             CachedNetworkImage(
                               imageUrl: imageUrl,
+                              httpHeaders:
+                                  widget.accessToken != null
+                                      ? {'Authorization': 'Bearer ${widget.accessToken}'}
+                                      : null,
                               fit: BoxFit.cover,
                               placeholder: (context, url) => Container(
                                 color: Colors.grey[200],
@@ -199,6 +205,7 @@ Future<void> showImageSelector({
   required ImageSelectorType type,
   String? currentUrl,
   String? serverBaseUrl,
+  String? accessToken,
   required void Function(String url) onSelect,
 }) {
   return showModalBottomSheet(
@@ -210,6 +217,7 @@ Future<void> showImageSelector({
       type: type,
       currentUrl: currentUrl,
       serverBaseUrl: serverBaseUrl,
+      accessToken: accessToken,
       onSelect: onSelect,
     ),
   );

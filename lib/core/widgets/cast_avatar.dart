@@ -9,6 +9,7 @@ import '../utils/image_proxy.dart';
 class CastAvatar extends StatelessWidget {
   final String? imageUrl;
   final String? serverBaseUrl;
+  final String? accessToken;
   final double size;
   final double iconSize;
   final Color iconColor;
@@ -18,6 +19,7 @@ class CastAvatar extends StatelessWidget {
     required this.size,
     this.imageUrl,
     this.serverBaseUrl,
+    this.accessToken,
     this.iconSize = 32,
     this.iconColor = Colors.white70,
   });
@@ -37,6 +39,10 @@ class CastAvatar extends StatelessWidget {
 
     return CachedNetworkImage(
       imageUrl: proxied,
+      httpHeaders:
+          accessToken != null
+              ? {'Authorization': 'Bearer $accessToken'}
+              : null,
       width: size,
       height: size,
       fit: BoxFit.cover,

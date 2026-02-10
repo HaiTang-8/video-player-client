@@ -5,6 +5,7 @@ import '../../../core/widgets/tap_feedback.dart';
 import '../../../data/models/models.dart';
 import '../../../core/utils/image_proxy.dart';
 import '../../../providers/server_provider.dart';
+import '../../../providers/auth_provider.dart';
 
 /// 媒体库卡片组件（标题在卡片下方）
 class LibraryPosterCard extends ConsumerStatefulWidget {
@@ -30,6 +31,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -64,7 +66,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _buildPosterImage(serverBaseUrl),
+                  _buildPosterImage(serverBaseUrl, accessToken),
                   if (widget.item.rating != null && widget.item.rating! > 0)
                     Positioned(
                       bottom: 8,
@@ -178,7 +180,7 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
     }
   }
 
-  Widget _buildPosterImage(String? serverBaseUrl) {
+  Widget _buildPosterImage(String? serverBaseUrl, String? accessToken) {
     if (widget.item.posterPath != null && widget.item.posterPath!.isNotEmpty) {
       final posterUrl = ImageProxy.proxyTMDBIfNeeded(
         widget.item.posterPath!,
@@ -186,6 +188,10 @@ class _LibraryPosterCardState extends ConsumerState<LibraryPosterCard> {
       );
       return CachedNetworkImage(
         imageUrl: posterUrl,
+        httpHeaders:
+            accessToken != null
+                ? {'Authorization': 'Bearer $accessToken'}
+                : null,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),

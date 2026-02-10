@@ -264,6 +264,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
     // 统一使用 16:9 比例
     final imageHeight = widget.width * 9 / 16;
     // 叠卡偏移量（仅多集时生效）
@@ -334,7 +335,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                             child: Stack(
                               fit: StackFit.expand,
                               children: [
-                                _buildImage(serverBaseUrl),
+                                _buildImage(serverBaseUrl, accessToken),
                                 // 进度条
                                 Positioned(
                                   left: 0,
@@ -397,12 +398,16 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
     return '已观看 $progress%';
   }
 
-  Widget _buildImage(String? serverBaseUrl) {
+  Widget _buildImage(String? serverBaseUrl, String? accessToken) {
     final imagePath = _imagePath;
     if (imagePath != null && imagePath.isNotEmpty) {
       final imageUrl = ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl);
       return CachedNetworkImage(
         imageUrl: imageUrl,
+        httpHeaders:
+            accessToken != null
+                ? {'Authorization': 'Bearer $accessToken'}
+                : null,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),

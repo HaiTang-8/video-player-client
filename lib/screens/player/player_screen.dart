@@ -635,15 +635,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final serverUrl = ref.read(serverUrlProvider);
       final fullUrl =
           streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
-      final resolvedUrl = await _resolveRedirectTarget(fullUrl);
-      final playUrl = resolvedUrl ?? fullUrl;
       final authHeaders = await _buildAuthHeadersForPlayUrl(
-        playUrl,
+        fullUrl,
         storageId: storageId,
       );
+      final resolvedUrl = await _resolveRedirectTarget(fullUrl, authHeaders: authHeaders);
+      final playUrl = resolvedUrl ?? fullUrl;
+      // 重定向后 URL 可能变更 origin，需要重新判断 auth
+      final playHeaders = (resolvedUrl != null && resolvedUrl != fullUrl)
+          ? await _buildAuthHeadersForPlayUrl(playUrl, storageId: storageId)
+          : authHeaders;
       final headers = <String, String>{
         'User-Agent': DownloadService.aria2UserAgent,
-        ...?authHeaders,
+        ...?playHeaders,
       };
 
       _currentStreamUrl = playUrl;
@@ -670,17 +674,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  Future<String?> _resolveRedirectTarget(String url) async {
+  Future<String?> _resolveRedirectTarget(String url, {Map<String, String>? authHeaders}) async {
     try {
-      // 使用 HEAD 请求避免下载大文件
       final response = await _dio.head(
         url,
         options: Options(
           followRedirects: false,
           validateStatus:
               (status) => status != null && status >= 200 && status < 400,
-          headers: const {
+          headers: {
             'User-Agent': DownloadService.aria2UserAgent,
+            ...?authHeaders,
           },
         ),
       );
@@ -715,26 +719,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     String playUrl, {
     required int? storageId,
   }) async {
-    if (storageId == null) return null;
-    final storage = await _getStorageById(storageId);
-    if (storage == null) return null;
+    // WebDAV 存储：使用 BasicAuth
+    if (storageId != null) {
+      final storage = await _getStorageById(storageId);
+      if (storage != null && storage.type.toLowerCase() == 'webdav') {
+        final settings = storage.settings;
+        if (settings != null) {
+          final webdavUrl = settings['url'];
+          final username = settings['username'];
+          final password = settings['password'];
+          if (webdavUrl != null && username != null && password != null && username.isNotEmpty) {
+            final webdavUri = Uri.tryParse(webdavUrl);
+            final playUri = Uri.tryParse(playUrl);
+            if (HttpUtils.sameOrigin(webdavUri, playUri)) {
+              return {'Authorization': HttpUtils.basicAuthHeader(username, password)};
+            }
+          }
+        }
+      }
+    }
 
-    if (storage.type.toLowerCase() != 'webdav') return null;
-    final settings = storage.settings;
-    if (settings == null) return null;
-
-    final webdavUrl = settings['url'];
-    final username = settings['username'];
-    final password = settings['password'];
-    if (webdavUrl == null || username == null || password == null) return null;
-    if (username.isEmpty) return null;
-
-    final webdavUri = Uri.tryParse(webdavUrl);
-    final playUri = Uri.tryParse(playUrl);
-
-    // 仅当目标 origin 与 WebDAV origin 一致时才附带 BasicAuth，避免把凭证带到 CDN/第三方直链上。
-    if (!HttpUtils.sameOrigin(webdavUri, playUri)) return null;
-    return {'Authorization': HttpUtils.basicAuthHeader(username, password)};
+    // 非 WebDAV：如果 URL 与服务器同源，附带 Bearer Token
+    final serverUrl = ref.read(serverUrlProvider);
+    final token = ref.read(authProvider).tokens?.accessToken;
+    if (serverUrl != null && token != null) {
+      final serverUri = Uri.tryParse(serverUrl);
+      final playUri = Uri.tryParse(playUrl);
+      if (HttpUtils.sameOrigin(serverUri, playUri)) {
+        return {'Authorization': 'Bearer $token'};
+      }
+    }
+    return null;
   }
 
   Future<void> _loadExternalSubtitles(int? storageId, String? filePath) async {
@@ -760,17 +775,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         // 找到最高分的字幕
         final bestSub = subtitles.reduce((a, b) => a.score >= b.score ? a : b);
         if (bestSub.score >= 85) {
-          final serverUrl = ref.read(serverUrlProvider);
-          final subUrl =
-              bestSub.url.startsWith('http')
-                  ? bestSub.url
-                  : '$serverUrl${bestSub.url}';
-          await _player.setSubtitleTrack(
-            SubtitleTrack.uri(
-              subUrl,
-              title: bestSub.displayName,
-            ),
-          );
+          await _loadExternalSubtitleTrack(bestSub);
 
           // 显示提示
           if (mounted) {
@@ -782,6 +787,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     } catch (e) {
       LogService.instance.warn('PlayerScreen', 'Failed to load external subtitles: $e');
+    }
+  }
+
+  Future<void> _loadExternalSubtitleTrack(SubtitleInfo sub) async {
+    final serverUrl = ref.read(serverUrlProvider);
+    final token = ref.read(authProvider).tokens?.accessToken;
+    final subUrl = sub.url.startsWith('http') ? sub.url : '$serverUrl${sub.url}';
+    try {
+      final response = await _dio.get<String>(
+        subUrl,
+        options: Options(
+          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
+          responseType: ResponseType.plain,
+        ),
+      );
+      if (response.data != null) {
+        await _player.setSubtitleTrack(
+          SubtitleTrack.data(response.data!, title: sub.displayName),
+        );
+      }
+    } catch (e) {
+      LogService.instance.warn('PlayerScreen', 'Failed to load subtitle: $e');
     }
   }
 
@@ -966,6 +993,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             serverUrl: ref.read(serverUrlProvider),
             onSpeedChanged: _onSpeedChanged,
             sourcePath: _currentFilePath,
+            onSelectExternalSubtitle: _loadExternalSubtitleTrack,
           ),
           if (_isExiting)
             Container(

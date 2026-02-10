@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/server_provider.dart';
+import '../../providers/auth_provider.dart';
 import 'tap_feedback.dart';
 
 /// 海报卡片组件
@@ -25,6 +26,7 @@ class PosterCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
 
     return TapFeedback(
       onTap: onTap,
@@ -48,7 +50,7 @@ class PosterCard extends ConsumerWidget {
             fit: StackFit.expand,
             children: [
               // 海报图片
-              _buildPosterImage(serverBaseUrl),
+              _buildPosterImage(serverBaseUrl, accessToken),
 
               // 底部信息区：用更小的渐变范围，并给文字留出底部呼吸感
               Positioned(
@@ -152,7 +154,7 @@ class PosterCard extends ConsumerWidget {
     );
   }
 
-  Widget _buildPosterImage(String? serverBaseUrl) {
+  Widget _buildPosterImage(String? serverBaseUrl, String? accessToken) {
     if (item.posterPath != null && item.posterPath!.isNotEmpty) {
       final posterUrl = ImageProxy.proxyTMDBIfNeeded(
         item.posterPath!,
@@ -160,6 +162,10 @@ class PosterCard extends ConsumerWidget {
       );
       return CachedNetworkImage(
         imageUrl: posterUrl,
+        httpHeaders:
+            accessToken != null
+                ? {'Authorization': 'Bearer $accessToken'}
+                : null,
         fit: BoxFit.cover,
         placeholder: (context, url) => _buildPlaceholder(),
         errorWidget: (context, url, error) => _buildPlaceholder(),

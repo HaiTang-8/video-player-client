@@ -33,6 +33,7 @@ class CustomVideoControls extends StatefulWidget {
   final String? serverUrl;
   final void Function(double speed)? onSpeedChanged;
   final String? sourcePath;
+  final Future<void> Function(SubtitleInfo sub)? onSelectExternalSubtitle;
 
   const CustomVideoControls({
     super.key,
@@ -54,6 +55,7 @@ class CustomVideoControls extends StatefulWidget {
     this.serverUrl,
     this.onSpeedChanged,
     this.sourcePath,
+    this.onSelectExternalSubtitle,
   });
 
   @override
@@ -1374,12 +1376,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   : null,
               child: Text(sub.displayName),
               onPressed: (_) {
-                final subUrl = sub.url.startsWith('http')
-                    ? sub.url
-                    : '${widget.serverUrl ?? ''}${sub.url}';
-                widget.player.setSubtitleTrack(
-                  SubtitleTrack.uri(subUrl, title: sub.displayName),
-                );
+                widget.onSelectExternalSubtitle?.call(sub);
                 _startHideTimer();
               },
             ));

@@ -292,6 +292,7 @@ class _WatchHistoryGridItem extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
     // 主展示记录（默认最新观看的一集）
     final primaryItem = group.primaryItem;
     // 是否显示多集叠卡与角标
@@ -336,7 +337,7 @@ class _WatchHistoryGridItem extends ConsumerWidget {
                         child: Stack(
                           fit: StackFit.expand,
                           children: [
-                            _buildImage(context, serverBaseUrl, primaryItem),
+                            _buildImage(context, serverBaseUrl, accessToken, primaryItem),
                             Positioned(
                               left: 0,
                               right: 0,
@@ -418,12 +419,16 @@ class _WatchHistoryGridItem extends ConsumerWidget {
     return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
   }
 
-  Widget _buildImage(BuildContext context, String? serverBaseUrl, WatchHistoryItem item) {
+  Widget _buildImage(BuildContext context, String? serverBaseUrl, String? accessToken, WatchHistoryItem item) {
     final imagePath = _imagePath(item);
     if (imagePath != null && imagePath.isNotEmpty) {
       final imageUrl = ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl);
       return CachedNetworkImage(
         imageUrl: imageUrl,
+        httpHeaders:
+            accessToken != null
+                ? {'Authorization': 'Bearer $accessToken'}
+                : null,
         fit: BoxFit.cover,
         placeholder: (ctx, url) => _buildPlaceholder(context),
         errorWidget: (ctx, url, error) => _buildPlaceholder(context),
