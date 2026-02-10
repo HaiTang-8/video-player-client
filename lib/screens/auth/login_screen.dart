@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_title_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
@@ -124,6 +125,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
             const SizedBox(height: 40),
+            _buildServerIndicator(),
+            const SizedBox(height: 24),
             shadcn.TextField(
               controller: _usernameController,
               placeholder: const Text('用户名'),
@@ -146,6 +149,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
             ),
             const SizedBox(height: 48),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServerIndicator() {
+    final serverState = ref.watch(serverListProvider);
+    final currentServer = serverState.currentServer;
+    if (currentServer == null) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: () => context.push('/server-config'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: CupertinoColors.systemGrey6.resolveFrom(context),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              CupertinoIcons.desktopcomputer,
+              size: 18,
+              color: CupertinoColors.secondaryLabel.resolveFrom(context),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    currentServer.name,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: CupertinoColors.label.resolveFrom(context),
+                    ),
+                  ),
+                  Text(
+                    currentServer.url,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              CupertinoIcons.chevron_right,
+              size: 16,
+              color: CupertinoColors.tertiaryLabel.resolveFrom(context),
+            ),
           ],
         ),
       ),

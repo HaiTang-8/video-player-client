@@ -17,6 +17,7 @@ import '../../screens/storages/resources_screen.dart';
 import '../../screens/storages/storage_browse_screen.dart';
 import '../../screens/library/category_detail_screen.dart';
 import '../../screens/library/watch_history_screen.dart';
+import '../../screens/library/local_media_screen.dart';
 import '../../screens/playback_settings/playback_settings_screen.dart';
 import '../../screens/settings/database_backup_screen.dart';
 import '../../screens/settings/aria2_settings_screen.dart';
@@ -62,13 +63,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isOnErrorPage = state.matchedLocation == '/connection-error';
       final isOnLoginPage = state.matchedLocation == '/login';
       final isOnSetupPage = state.matchedLocation == '/setup';
+      final isOnServerConfigPage = state.matchedLocation == '/server-config';
       final isAuthPage = isOnLoginPage || isOnSetupPage;
 
       if (!isConfigured && !isOnConfigPage) {
         return '/config';
       }
 
-      if (isConfigured && isError && !isOnErrorPage && !isOnConfigPage) {
+      if (isConfigured && isError && !isOnErrorPage && !isOnConfigPage && !isOnServerConfigPage) {
         return '/connection-error';
       }
 
@@ -85,10 +87,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
 
       if (isConnected && authState.authEnabled) {
-        if (authState.status == AuthStatus.setupRequired && !isOnSetupPage) {
+        if (authState.status == AuthStatus.setupRequired && !isOnSetupPage && !isOnServerConfigPage) {
           return '/setup';
         }
-        if (authState.status == AuthStatus.unauthenticated && !isAuthPage) {
+        if (authState.status == AuthStatus.unauthenticated && !isAuthPage && !isOnServerConfigPage) {
           return '/login';
         }
         if (authState.status == AuthStatus.authenticated && isAuthPage) {
@@ -251,6 +253,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/watch-history',
         builder: (context, state) => const WatchHistoryScreen(),
+      ),
+
+      // 本地影片页面
+      GoRoute(
+        path: '/downloads',
+        builder: (context, state) => const LocalMediaScreen(),
       ),
 
       // 设置页面

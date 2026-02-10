@@ -51,6 +51,15 @@ class AuthNotifier extends Notifier<AuthState> {
     ref.listen(apiClientProvider, (prev, next) {
       _setupInterceptor(next);
     });
+    _setupInterceptor(ref.read(apiClientProvider));
+    final savedTokens = _loadTokens();
+    if (savedTokens != null) {
+      return AuthState(
+        tokens: savedTokens,
+        status: AuthStatus.authenticated,
+        authEnabled: true,
+      );
+    }
     return const AuthState();
   }
 
