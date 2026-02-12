@@ -75,7 +75,7 @@ class AppTheme {
       titleTextStyle: TextStyle(
         color: Colors.black,
         fontSize: 16,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
       ),
     ),
     cardTheme: CardThemeData(
@@ -141,7 +141,7 @@ class AppTheme {
       titleTextStyle: TextStyle(
         color: Colors.white,
         fontSize: 16,
-        fontWeight: FontWeight.w500,
+        fontWeight: FontWeight.w600,
       ),
     ),
     cardTheme: CardThemeData(

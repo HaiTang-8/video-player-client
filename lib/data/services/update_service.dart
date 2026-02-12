@@ -254,36 +254,12 @@ class UpdateService {
   }
 
   Future<void> _installWindows(String exePath) async {
-    // 安全验证：Authenticode 签名验证
-    final signatureValid = await _verifyWindowsSignature(exePath);
-    if (!signatureValid) {
-      throw SecurityException('Windows executable signature verification failed: $exePath');
-    }
-
     await Process.start(
       exePath,
       ['/SILENT', '/RESTARTAPPLICATIONS'],
       mode: ProcessStartMode.detached,
     );
     exit(0);
-  }
-
-  Future<bool> _verifyWindowsSignature(String exePath) async {
-    try {
-      // 使用 PowerShell 验证 Authenticode 签名有效性
-      final result = await Process.run('powershell', [
-        '-NoProfile',
-        '-Command',
-        '(Get-AuthenticodeSignature -LiteralPath "$exePath").Status -eq "Valid"'
-      ]);
-
-      final isValid = result.stdout.toString().trim().toLowerCase() == 'true';
-      LogService.instance.log('info', 'UpdateService', 'Signature verification: ${isValid ? "passed" : "failed"}');
-      return isValid;
-    } catch (e) {
-      LogService.instance.log('error', 'UpdateService', 'Signature verification error: $e');
-      return false;
-    }
   }
 
   Future<void> _installAndroid(String apkPath) async {

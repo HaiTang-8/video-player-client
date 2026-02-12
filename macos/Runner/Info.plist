@@ -33,6 +33,8 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUPublicEDKey</key>
+	<string>nJLLjodVxxzBMKY5iFzZxID2YJU/KvUxm6g2elAzAsU=</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/HaiTang-8/video-player-client/releases/latest/download/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>
