@@ -23,6 +23,8 @@ class LogViewerScreen extends ConsumerStatefulWidget {
 class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
   final _searchController = TextEditingController();
   bool _showFilters = false;
+  bool _selectionMode = false;
+  final Set<int> _selectedIndices = {};
 
   @override
   void initState() {
@@ -44,44 +46,108 @@ class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
     final state = ref.watch(logViewerProvider);
 
     return Scaffold(
-      appBar: isDesktop
-          ? DesktopAppBar(
-              title: const Text('应用日志'),
-              onBack: () => context.pop(),
-              actions: [
-                shadcn.GhostButton(
-                  size: shadcn.ButtonSize.small,
-                  density: shadcn.ButtonDensity.icon,
-                  onPressed: () => ref.read(logViewerProvider.notifier).loadLogs(),
-                  child: const Icon(shadcn.LucideIcons.refreshCw, size: 16),
+      appBar: _selectionMode
+          ? _buildSelectionAppBar(isDesktop, state)
+          : isDesktop
+              ? DesktopAppBar(
+                  title: const Text('应用日志'),
+                  onBack: () => context.pop(),
+                  actions: [
+                    shadcn.GhostButton(
+                      size: shadcn.ButtonSize.small,
+                      density: shadcn.ButtonDensity.icon,
+                      onPressed: () => ref.read(logViewerProvider.notifier).loadLogs(),
+                      child: const Icon(shadcn.LucideIcons.refreshCw, size: 16),
+                    ),
+                    const SizedBox(width: 4),
+                    shadcn.GhostButton(
+                      size: shadcn.ButtonSize.small,
+                      density: shadcn.ButtonDensity.icon,
+                      onPressed: () => _copyLogs(),
+                      child: const Icon(shadcn.LucideIcons.copy, size: 16),
+                    ),
+                  ],
+                )
+              : MobileAppBar(
+                  title: const Text('应用日志'),
+                  onBack: () => context.pop(),
+                  actions: [
+                    IconButton(
+                      icon: Icon(_showFilters ? CupertinoIcons.slider_horizontal_3 : CupertinoIcons.slider_horizontal_below_rectangle),
+                      onPressed: () => setState(() => _showFilters = !_showFilters),
+                    ),
+                    IconButton(
+                      icon: const Icon(CupertinoIcons.doc_on_clipboard),
+                      onPressed: () => _copyLogs(),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                shadcn.GhostButton(
-                  size: shadcn.ButtonSize.small,
-                  density: shadcn.ButtonDensity.icon,
-                  onPressed: () => _copyLogs(),
-                  child: const Icon(shadcn.LucideIcons.copy, size: 16),
-                ),
-              ],
-            )
-          : MobileAppBar(
-              title: const Text('应用日志'),
-              onBack: () => context.pop(),
-              actions: [
-                IconButton(
-                  icon: Icon(_showFilters ? CupertinoIcons.slider_horizontal_3 : CupertinoIcons.slider_horizontal_below_rectangle),
-                  onPressed: () => setState(() => _showFilters = !_showFilters),
-                ),
-                IconButton(
-                  icon: const Icon(CupertinoIcons.doc_on_clipboard),
-                  onPressed: () => _copyLogs(),
-                ),
-              ],
-            ),
       body: isDesktop
           ? _buildDesktopLayout(theme, isDark, state)
           : _buildMobileLayout(theme, isDark, state),
     );
+  }
+
+  PreferredSizeWidget _buildSelectionAppBar(bool isDesktop, LogViewerState state) {
+    final total = state.filteredLogs.length;
+    final allSelected = _selectedIndices.length == total && total > 0;
+    if (isDesktop) {
+      return DesktopAppBar(
+        title: Text('已选 ${_selectedIndices.length} 条'),
+        onBack: () => _exitSelectionMode(),
+        actions: [
+          shadcn.GhostButton(
+            size: shadcn.ButtonSize.small,
+            density: shadcn.ButtonDensity.icon,
+            onPressed: () => setState(() {
+              if (allSelected) {
+                _selectedIndices.clear();
+              } else {
+                _selectedIndices.addAll(List.generate(total, (i) => i));
+              }
+            }),
+            child: Icon(
+              allSelected ? shadcn.LucideIcons.checkCheck : shadcn.LucideIcons.check,
+              size: 16,
+            ),
+          ),
+          const SizedBox(width: 4),
+          shadcn.GhostButton(
+            size: shadcn.ButtonSize.small,
+            density: shadcn.ButtonDensity.icon,
+            onPressed: _selectedIndices.isEmpty ? null : () => _copySelected(state),
+            child: const Icon(shadcn.LucideIcons.copy, size: 16),
+          ),
+        ],
+      );
+    }
+    return MobileAppBar(
+      title: Text('已选 ${_selectedIndices.length} 条'),
+      onBack: () => _exitSelectionMode(),
+      actions: [
+        IconButton(
+          icon: Icon(allSelected ? CupertinoIcons.checkmark_square_fill : CupertinoIcons.checkmark_square),
+          onPressed: () => setState(() {
+            if (allSelected) {
+              _selectedIndices.clear();
+            } else {
+              _selectedIndices.addAll(List.generate(total, (i) => i));
+            }
+          }),
+        ),
+        IconButton(
+          icon: const Icon(CupertinoIcons.doc_on_clipboard),
+          onPressed: _selectedIndices.isEmpty ? null : () => _copySelected(state),
+        ),
+      ],
+    );
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedIndices.clear();
+    });
   }
 
   Widget _buildDesktopLayout(shadcn.ThemeData theme, bool isDark, LogViewerState state) {
@@ -266,6 +332,24 @@ class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
           return _LogEntryCard(
             entry: state.filteredLogs[index],
             theme: theme,
+            selectionMode: _selectionMode,
+            selected: _selectedIndices.contains(index),
+            onTapInSelectionMode: () => setState(() {
+              if (_selectedIndices.contains(index)) {
+                _selectedIndices.remove(index);
+                if (_selectedIndices.isEmpty) _selectionMode = false;
+              } else {
+                _selectedIndices.add(index);
+              }
+            }),
+            onLongPress: () {
+              if (!_selectionMode) {
+                setState(() {
+                  _selectionMode = true;
+                  _selectedIndices.add(index);
+                });
+              }
+            },
           );
         },
       ),
@@ -639,6 +723,25 @@ class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
     }
   }
 
+  Future<void> _copySelected(LogViewerState state) async {
+    final logs = state.filteredLogs;
+    final sorted = _selectedIndices.toList()..sort();
+    final text = sorted
+        .where((i) => i < logs.length)
+        .map((i) {
+          final e = logs[i];
+          return '[${e.timestamp.toIso8601String()}] [${e.level}] [${e.tag}] ${e.message}';
+        })
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已复制 ${sorted.length} 条日志')),
+      );
+    }
+    _exitSelectionMode();
+  }
+
   Color _getLevelColor(String level) {
     switch (level) {
       case 'ERROR':
@@ -654,8 +757,19 @@ class _LogViewerScreenState extends ConsumerState<LogViewerScreen> {
 class _LogEntryCard extends StatefulWidget {
   final LogEntry entry;
   final shadcn.ThemeData theme;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onTapInSelectionMode;
+  final VoidCallback? onLongPress;
 
-  const _LogEntryCard({required this.entry, required this.theme});
+  const _LogEntryCard({
+    required this.entry,
+    required this.theme,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onTapInSelectionMode,
+    this.onLongPress,
+  });
 
   @override
   State<_LogEntryCard> createState() => _LogEntryCardState();
@@ -676,15 +790,36 @@ class _LogEntryCardState extends State<_LogEntryCard> {
       child: shadcn.Card(
         padding: EdgeInsets.zero,
         child: InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
+          onTap: widget.selectionMode
+              ? widget.onTapInSelectionMode
+              : () => setState(() => _expanded = !_expanded),
+          onLongPress: widget.onLongPress,
           borderRadius: BorderRadius.circular(theme.radiusMd),
-          child: Padding(
+          child: Container(
+            decoration: widget.selected
+                ? BoxDecoration(
+                    border: Border.all(color: theme.colorScheme.primary, width: 1.5),
+                    borderRadius: BorderRadius.circular(theme.radiusMd),
+                  )
+                : null,
             padding: const EdgeInsets.all(12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
+                    if (widget.selectionMode) ...[
+                      Icon(
+                        widget.selected
+                            ? shadcn.LucideIcons.circleCheck
+                            : shadcn.LucideIcons.circle,
+                        size: 18,
+                        color: widget.selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.mutedForeground,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     // Level badge
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
