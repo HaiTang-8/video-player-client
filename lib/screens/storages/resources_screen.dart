@@ -80,16 +80,14 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
           shadcn.MenuButton(
             leading: const Icon(CupertinoIcons.doc_text_search, size: 18),
             child: const Text('扫描新文件'),
-            onPressed: (ctx) {
-              Navigator.of(ctx).pop();
+            onPressed: (_) {
               _startGlobalScan(forceScrape: false);
             },
           ),
           shadcn.MenuButton(
             leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
             child: const Text('强制刮削全部'),
-            onPressed: (ctx) {
-              Navigator.of(ctx).pop();
+            onPressed: (_) {
               _startGlobalScan(forceScrape: true);
             },
           ),
@@ -738,8 +736,7 @@ class _StorageTile extends StatelessWidget {
             shadcn.MenuButton(
               leading: const Icon(CupertinoIcons.pencil, size: 18),
               child: const Text('编辑存储源'),
-              onPressed: (context) {
-                Navigator.of(context).pop();
+              onPressed: (_) {
                 onEdit();
               },
             ),
@@ -750,8 +747,7 @@ class _StorageTile extends StatelessWidget {
                 color: destructiveColor,
               ),
               child: Text('删除存储源', style: TextStyle(color: destructiveColor)),
-              onPressed: (context) {
-                Navigator.of(context).pop();
+              onPressed: (_) {
                 onDelete();
               },
             ),
