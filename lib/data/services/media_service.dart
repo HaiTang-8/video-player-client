@@ -420,10 +420,14 @@ class MediaService {
   /// 获取单个媒体的观看进度
   Future<ApiResponse<WatchHistoryItem>> getWatchProgress(
     String mediaType,
-    int mediaId,
-  ) async {
+    int mediaId, {
+    int? tmdbId,
+  }) async {
     return _client.get<WatchHistoryItem>(
       ApiConstants.historyGet(mediaType, mediaId),
+      queryParameters: {
+        if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId,
+      },
       fromJson: (json) =>
           WatchHistoryItem.fromJson(json as Map<String, dynamic>),
     );
@@ -445,9 +449,13 @@ class MediaService {
   Future<ApiResponse<WatchHistoryItem>> getSeasonProgress({
     required int tvShowId,
     required int seasonId,
+    int? tmdbId,
   }) async {
     return _client.get<WatchHistoryItem>(
       ApiConstants.historySeasonProgress(tvShowId, seasonId),
+      queryParameters: {
+        if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId,
+      },
       fromJson: (json) =>
           WatchHistoryItem.fromJson(json as Map<String, dynamic>),
     );

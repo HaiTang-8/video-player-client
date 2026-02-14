@@ -39,6 +39,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   WatchHistoryItem? _watchHistory;
   bool _hasAutoScrolled = false;
   int? _lastAutoScrolledSeasonId;
+  int? _tmdbId;
 
   @override
   void initState() {
@@ -51,6 +52,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final resp = await service.getSeasonProgress(
       tvShowId: widget.tvShowId,
       seasonId: seasonId,
+      tmdbId: _tmdbId,
     );
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
@@ -82,10 +84,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     const horizontalPadding = 12.0;
 
     final availableWidth = viewportWidth - horizontalPadding * 2;
-    final itemCount = ((availableWidth + itemSpacing) / (minItemWidth + itemSpacing)).floor();
-    final itemWidth = itemCount > 0
-        ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
-        : minItemWidth;
+    final double itemWidth;
+    if (WindowControls.isDesktop) {
+      final itemCount = ((availableWidth + itemSpacing) / (minItemWidth + itemSpacing)).floor();
+      itemWidth = itemCount > 0
+          ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
+          : minItemWidth;
+    } else {
+      itemWidth = minItemWidth;
+    }
 
     final adjustedIndex = targetIndex > 0 ? targetIndex - 1 : 0;
     final targetOffset = adjustedIndex * (itemWidth + itemSpacing);
@@ -106,7 +113,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return;
     }
 
-    final targetIndex = episodes.indexWhere((ep) => ep.id == history.episodeId);
+    var targetIndex = episodes.indexWhere((ep) => ep.id == history.episodeId);
+    if (targetIndex == -1 && history.mediaInfo?.episodeInfo != null) {
+      final epNum = history.mediaInfo!.episodeInfo!.episodeNumber;
+      targetIndex = episodes.indexWhere((ep) => ep.episodeNumber == epNum);
+    }
     if (targetIndex == -1) {
       return;
     }
@@ -197,6 +208,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           if (tvShow == null) {
             return const AppErrorWidget(message: '剧集不存在');
           }
+          _tmdbId = int.tryParse(tvShow.tmdbId ?? '');
 
           final cast =
               (tvShow.castDetail != null && tvShow.castDetail!.isNotEmpty)
@@ -271,6 +283,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     serverBaseUrl: serverBaseUrl,
                     fallbackImageUrl: episodeFallbackImage,
                     scrollController: _episodesScrollController,
+                    tmdbId: _tmdbId,
                     onEpisodesLoaded: (episodes) {
                       _autoScrollToWatchedEpisode(
                         episodes: episodes,
@@ -287,6 +300,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     tvShowName: tvShow.name,
                     fallbackImageUrl: episodeFallbackImage,
                     scrollController: _episodesScrollController,
+                    tmdbId: _tmdbId,
                     onEpisodesLoaded: (episodes) {
                       _autoScrollToWatchedEpisode(
                         episodes: episodes,
@@ -1572,6 +1586,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
   final String? fallbackImageUrl;
   final ScrollController scrollController;
   final void Function(List<Episode> episodes)? onEpisodesLoaded;
+  final int? tmdbId;
 
   static const double _minItemWidth = 160.0;
   static const double _itemSpacing = 16.0;
@@ -1586,6 +1601,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
     this.fallbackImageUrl,
     required this.scrollController,
     this.onEpisodesLoaded,
+    this.tmdbId,
   });
 
   @override
@@ -1691,6 +1707,7 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
               fallbackImageUrl: widget.fallbackImageUrl,
               episodes: widget.episodes,
               width: itemWidth,
+              tmdbId: widget.tmdbId,
             );
           },
         ),
@@ -1707,6 +1724,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
   final String? fallbackImageUrl;
   final ScrollController scrollController;
   final void Function(List<Episode> episodes)? onEpisodesLoaded;
+  final int? tmdbId;
 
   static const double _minItemWidth = 160.0;
   static const double _itemSpacing = 16.0;
@@ -1719,6 +1737,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
     this.fallbackImageUrl,
     required this.scrollController,
     this.onEpisodesLoaded,
+    this.tmdbId,
   });
 
   @override
@@ -1855,6 +1874,7 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
               fallbackImageUrl: widget.fallbackImageUrl,
               episodes: episodes,
               width: itemWidth,
+              tmdbId: widget.tmdbId,
             );
           },
         ),
@@ -1873,6 +1893,7 @@ class _EpisodeCard extends ConsumerWidget {
   final String? fallbackImageUrl;
   final List<Episode>? episodes;
   final double width;
+  final int? tmdbId;
 
   const _EpisodeCard({
     required this.episode,
@@ -1883,6 +1904,7 @@ class _EpisodeCard extends ConsumerWidget {
     this.fallbackImageUrl,
     this.episodes,
     this.width = 160,
+    this.tmdbId,
   });
 
   @override
@@ -1996,7 +2018,7 @@ class _EpisodeCard extends ConsumerWidget {
     int? position;
 
     if (service != null) {
-      final historyResp = await service.getWatchProgress('tv', tvShowId);
+      final historyResp = await service.getWatchProgress('tv', tvShowId, tmdbId: tmdbId);
       if (historyResp.isSuccess &&
           historyResp.data != null &&
           historyResp.data!.episodeId == episode.id &&

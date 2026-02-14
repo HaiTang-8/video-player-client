@@ -216,13 +216,28 @@ class WatchHistoryGroup {
     final List<String> orderedKeys = [];
 
     for (final item in sortedItems) {
-      // 只对“有剧集信息的电视剧”做合并，其它记录保持单条
       final bool canMergeAsShow = mergeEpisodes &&
           item.mediaType == 'tv' &&
           item.mediaInfo?.episodeInfo != null;
-      final String groupKey = canMergeAsShow
-          ? 'tv_${item.mediaId}'
-          : '${item.mediaType}_${item.mediaId}_${item.episodeId ?? 0}_${item.id}';
+      final tmdb = item.tmdbMediaId ?? 0;
+      final tmdbEp = item.tmdbEpisodeId ?? 0;
+
+      final String groupKey;
+      if (canMergeAsShow) {
+        groupKey = tmdb > 0
+            ? 'tv_tmdb_$tmdb'
+            : 'tv_${item.mediaId}';
+      } else if (tmdb > 0) {
+        if (item.mediaType == 'tv' && tmdbEp > 0) {
+          groupKey = 'tv_tmdb_${tmdb}_$tmdbEp';
+        } else if (item.mediaType == 'tv') {
+          groupKey = 'tv_${item.mediaId}_${item.episodeId ?? 0}_${item.id}';
+        } else {
+          groupKey = 'movie_tmdb_$tmdb';
+        }
+      } else {
+        groupKey = '${item.mediaType}_${item.mediaId}_${item.episodeId ?? 0}_${item.id}';
+      }
 
       if (!groupedMap.containsKey(groupKey)) {
         groupedMap[groupKey] = [];

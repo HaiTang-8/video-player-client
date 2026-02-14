@@ -32,17 +32,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Movie? _movie;
   final _castScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
+  bool _historyLoaded = false;
 
   @override
   void initState() {
     super.initState();
-    _loadWatchHistory();
   }
 
   Future<void> _loadWatchHistory() async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
-    final resp = await service.getWatchProgress('movie', widget.movieId);
+    final tmdbId = int.tryParse(_movie?.tmdbId ?? '');
+    final resp = await service.getWatchProgress('movie', widget.movieId, tmdbId: tmdbId);
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
       setState(() => _watchHistory = resp.data);
@@ -112,6 +113,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             return const AppErrorWidget(message: '电影不存在');
           }
           _movie = movie;
+          if (!_historyLoaded) {
+            _historyLoaded = true;
+            _loadWatchHistory();
+          }
 
           final cast =
               (movie.castDetail != null && movie.castDetail!.isNotEmpty)
@@ -710,7 +715,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     int? position;
 
     if (service != null) {
-      final historyResp = await service.getWatchProgress('movie', movie.id);
+      final tmdbId = int.tryParse(movie.tmdbId ?? '');
+      final historyResp = await service.getWatchProgress('movie', movie.id, tmdbId: tmdbId);
       if (historyResp.isSuccess && historyResp.data != null) {
         if (!historyResp.data!.completed) {
           position = historyResp.data!.position;
