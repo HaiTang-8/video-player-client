@@ -47,7 +47,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final colors = context.appColors;
 
     return Scaffold(
-      backgroundColor: isDesktop ? colors.groupedBackground : colors.cardBackground,
+      backgroundColor: colors.cardBackground,
       appBar: isDesktop
           ? DesktopTitleBar(
               title: const Text('媒体库'),
