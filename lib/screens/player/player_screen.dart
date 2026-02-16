@@ -609,12 +609,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           widget.tvShowId != null &&
           widget.seasonId != null) {
         final episodeId = _currentEpisode?.id ?? widget.id;
+        final providerKey = (
+          tvShowId: widget.tvShowId!,
+          seasonId: widget.seasonId!,
+          episodeId: episodeId,
+        );
+        ref.invalidate(episodeStreamProvider(providerKey));
         final response = await ref.read(
-          episodeStreamProvider((
-            tvShowId: widget.tvShowId!,
-            seasonId: widget.seasonId!,
-            episodeId: episodeId,
-          )).future,
+          episodeStreamProvider(providerKey).future,
         );
         streamUrl = response?.url;
         storageId = response?.storageId;

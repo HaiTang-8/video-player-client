@@ -1019,7 +1019,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   tvShowId: widget.tvShowId,
                                   season: season,
                                   isSelected: isSelected,
-                                  isSingleSeason: tvShow.seasons!.length == 1,
                                 ),
                                 const SizedBox(height: 4),
                                 // 指示器
@@ -2082,13 +2081,11 @@ class _SeasonTabLabel extends ConsumerWidget {
   final int tvShowId;
   final Season season;
   final bool isSelected;
-  final bool isSingleSeason;
 
   const _SeasonTabLabel({
     required this.tvShowId,
     required this.season,
     required this.isSelected,
-    required this.isSingleSeason,
   });
 
   @override
@@ -2165,7 +2162,7 @@ class _SeasonTabLabel extends ConsumerWidget {
           (context) => _SourceGroupsSheet(
             tvShowId: tvShowId,
             seasonId: season.id,
-            seasonName: isSingleSeason ? '第一季' : season.displayName,
+            seasonName: '第${season.seasonNumber}季',
             groups: groups,
           ),
     );
@@ -2246,11 +2243,6 @@ class _SourceGroupsSheet extends ConsumerWidget {
     WidgetRef ref,
     SourceGroup group,
   ) async {
-    if (group.isPrimary) {
-      Navigator.pop(context);
-      return;
-    }
-
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
 
@@ -2262,11 +2254,9 @@ class _SourceGroupsSheet extends ConsumerWidget {
       group.folderPath,
     );
     if (response.isSuccess) {
-      // 刷新播放源分组数据
       ref.invalidate(
         seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)),
       );
-      // 刷新剧集详情（包含 episodes 数据，下载列表需要）
       ref.invalidate(tvShowDetailProvider(tvShowId));
     }
   }
