@@ -85,6 +85,8 @@ class ScanProgress {
   final int taskId;
   final int storageId;
   final String status;
+  final String phase;
+  final int discoveredFiles;
   final int totalFiles;
   final int scannedFiles;
   final double progress;
@@ -96,6 +98,8 @@ class ScanProgress {
     required this.taskId,
     required this.storageId,
     required this.status,
+    this.phase = '',
+    this.discoveredFiles = 0,
     required this.totalFiles,
     required this.scannedFiles,
     required this.progress,
@@ -109,6 +113,8 @@ class ScanProgress {
       taskId: json['task_id'] as int? ?? 0,
       storageId: json['storage_id'] as int? ?? 0,
       status: json['status'] as String? ?? '',
+      phase: json['phase'] as String? ?? '',
+      discoveredFiles: json['discovered_files'] as int? ?? 0,
       totalFiles: json['total_files'] as int? ?? 0,
       scannedFiles: json['scanned_files'] as int? ?? 0,
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
@@ -126,10 +132,14 @@ class ScanProgress {
   bool get isRunning => status == 'running';
 
   /// 是否已完成
-  bool get isCompleted => status == 'completed';
+  bool get isCompleted =>
+      status == 'completed' || status == 'completed_with_errors';
 
   /// 是否失败
   bool get isFailed => status == 'failed';
+
+  /// 是否处于扫描发现阶段
+  bool get isDiscovering => phase == 'scanning';
 
   /// 获取状态显示文本
   String get statusText {
@@ -138,8 +148,12 @@ class ScanProgress {
         return '扫描中';
       case 'completed':
         return '已完成';
+      case 'completed_with_errors':
+        return '完成(有错误)';
       case 'failed':
         return '失败';
+      case 'cancelled':
+        return '已取消';
       case 'pending':
         return '等待中';
       default:

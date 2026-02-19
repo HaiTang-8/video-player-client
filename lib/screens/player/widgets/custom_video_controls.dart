@@ -128,6 +128,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Map<String, String> _mediaInfo = {};
   Timer? _mediaInfoTimer;
 
+  // 三指点击触发媒体信息
+  int _pointerCount = 0;
+  bool _threeFingerTriggered = false;
+
   final List<StreamSubscription> _subscriptions = [];
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
@@ -730,7 +734,23 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         onHover: _onMouseMove,
         child: Stack(
           children: [
-            GestureDetector(
+            Listener(
+              onPointerDown: WindowControls.isDesktop ? null : (_) {
+                _pointerCount++;
+                if (_pointerCount >= 3 && !_threeFingerTriggered) {
+                  _threeFingerTriggered = true;
+                  _toggleMediaInfo();
+                }
+              },
+              onPointerUp: WindowControls.isDesktop ? null : (_) {
+                _pointerCount = (_pointerCount - 1).clamp(0, 10);
+                if (_pointerCount == 0) _threeFingerTriggered = false;
+              },
+              onPointerCancel: WindowControls.isDesktop ? null : (_) {
+                _pointerCount = (_pointerCount - 1).clamp(0, 10);
+                if (_pointerCount == 0) _threeFingerTriggered = false;
+              },
+              child: GestureDetector(
               onTap: () {
                 if (WindowControls.isDesktop) {
                   widget.player.playOrPause();
@@ -743,14 +763,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               onLongPressStart:
                   WindowControls.isDesktop || _isLocked
                       ? null
-                      : (details) {
-                          final screenWidth = MediaQuery.of(context).size.width;
-                          if (details.globalPosition.dx < screenWidth / 2) {
-                            _toggleMediaInfo();
-                          } else {
-                            _startLongPressSpeed();
-                          }
-                        },
+                      : (_) => _startLongPressSpeed(),
               onLongPressEnd:
                   WindowControls.isDesktop || _isLocked ? null : (_) => _endLongPressSpeed(),
               onPanStart: WindowControls.isDesktop || _isLocked ? null : _onPanStart,
@@ -762,6 +775,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 controls: NoVideoControls,
                 fit: _isFillMode ? BoxFit.cover : BoxFit.contain,
               ),
+            ),
             ),
           // 亮度指示器
           if (_showBrightnessOverlay) _buildBrightnessOverlay(),
@@ -1582,7 +1596,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               builder: (innerCtx) {
                 final mq = MediaQuery.of(innerCtx);
                 final panelWidth =
-                    WindowControls.isDesktop ? 280.0 : mq.size.width * 0.5;
+                    WindowControls.isDesktop ? 280.0 : mq.size.width * 0.35;
                 final vp = mq.viewPadding;
                 // 这里不要直接用 SafeArea：
                 // - 在 Android 沉浸式全屏(immersiveSticky)下，MediaQuery.padding 可能被系统置为 0，
@@ -1635,7 +1649,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                                 child: ListView.builder(
                                   controller: scrollController,
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
+                                    horizontal: 12,
                                   ),
                                   itemCount: episodes.length,
                                   itemBuilder: (_, index) {

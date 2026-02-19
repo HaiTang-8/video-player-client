@@ -844,8 +844,10 @@ class _ScanPopoverOverlay extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        state.foundFiles == 0 && state.isScanning
-                            ? '正在扫描目录...'
+                        state.isDiscovering
+                            ? (state.discoveredFiles > 0
+                                ? '正在扫描... 已发现 ${state.discoveredFiles} 个文件'
+                                : '正在扫描目录...')
                             : '已找到 ${state.foundFiles}，待更新 ${state.pendingFiles}，已更新 ${state.updatedFiles}',
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.9),

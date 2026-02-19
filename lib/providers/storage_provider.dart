@@ -177,6 +177,8 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
 
 class GlobalScanState {
   final bool isScanning;
+  final bool isDiscovering;
+  final int discoveredFiles;
   final int foundFiles;
   final int pendingFiles;
   final int updatedFiles;
@@ -184,6 +186,8 @@ class GlobalScanState {
 
   const GlobalScanState({
     this.isScanning = false,
+    this.isDiscovering = false,
+    this.discoveredFiles = 0,
     this.foundFiles = 0,
     this.pendingFiles = 0,
     this.updatedFiles = 0,
@@ -192,6 +196,8 @@ class GlobalScanState {
 
   GlobalScanState copyWith({
     bool? isScanning,
+    bool? isDiscovering,
+    int? discoveredFiles,
     int? foundFiles,
     int? pendingFiles,
     int? updatedFiles,
@@ -199,6 +205,8 @@ class GlobalScanState {
   }) {
     return GlobalScanState(
       isScanning: isScanning ?? this.isScanning,
+      isDiscovering: isDiscovering ?? this.isDiscovering,
+      discoveredFiles: discoveredFiles ?? this.discoveredFiles,
       foundFiles: foundFiles ?? this.foundFiles,
       pendingFiles: pendingFiles ?? this.pendingFiles,
       updatedFiles: updatedFiles ?? this.updatedFiles,
@@ -247,6 +255,8 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
     _cancelled = false;
     state = state.copyWith(
       isScanning: true,
+      isDiscovering: true,
+      discoveredFiles: 0,
       foundFiles: 0,
       pendingFiles: 0,
       updatedFiles: 0,
@@ -270,8 +280,9 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
 
       if (_cancelled) break;
 
-      int totalFound = 0, totalUpdated = 0;
+      int totalFound = 0, totalUpdated = 0, totalDiscovered = 0;
       bool anyRunning = false;
+      bool anyDiscovering = false;
 
       for (final id in storageIds) {
         if (_cancelled) break;
@@ -285,8 +296,13 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
       if (_cancelled) break;
 
       for (final p in _progresses.values) {
-        totalFound += p.totalFiles;
-        totalUpdated += p.scannedFiles;
+        totalDiscovered += p.discoveredFiles;
+        if (p.isDiscovering) {
+          anyDiscovering = true;
+        } else {
+          totalFound += p.totalFiles;
+          totalUpdated += p.scannedFiles;
+        }
       }
 
       state = state.copyWith(
@@ -294,6 +310,8 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
         pendingFiles: totalFound - totalUpdated,
         updatedFiles: totalUpdated,
         isScanning: anyRunning,
+        isDiscovering: anyDiscovering,
+        discoveredFiles: totalDiscovered,
       );
 
       if (!anyRunning) break;
