@@ -550,7 +550,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             onPressed: () => _downloadMovie(context, movie),
-            child: const Icon(CupertinoIcons.cloud_download, color: Colors.black, size: 22),
+            child: Icon(shadcn.LucideIcons.circleArrowDown, color: Colors.black, size: 22),
           ),
         Builder(
           builder: (menuContext) => CupertinoButton(
@@ -584,7 +584,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       if (hasFile)
         IconButton(
           tooltip: '下载',
-          icon: const Icon(CupertinoIcons.cloud_download),
+          icon: Icon(shadcn.LucideIcons.circleArrowDown),
           onPressed: () => _downloadMovie(context, movie),
         ),
       Builder(
@@ -600,69 +600,93 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   void _showMobileActionsMenu(BuildContext context, Movie movie) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo, size: 18),
-            child: const Text('更换海报'),
-            onPressed: (_) {
-              _showImageSelector(context, movie, ImageSelectorType.poster);
-            },
+      builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-            child: const Text('重新刮削'),
-            onPressed: (_) {
-              _scrapeMovie(context, movie.id);
-            },
+        );
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: shadcn.MenuGroup(
+            direction: Axis.vertical,
+            builder: (context, children) => shadcn.MenuPopup(children: children),
+            children: [
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo, size: 18),
+                child: const Text('更换海报'),
+                onPressed: (_) {
+                  _showImageSelector(context, movie, ImageSelectorType.poster);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+                child: const Text('重新刮削'),
+                onPressed: (_) {
+                  _scrapeMovie(context, movie.id);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.refresh, size: 18),
+                child: const Text('刷新'),
+                onPressed: (_) {
+                  ref.invalidate(movieDetailProvider(widget.movieId));
+                },
+              ),
+            ],
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.refresh, size: 18),
-            child: const Text('刷新'),
-            onPressed: (_) {
-              ref.invalidate(movieDetailProvider(widget.movieId));
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   void _showDesktopActionsMenu(BuildContext context, Movie movie) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo, size: 18),
-            child: const Text('更换海报'),
-            onPressed: (_) {
-              _showImageSelector(context, movie, ImageSelectorType.poster);
-            },
+      builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
-            child: const Text('更换背景图'),
-            onPressed: (_) {
-              _showImageSelector(context, movie, ImageSelectorType.backdrop);
-            },
+        );
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: shadcn.MenuGroup(
+            direction: Axis.vertical,
+            builder: (context, children) => shadcn.MenuPopup(children: children),
+            children: [
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo, size: 18),
+                child: const Text('更换海报'),
+                onPressed: (_) {
+                  _showImageSelector(context, movie, ImageSelectorType.poster);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+                child: const Text('更换背景图'),
+                onPressed: (_) {
+                  _showImageSelector(context, movie, ImageSelectorType.backdrop);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+                child: const Text('重新刮削'),
+                onPressed: (_) {
+                  _scrapeMovie(context, movie.id);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.refresh, size: 18),
+                child: const Text('刷新'),
+                onPressed: (_) {
+                  ref.invalidate(movieDetailProvider(widget.movieId));
+                },
+              ),
+            ],
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-            child: const Text('重新刮削'),
-            onPressed: (_) {
-              _scrapeMovie(context, movie.id);
-            },
-          ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.refresh, size: 18),
-            child: const Text('刷新'),
-            onPressed: (_) {
-              ref.invalidate(movieDetailProvider(widget.movieId));
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

@@ -686,7 +686,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
-            child: Icon(CupertinoIcons.cloud_download, color: colors.textPrimary, size: 22),
+            child: Icon(shadcn.LucideIcons.circleArrowDown, color: colors.textPrimary, size: 22),
           ),
         Builder(
           builder: (menuContext) => CupertinoButton(
@@ -723,7 +723,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       if (hasDownloadableEpisodes)
         IconButton(
           tooltip: '下载',
-          icon: const Icon(CupertinoIcons.cloud_download),
+          icon: Icon(shadcn.LucideIcons.circleArrowDown),
           onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
         ),
       Builder(
@@ -739,83 +739,107 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   void _showMobileActionsMenu(BuildContext context, TvShow tvShow, Season? selectedSeason) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo, size: 18),
-            child: const Text('更换海报'),
-            onPressed: (_) {
-              _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason);
-            },
+      builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-            child: const Text('重新刮削'),
-            onPressed: (_) {
-              _scrapeTvShow(context, widget.tvShowId);
-            },
+        );
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: shadcn.MenuGroup(
+            direction: Axis.vertical,
+            builder: (context, children) => shadcn.MenuPopup(children: children),
+            children: [
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo, size: 18),
+                child: const Text('更换海报'),
+                onPressed: (_) {
+                  _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+                child: const Text('重新刮削'),
+                onPressed: (_) {
+                  _scrapeTvShow(context, widget.tvShowId);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+                child: const Text('同步季度'),
+                onPressed: (_) {
+                  _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.refresh, size: 18),
+                child: const Text('刷新'),
+                onPressed: (_) {
+                  ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+                },
+              ),
+            ],
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
-            child: const Text('同步季度'),
-            onPressed: (_) {
-              _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
-            },
-          ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.refresh, size: 18),
-            child: const Text('刷新'),
-            onPressed: (_) {
-              ref.invalidate(tvShowDetailProvider(widget.tvShowId));
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
   void _showDesktopActionsMenu(BuildContext context, TvShow tvShow) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo, size: 18),
-            child: const Text('更换海报'),
-            onPressed: (_) {
-              _showImageSelector(context, tvShow, ImageSelectorType.poster);
-            },
+      builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
-            child: const Text('更换背景图'),
-            onPressed: (_) {
-              _showImageSelector(context, tvShow, ImageSelectorType.backdrop);
-            },
+        );
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: shadcn.MenuGroup(
+            direction: Axis.vertical,
+            builder: (context, children) => shadcn.MenuPopup(children: children),
+            children: [
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo, size: 18),
+                child: const Text('更换海报'),
+                onPressed: (_) {
+                  _showImageSelector(context, tvShow, ImageSelectorType.poster);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+                child: const Text('更换背景图'),
+                onPressed: (_) {
+                  _showImageSelector(context, tvShow, ImageSelectorType.backdrop);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
+                child: const Text('重新刮削'),
+                onPressed: (_) {
+                  _scrapeTvShow(context, widget.tvShowId);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+                child: const Text('同步季度'),
+                onPressed: (_) {
+                  _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.refresh, size: 18),
+                child: const Text('刷新'),
+                onPressed: (_) {
+                  ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+                },
+              ),
+            ],
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-            child: const Text('重新刮削'),
-            onPressed: (_) {
-              _scrapeTvShow(context, widget.tvShowId);
-            },
-          ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
-            child: const Text('同步季度'),
-            onPressed: (_) {
-              _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
-            },
-          ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.refresh, size: 18),
-            child: const Text('刷新'),
-            onPressed: (_) {
-              ref.invalidate(tvShowDetailProvider(widget.tvShowId));
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

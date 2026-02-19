@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
-import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem;
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem, Theme;
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapIcons;
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
@@ -1182,6 +1182,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             )
           : null,
       builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
+          ),
+        );
         final children = <shadcn.MenuItem>[];
         for (var i = 0; i < speeds.length; i++) {
           final s = speeds[i];
@@ -1204,11 +1209,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             children.add(const shadcn.MenuDivider());
           }
         }
-        return ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
-            child: shadcn.DropdownMenu(children: children),
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              child: shadcn.DropdownMenu(children: children),
+            ),
           ),
         );
       },
@@ -1252,14 +1260,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             )
           : null,
       builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
+          ),
+        );
         if (tracks.isEmpty) {
-          return shadcn.DropdownMenu(
-            children: [
-              shadcn.MenuButton(
-                onPressed: null,
-                child: const Text('无可用音轨'),
-              ),
-            ],
+          return shadcn.Theme(
+            data: noAccentTheme,
+            child: shadcn.DropdownMenu(
+              children: [
+                shadcn.MenuButton(
+                  onPressed: null,
+                  child: const Text('无可用音轨'),
+                ),
+              ],
+            ),
           );
         }
         final children = <shadcn.MenuItem>[];
@@ -1280,11 +1296,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             children.add(const shadcn.MenuDivider());
           }
         }
-        return ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
-            child: shadcn.DropdownMenu(children: children),
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              child: shadcn.DropdownMenu(children: children),
+            ),
           ),
         );
       },
@@ -1330,6 +1349,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             )
           : null,
       builder: (dropdownContext) {
+        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
+          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
+            accent: () => Colors.transparent,
+          ),
+        );
         final closeSelected = currentId == 'no' || currentId == null;
         final children = <shadcn.MenuItem>[
           shadcn.MenuButton(
@@ -1393,11 +1417,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           ));
         }
 
-        return ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: ScrollConfiguration(
-            behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
-            child: shadcn.DropdownMenu(children: children),
+        return shadcn.Theme(
+          data: noAccentTheme,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              child: shadcn.DropdownMenu(children: children),
+            ),
           ),
         );
       },
