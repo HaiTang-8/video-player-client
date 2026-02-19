@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/utils/http_utils.dart';
 import '../../core/widgets/dialog_utils.dart';
@@ -929,30 +930,72 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.error_outline,
-                      size: 64,
-                      color: theme.colorScheme.error,
-                    ),
-                    const SizedBox(height: 16),
-                    SelectableText(
-                      _error!,
-                      style: const TextStyle(color: Colors.white),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 24),
-                    FilledButton.icon(
-                      onPressed: _loadVideo,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('重试'),
-                    ),
-                  ],
+            SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 24, right: 24, top: 56),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 64,
+                        color: theme.colorScheme.error,
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.all(12),
+                        child: Scrollbar(
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              _error!,
+                              style: const TextStyle(color: Colors.white, fontSize: 13),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          shadcn.PrimaryButton(
+                            onPressed: _loadVideo,
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(shadcn.LucideIcons.refreshCw, size: 16),
+                                SizedBox(width: 8),
+                                Text('重试'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          shadcn.OutlineButton(
+                            onPressed: () {
+                              Clipboard.setData(ClipboardData(text: _error!));
+                              DialogUtils.showToast(
+                                context: context,
+                                message: '已复制错误信息',
+                              );
+                            },
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(shadcn.LucideIcons.copy, size: 16),
+                                SizedBox(width: 8),
+                                Text('复制'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -960,7 +1003,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               title: '播放失败',
               onBack: () => Navigator.of(context).pop(),
               useGradient: false,
-              useSafeArea: false,
+              useSafeArea: true,
             ),
           ],
         ),
