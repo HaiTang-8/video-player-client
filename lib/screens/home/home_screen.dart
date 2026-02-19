@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 import '../../core/widgets/poster_card.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/smooth_scroll_behavior.dart';
@@ -53,11 +54,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               title: const Text('媒体库'),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.search),
+                  icon: const Icon(LucideIcons.search),
                   onPressed: () => context.push('/search'),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.settings),
+                  icon: const Icon(LucideIcons.settings),
                   onPressed: () => context.push('/settings'),
                 ),
               ],

@@ -615,21 +615,24 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
                 child: const Text('更换海报'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   _showImageSelector(context, movie, ImageSelectorType.poster);
                 },
               ),
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.wand_stars, size: 18),
                 child: const Text('重新刮削'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   _scrapeMovie(context, movie.id);
                 },
               ),
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.refresh, size: 18),
                 child: const Text('刷新'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   ref.invalidate(movieDetailProvider(widget.movieId));
                 },
               ),
@@ -658,28 +661,32 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
                 child: const Text('更换海报'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   _showImageSelector(context, movie, ImageSelectorType.poster);
                 },
               ),
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
                 child: const Text('更换背景图'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   _showImageSelector(context, movie, ImageSelectorType.backdrop);
                 },
               ),
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.wand_stars, size: 18),
                 child: const Text('重新刮削'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   _scrapeMovie(context, movie.id);
                 },
               ),
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.refresh, size: 18),
                 child: const Text('刷新'),
-                onPressed: (_) {
+                onPressed: (menuContext) {
+                  shadcn.closeOverlay(menuContext);
                   ref.invalidate(movieDetailProvider(widget.movieId));
                 },
               ),

@@ -135,7 +135,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                     icon:
                         hasActiveDownloads
                             ? const AnimatedDownloadIndicator(size: 20)
-                            : const Icon(CupertinoIcons.arrow_down_circle),
+                            : const Icon(shadcn.LucideIcons.circleArrowDown),
                   ),
                   CompositedTransformTarget(
                     link: _refreshButtonLink,
@@ -164,14 +164,14 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                                 key: _refreshButtonKey,
                                 tooltip: '扫描存储源',
                                 onPressed: () => _showScanMenu(menuContext),
-                                icon: const Icon(CupertinoIcons.refresh),
+                                icon: const Icon(shadcn.LucideIcons.refreshCw),
                               ),
                             ),
                   ),
                   IconButton(
                     tooltip: '存储源管理',
                     onPressed: () => context.push('/storage-manage'),
-                    icon: const Icon(CupertinoIcons.tray_full),
+                    icon: const Icon(shadcn.LucideIcons.database),
                   ),
                 ],
               )
@@ -184,7 +184,7 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                     icon:
                         hasActiveDownloads
                             ? const AnimatedDownloadIndicator(size: 20)
-                            : const Icon(CupertinoIcons.arrow_down_circle),
+                            : const Icon(shadcn.LucideIcons.circleArrowDown),
                   ),
                   CompositedTransformTarget(
                     link: _refreshButtonLink,
@@ -213,14 +213,14 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                                 key: _refreshButtonKey,
                                 tooltip: '扫描存储源',
                                 onPressed: () => _showScanMenu(menuContext),
-                                icon: const Icon(CupertinoIcons.refresh),
+                                icon: const Icon(shadcn.LucideIcons.refreshCw),
                               ),
                             ),
                   ),
                   IconButton(
                     tooltip: '存储源管理',
                     onPressed: () => context.push('/storage-manage'),
-                    icon: const Icon(CupertinoIcons.tray_full),
+                    icon: const Icon(shadcn.LucideIcons.database),
                   ),
                 ],
               ),
@@ -736,7 +736,8 @@ class _StorageTile extends StatelessWidget {
             shadcn.MenuButton(
               leading: const Icon(CupertinoIcons.pencil, size: 18),
               child: const Text('编辑存储源'),
-              onPressed: (_) {
+              onPressed: (menuContext) {
+                shadcn.closeOverlay(menuContext);
                 onEdit();
               },
             ),
@@ -747,7 +748,8 @@ class _StorageTile extends StatelessWidget {
                 color: destructiveColor,
               ),
               child: Text('删除存储源', style: TextStyle(color: destructiveColor)),
-              onPressed: (_) {
+              onPressed: (menuContext) {
+                shadcn.closeOverlay(menuContext);
                 onDelete();
               },
             ),
