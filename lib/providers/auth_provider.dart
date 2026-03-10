@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
+import '../core/utils/http_utils.dart';
 import '../data/models/models.dart';
 import '../data/services/api_client.dart';
 import '../data/services/auth_service.dart';
@@ -45,6 +46,7 @@ final authProvider = NotifierProvider<AuthNotifier, AuthState>(AuthNotifier.new)
 
 class AuthNotifier extends Notifier<AuthState> {
   AuthInterceptor? _interceptor;
+  Future<bool>? _refreshing;
 
   @override
   AuthState build() {
@@ -72,9 +74,13 @@ class AuthNotifier extends Notifier<AuthState> {
   void _setupInterceptor(ApiClient? client) {
     if (client == null) return;
     _interceptor?.let(client.removeInterceptor);
+    final serverUrl = ref.read(serverUrlProvider);
+    final serverUri = serverUrl == null ? null : Uri.tryParse(serverUrl);
     _interceptor = AuthInterceptor(
       tokenGetter: () => state.tokens?.accessToken,
       onTokenExpired: () => refreshToken(),
+      shouldAttachToken: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
+      shouldRefreshOn401: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
     );
     client.addInterceptor(_interceptor!);
   }
@@ -219,20 +225,40 @@ class AuthNotifier extends Notifier<AuthState> {
     );
   }
 
-  Future<bool> refreshToken() async {
+  Future<bool> refreshToken() {
+    final inFlight = _refreshing;
+    if (inFlight != null) return inFlight;
+
     final client = _apiClient;
     final tokens = state.tokens;
-    if (client == null || tokens == null) return false;
-
-    final authService = AuthService(client);
-    final resp = await authService.refresh(refreshToken: tokens.refreshToken);
-
-    if (resp.isSuccess && resp.data != null) {
-      final newTokens = resp.data!;
-      _saveTokens(newTokens);
-      state = state.copyWith(tokens: newTokens);
-      return true;
+    if (client == null || tokens == null) {
+      return Future.value(false);
     }
+
+    final future = _refreshTokenInternal(client, tokens.refreshToken);
+    _refreshing = future;
+    return future.whenComplete(() {
+      if (identical(_refreshing, future)) {
+        _refreshing = null;
+      }
+    });
+  }
+
+  Future<bool> _refreshTokenInternal(ApiClient client, String refreshToken) async {
+    try {
+      final authService = AuthService(client);
+      final resp = await authService.refresh(refreshToken: refreshToken);
+
+      if (resp.isSuccess && resp.data != null) {
+        final newTokens = resp.data!;
+        _saveTokens(newTokens);
+        state = state.copyWith(tokens: newTokens);
+        return true;
+      }
+    } catch (_) {
+      // Fall through to clear auth below.
+    }
+
     _clearStorage();
     state = state.copyWith(
       status: AuthStatus.unauthenticated,

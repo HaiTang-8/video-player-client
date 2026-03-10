@@ -2,20 +2,68 @@ import 'package:dio/dio.dart';
 import 'log_service.dart';
 
 class AuthInterceptor extends Interceptor {
-  String? Function() tokenGetter;
-  Future<bool> Function()? onTokenExpired;
+  final String? Function() tokenGetter;
+  final Future<bool> Function()? onTokenExpired;
+  final bool Function(RequestOptions options)? shouldAttachToken;
+  final bool Function(RequestOptions options)? shouldRefreshOn401;
 
   bool _isRefreshing = false;
   final List<({RequestOptions options, ErrorInterceptorHandler handler})> _pendingRequests = [];
 
-  AuthInterceptor({required this.tokenGetter, this.onTokenExpired});
+  AuthInterceptor({
+    required this.tokenGetter,
+    this.onTokenExpired,
+    this.shouldAttachToken,
+    this.shouldRefreshOn401,
+  });
+
+  dynamic _getHeaderValue(Map<String, dynamic> headers, String headerName) {
+    final name = headerName.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == name) return entry.value;
+    }
+    return null;
+  }
+
+  bool _shouldAttach(RequestOptions options) {
+    final fn = shouldAttachToken;
+    if (fn == null) return true;
+    try {
+      return fn(options);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _shouldRefresh(RequestOptions options) {
+    final fn = shouldRefreshOn401 ?? shouldAttachToken;
+    if (fn == null) return true;
+    try {
+      return fn(options);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _setBearerHeaderIfNeeded(RequestOptions options) {
+    if (!_shouldAttach(options)) return;
+    final token = tokenGetter();
+    if (token == null || token.isEmpty) return;
+
+    final existing = _getHeaderValue(options.headers, 'Authorization');
+    if (existing != null) {
+      final v = existing.toString().trimLeft();
+      if (!v.toLowerCase().startsWith('bearer ')) {
+        // Keep caller-provided auth (e.g. Basic) untouched.
+        return;
+      }
+    }
+    options.headers['Authorization'] = 'Bearer $token';
+  }
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
-    final token = tokenGetter();
-    if (token != null) {
-      options.headers['Authorization'] = 'Bearer $token';
-    }
+    _setBearerHeaderIfNeeded(options);
     handler.next(options);
   }
 
@@ -27,9 +75,23 @@ class AuthInterceptor extends Interceptor {
     }
 
     final path = err.requestOptions.path;
-    if (path.contains('/auth/refresh') || path.contains('/auth/login')) {
+    if (path.contains('/auth/refresh') || path.contains('/auth/login') || path.contains('/auth/setup')) {
       handler.next(err);
       return;
+    }
+
+    if (!_shouldRefresh(err.requestOptions)) {
+      handler.next(err);
+      return;
+    }
+
+    final existingAuth = _getHeaderValue(err.requestOptions.headers, 'Authorization');
+    if (existingAuth != null) {
+      final v = existingAuth.toString().trimLeft().toLowerCase();
+      if (!v.startsWith('bearer ')) {
+        handler.next(err);
+        return;
+      }
     }
 
     if (_isRefreshing) {
@@ -43,8 +105,7 @@ class AuthInterceptor extends Interceptor {
 
     if (success) {
       try {
-        final token = tokenGetter();
-        err.requestOptions.headers['Authorization'] = 'Bearer $token';
+        _setBearerHeaderIfNeeded(err.requestOptions);
         final dio = Dio();
         final response = await dio.fetch(err.requestOptions);
         handler.resolve(response);
@@ -55,8 +116,7 @@ class AuthInterceptor extends Interceptor {
       final pending = List.of(_pendingRequests);
       _pendingRequests.clear();
       for (final req in pending) {
-        final token = tokenGetter();
-        req.options.headers['Authorization'] = 'Bearer $token';
+        _setBearerHeaderIfNeeded(req.options);
         try {
           final dio = Dio();
           final response = await dio.fetch(req.options);

@@ -3,14 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/utils/download_queue.dart';
+import '../core/utils/http_utils.dart';
 import '../data/models/download_task.dart';
 import '../data/models/episode.dart';
 import '../data/models/movie.dart';
+import '../data/services/api_client.dart';
 import '../data/services/aria2_service.dart';
 import '../data/services/download_service.dart';
 import '../data/services/log_service.dart';
 import 'aria2_provider.dart';
 import 'download_settings_provider.dart';
+import 'auth_provider.dart';
 import 'server_provider.dart';
 
 class DownloadManagerState {
@@ -82,12 +85,25 @@ final downloadServiceProvider = Provider<DownloadService?>((ref) {
 
   final downloadSettings = ref.watch(downloadSettingsProvider);
 
+  final serverUri = Uri.tryParse(serverUrl);
   final dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(hours: 2),
   ));
+  dio.interceptors.add(
+    AuthInterceptor(
+      tokenGetter: () => ref.read(authProvider).tokens?.accessToken,
+      onTokenExpired: () => ref.read(authProvider.notifier).refreshToken(),
+      shouldAttachToken: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
+      shouldRefreshOn401: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
+    ),
+  );
 
-  final service = DownloadService(dio, serverUrl);
+  final service = DownloadService(
+    dio,
+    serverUrl,
+    tokenGetter: () => ref.read(authProvider).tokens?.accessToken,
+  );
   service.useMultiThread = downloadSettings.multiThreadEnabled;
   service.threadCount = downloadSettings.threadCount;
   return service;

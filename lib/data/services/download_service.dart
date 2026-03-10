@@ -27,6 +27,8 @@ class DownloadService {
 
   final Dio _dio;
   final String _serverUrl;
+  final String? Function()? _tokenGetter;
+  final Uri? _serverUri;
   final Map<String, CancelToken> _cancelTokens = {};
   final Map<String, MultiThreadDownloader> _multiThreadDownloaders = {};
   final Map<int, Storage> _storageCache = {};
@@ -43,7 +45,25 @@ class DownloadService {
   final Map<String, String> _aria2Tasks = {};
   Timer? _aria2ProgressTimer;
 
-  DownloadService(this._dio, this._serverUrl);
+  DownloadService(
+    this._dio,
+    String serverUrl, {
+    String? Function()? tokenGetter,
+  }) : _serverUrl = serverUrl,
+       _tokenGetter = tokenGetter,
+       _serverUri = Uri.tryParse(serverUrl);
+
+  void _maybeAttachBearerAuth(Map<String, String> headers, String url) {
+    if (_tokenGetter == null) return;
+    if (headers.keys.any((k) => k.toLowerCase() == 'authorization')) return;
+
+    final token = _tokenGetter();
+    if (token == null || token.isEmpty) return;
+
+    final targetUri = Uri.tryParse(url);
+    if (!HttpUtils.sameOrigin(_serverUri, targetUri)) return;
+    headers['Authorization'] = 'Bearer $token';
+  }
 
   String? _cachedDownloadDir;
 
@@ -387,6 +407,7 @@ class DownloadService {
         }
       }
     }
+    _maybeAttachBearerAuth(headers, streamUrl);
 
     // 优先使用原生下载器（iOS/Android）
     if (useNativeDownloader && (Platform.isIOS || Platform.isAndroid)) {
@@ -1062,6 +1083,7 @@ class DownloadService {
         }
       }
     }
+    _maybeAttachBearerAuth(headers, streamUrl);
 
     return (url: streamUrl, headers: headers, error: null);
   }
