@@ -62,7 +62,7 @@ class Movie {
       id: (json['id'] as num?)?.toInt() ?? 0,
       title: json['title'] as String? ?? '',
       originalTitle: json['original_title'] as String?,
-      overview: json['overview'] as String?,
+      overview: (json['overview'] as String?)?.trim(),
       posterPath: json['poster_path'] as String?,
       backdropPath: json['backdrop_path'] as String?,
       rating: (json['vote_average'] as num?)?.toDouble(),

@@ -73,7 +73,7 @@ class TvShow {
       id: (json['id'] as num?)?.toInt() ?? 0,
       name: json['name'] as String? ?? json['title'] as String? ?? '',
       originalName: json['original_name'] as String?,
-      overview: json['overview'] as String?,
+      overview: (json['overview'] as String?)?.trim(),
       posterPath: json['poster_path'] as String?,
       backdropPath: json['backdrop_path'] as String?,
       backdrops: _parseGenres(json['backdrops']),

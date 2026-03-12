@@ -41,7 +41,7 @@ class Season {
       tvShowId: (json['tv_show_id'] as num?)?.toInt() ?? 0,
       seasonNumber: (json['season_number'] as num?)?.toInt() ?? 0,
       name: json['name'] as String?,
-      overview: json['overview'] as String?,
+      overview: (json['overview'] as String?)?.trim(),
       posterPath: json['poster_path'] as String?,
       airDate:
           json['air_date'] != null
