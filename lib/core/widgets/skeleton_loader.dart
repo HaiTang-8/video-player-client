@@ -724,30 +724,47 @@ class DetailSkeletonLoader extends StatelessWidget {
     final colors = context.appColors;
 
     return SkeletonShimmer(
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isDesktop) const _DetailTopBarSkeleton(),
-            _DetailHeroSkeleton(
+      child: CustomScrollView(
+        slivers: [
+          if (!isDesktop)
+            SliverAppBar(
+              backgroundColor: colors.cardBackground,
+              elevation: 0,
+              pinned: true,
+              toolbarHeight: 44,
+              automaticallyImplyLeading: false,
+              flexibleSpace: const SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: _DetailTopBarSkeleton(),
+                ),
+              ),
+            ),
+          SliverToBoxAdapter(
+            child: _DetailHeroSkeleton(
               variant: variant,
               height: heroHeight,
               backgroundColor: colors.cardBackground,
             ),
-            if (variant == DetailSkeletonVariant.tvShow) ...[
-              const _DetailEpisodeSelectorSkeleton(),
-              const _DetailEpisodesSkeleton(),
-            ],
-            if (!isDesktop) const _DetailOverviewSkeleton(),
-            _DetailPeopleSectionSkeleton(
+          ),
+          if (variant == DetailSkeletonVariant.tvShow)
+            const SliverToBoxAdapter(child: _DetailEpisodeSelectorSkeleton()),
+          if (variant == DetailSkeletonVariant.tvShow)
+            const SliverToBoxAdapter(child: _DetailEpisodesSkeleton()),
+          if (!isDesktop)
+            const SliverToBoxAdapter(child: _DetailOverviewSkeleton()),
+          SliverToBoxAdapter(
+            child: _DetailPeopleSectionSkeleton(
               titleWidth: variant == DetailSkeletonVariant.movie ? 60 : 72,
               itemSpacing: variant == DetailSkeletonVariant.movie ? 4 : 8,
             ),
-            _DetailInfoSectionSkeleton(dividerColor: colors.divider),
-            const SizedBox(height: 32),
-          ],
-        ),
+          ),
+          SliverToBoxAdapter(
+            child: _DetailInfoSectionSkeleton(dividerColor: colors.divider),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+        ],
       ),
     );
   }
@@ -1000,6 +1017,8 @@ class _DetailEpisodeSelectorSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = WindowControls.isDesktop;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
@@ -1007,26 +1026,37 @@ class _DetailEpisodeSelectorSkeleton extends StatelessWidget {
         children: [
           SizedBox(
             height: 44,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: const [
-                      _SeasonTabSkeleton(width: 64, selected: true),
-                      SizedBox(width: 32),
-                      _SeasonTabSkeleton(width: 64),
-                      SizedBox(width: 32),
-                      _SeasonTabSkeleton(width: 64),
-                    ],
-                  ),
-                ),
-                if (WindowControls.isDesktop) ...[
-                  const _DetailArrowSkeleton(),
-                  const SizedBox(width: 4),
-                  const _DetailArrowSkeleton(),
-                ],
-              ],
-            ),
+            child:
+                isDesktop
+                    ? Row(
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: const [
+                              _SeasonTabSkeleton(width: 64, selected: true),
+                              SizedBox(width: 32),
+                              _SeasonTabSkeleton(width: 64),
+                              SizedBox(width: 32),
+                              _SeasonTabSkeleton(width: 64),
+                            ],
+                          ),
+                        ),
+                        const _DetailArrowSkeleton(),
+                        const SizedBox(width: 4),
+                        const _DetailArrowSkeleton(),
+                      ],
+                    )
+                    : ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.zero,
+                      itemCount: 4,
+                      separatorBuilder: (_, _) => const SizedBox(width: 32),
+                      itemBuilder:
+                          (_, index) => _SeasonTabSkeleton(
+                            width: 64,
+                            selected: index == 0,
+                          ),
+                    ),
           ),
           const SizedBox(height: 20),
         ],
