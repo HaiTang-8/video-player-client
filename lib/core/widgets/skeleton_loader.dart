@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../window/window_controls.dart';
 
 export 'loading_widget.dart' show AppErrorWidget, EmptyWidget;
@@ -698,14 +699,29 @@ class _StorageTileSkeleton extends StatelessWidget {
   }
 }
 
+enum DetailSkeletonVariant { movie, tvShow }
+
 /// 详情页骨架屏 - 模拟电影/剧集详情布局
 class DetailSkeletonLoader extends StatelessWidget {
-  const DetailSkeletonLoader({super.key});
+  final DetailSkeletonVariant variant;
+
+  const DetailSkeletonLoader({
+    super.key,
+    this.variant = DetailSkeletonVariant.movie,
+  });
+
+  const DetailSkeletonLoader.movie({super.key})
+    : variant = DetailSkeletonVariant.movie;
+
+  const DetailSkeletonLoader.tvShow({super.key})
+    : variant = DetailSkeletonVariant.tvShow;
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final backdropHeight = size.height * 0.35;
+    final isDesktop = WindowControls.isDesktop;
+    final heroHeight = _calculateHeroHeight(size, usePoster: !isDesktop);
+    final colors = context.appColors;
 
     return SkeletonShimmer(
       child: SingleChildScrollView(
@@ -713,91 +729,648 @@ class DetailSkeletonLoader extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SkeletonBox(
-              width: double.infinity,
-              height: backdropHeight,
-              borderRadius: BorderRadius.zero,
+            if (!isDesktop) const _DetailTopBarSkeleton(),
+            _DetailHeroSkeleton(
+              variant: variant,
+              height: heroHeight,
+              backgroundColor: colors.cardBackground,
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SkeletonBox(
-                    width: 200,
-                    height: 24,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 8),
-                  SkeletonBox(
-                    width: 120,
-                    height: 16,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 16),
-                  SkeletonBox(
-                    width: double.infinity,
-                    height: 48,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  const SizedBox(height: 24),
-                  SkeletonBox(
-                    width: double.infinity,
-                    height: 14,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 8),
-                  SkeletonBox(
-                    width: double.infinity,
-                    height: 14,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 8),
-                  SkeletonBox(
-                    width: 200,
-                    height: 14,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 24),
-                  SkeletonBox(
-                    width: 60,
-                    height: 18,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    height: 80,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: 6,
-                      itemBuilder:
-                          (context, index) => Padding(
-                            padding: const EdgeInsets.only(right: 16),
-                            child: Column(
-                              children: [
-                                SkeletonBox(
-                                  width: 56,
-                                  height: 56,
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
-                                const SizedBox(height: 6),
-                                SkeletonBox(
-                                  width: 50,
-                                  height: 12,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ],
-                            ),
-                          ),
-                    ),
-                  ),
-                ],
+            if (variant == DetailSkeletonVariant.tvShow) ...[
+              const _DetailEpisodeSelectorSkeleton(),
+              const _DetailEpisodesSkeleton(),
+            ],
+            if (!isDesktop) const _DetailOverviewSkeleton(),
+            _DetailPeopleSectionSkeleton(
+              titleWidth: variant == DetailSkeletonVariant.movie ? 60 : 72,
+              itemSpacing: variant == DetailSkeletonVariant.movie ? 4 : 8,
+            ),
+            _DetailInfoSectionSkeleton(dividerColor: colors.divider),
+            const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  double _calculateHeroHeight(Size size, {required bool usePoster}) {
+    if (usePoster) {
+      return (size.height * 0.7).ceilToDouble();
+    }
+    const backdropAspect = 16 / 9;
+    final idealHeight = size.width / backdropAspect;
+    final minHeight = size.height * 0.55;
+    final maxHeight = size.height * 0.9;
+    return idealHeight.clamp(minHeight, maxHeight).ceilToDouble();
+  }
+}
+
+class _DetailTopBarSkeleton extends StatelessWidget {
+  const _DetailTopBarSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 44,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          children: [
+            SkeletonBox(
+              width: 28,
+              height: 28,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Center(
+                child: SkeletonBox(
+                  width: 132,
+                  height: 18,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
+            ),
+            SkeletonBox(
+              width: 22,
+              height: 22,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            const SizedBox(width: 16),
+            SkeletonBox(
+              width: 22,
+              height: 22,
+              borderRadius: BorderRadius.circular(4),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _DetailHeroSkeleton extends StatelessWidget {
+  final DetailSkeletonVariant variant;
+  final double height;
+  final Color backgroundColor;
+
+  const _DetailHeroSkeleton({
+    required this.variant,
+    required this.height,
+    required this.backgroundColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final gradientHeight = (height * 0.5).ceilToDouble();
+
+    return Stack(
+      children: [
+        SkeletonBox(
+          width: double.infinity,
+          height: height,
+          borderRadius: BorderRadius.zero,
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: gradientHeight,
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    backgroundColor.withValues(alpha: 0),
+                    backgroundColor.withValues(alpha: 0.2),
+                    backgroundColor.withValues(alpha: 0.5),
+                    backgroundColor.withValues(alpha: 0.8),
+                    backgroundColor,
+                  ],
+                  stops: const [0, 0.25, 0.5, 0.75, 1],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 12,
+          right: 12,
+          bottom: 24,
+          child:
+              WindowControls.isDesktop
+                  ? _DetailDesktopHeroContentSkeleton(variant: variant)
+                  : _DetailMobileHeroContentSkeleton(variant: variant),
+        ),
+      ],
+    );
+  }
+}
+
+class _DetailDesktopHeroContentSkeleton extends StatelessWidget {
+  final DetailSkeletonVariant variant;
+
+  const _DetailDesktopHeroContentSkeleton({required this.variant});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SkeletonBox(
+          width: variant == DetailSkeletonVariant.movie ? 220 : 260,
+          height: 28,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SkeletonBox(
+              width: 148,
+              height: 52,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            const SizedBox(width: 24),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 16,
+                    runSpacing: 8,
+                    children: [
+                      _metadataBox(56),
+                      _metadataBox(104),
+                      _metadataBox(72),
+                      _metadataBox(
+                        variant == DetailSkeletonVariant.movie ? 84 : 78,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: double.infinity,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: double.infinity,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  const SizedBox(height: 8),
+                  SkeletonBox(
+                    width: 220,
+                    height: 14,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _metadataBox(double width) {
+    return SkeletonBox(
+      width: width,
+      height: 14,
+      borderRadius: BorderRadius.circular(4),
+    );
+  }
+}
+
+class _DetailMobileHeroContentSkeleton extends StatelessWidget {
+  final DetailSkeletonVariant variant;
+
+  const _DetailMobileHeroContentSkeleton({required this.variant});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SkeletonBox(
+          width: variant == DetailSkeletonVariant.movie ? 180 : 228,
+          height: 28,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [_metadataBox(54), _metadataBox(86), _metadataBox(74)],
+        ),
+        if (variant == DetailSkeletonVariant.movie) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [_metadataBox(118), _metadataBox(82)],
+          ),
+        ],
+        const SizedBox(height: 12),
+        SkeletonBox(
+          width: double.infinity,
+          height: 48,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ],
+    );
+  }
+
+  Widget _metadataBox(double width) {
+    return SkeletonBox(
+      width: width,
+      height: 14,
+      borderRadius: BorderRadius.circular(4),
+    );
+  }
+}
+
+class _DetailEpisodeSelectorSkeleton extends StatelessWidget {
+  const _DetailEpisodeSelectorSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 44,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Row(
+                    children: const [
+                      _SeasonTabSkeleton(width: 64, selected: true),
+                      SizedBox(width: 32),
+                      _SeasonTabSkeleton(width: 64),
+                      SizedBox(width: 32),
+                      _SeasonTabSkeleton(width: 64),
+                    ],
+                  ),
+                ),
+                if (WindowControls.isDesktop) ...[
+                  const _DetailArrowSkeleton(),
+                  const SizedBox(width: 4),
+                  const _DetailArrowSkeleton(),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeasonTabSkeleton extends StatelessWidget {
+  final double width;
+  final bool selected;
+
+  const _SeasonTabSkeleton({required this.width, this.selected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: width,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(
+            width: width,
+            height: 16,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 4),
+          SkeletonBox(
+            width: selected ? width : width * 0.7,
+            height: 3,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailArrowSkeleton extends StatelessWidget {
+  const _DetailArrowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SkeletonBox(
+      width: 28,
+      height: 28,
+      borderRadius: BorderRadius.circular(4),
+    );
+  }
+}
+
+class _DetailEpisodesSkeleton extends StatelessWidget {
+  const _DetailEpisodesSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const horizontalPadding = 12.0;
+        const spacing = 16.0;
+        const mobileItemWidth = 160.0;
+        final availableWidth = _availableWidth(
+          constraints.maxWidth,
+          horizontalPadding,
+          mobileItemWidth,
+        );
+        final itemCount = _visibleItemCount(
+          availableWidth,
+          mobileItemWidth,
+          spacing,
+        );
+        final itemWidth =
+            WindowControls.isDesktop
+                ? (availableWidth - (itemCount - 1) * spacing) / itemCount
+                : mobileItemWidth;
+
+        return SizedBox(
+          height: 140,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: horizontalPadding),
+            itemCount: itemCount,
+            separatorBuilder: (_, _) => const SizedBox(width: spacing),
+            itemBuilder: (_, _) => _EpisodeCardSkeleton(width: itemWidth),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _EpisodeCardSkeleton extends StatelessWidget {
+  final double width;
+
+  const _EpisodeCardSkeleton({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnailHeight = width * 90 / 160;
+
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(
+            width: width,
+            height: thumbnailHeight,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.center,
+            child: SkeletonBox(
+              width: width * 0.74,
+              height: 13,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.center,
+            child: SkeletonBox(
+              width: width * 0.48,
+              height: 13,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailOverviewSkeleton extends StatelessWidget {
+  const _DetailOverviewSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SkeletonBox(
+            width: 72,
+            height: 18,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 8),
+          SkeletonBox(
+            width: double.infinity,
+            height: 14,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 8),
+          SkeletonBox(
+            width: double.infinity,
+            height: 14,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 8),
+          SkeletonBox(
+            width: 240,
+            height: 14,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailPeopleSectionSkeleton extends StatelessWidget {
+  final double titleWidth;
+  final double itemSpacing;
+
+  const _DetailPeopleSectionSkeleton({
+    required this.titleWidth,
+    required this.itemSpacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                SkeletonBox(
+                  width: titleWidth,
+                  height: 18,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                const Spacer(),
+                if (WindowControls.isDesktop) ...[
+                  const _DetailArrowSkeleton(),
+                  const SizedBox(width: 4),
+                  const _DetailArrowSkeleton(),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 120,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                const itemWidth = 80.0;
+                final availableWidth = _availableWidth(
+                  constraints.maxWidth,
+                  12,
+                  itemWidth,
+                );
+                final itemCount = _visibleItemCount(
+                  availableWidth,
+                  itemWidth,
+                  itemSpacing,
+                );
+
+                return ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: itemCount,
+                  separatorBuilder: (_, _) => SizedBox(width: itemSpacing),
+                  itemBuilder: (_, _) => const _PersonCardSkeleton(),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonCardSkeleton extends StatelessWidget {
+  const _PersonCardSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 80,
+      child: Column(
+        children: [
+          SkeletonBox(
+            width: 64,
+            height: 64,
+            borderRadius: BorderRadius.circular(32),
+          ),
+          const SizedBox(height: 8),
+          SkeletonBox(
+            width: 56,
+            height: 12,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 4),
+          SkeletonBox(
+            width: 42,
+            height: 10,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailInfoSectionSkeleton extends StatelessWidget {
+  final Color dividerColor;
+
+  const _DetailInfoSectionSkeleton({required this.dividerColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Divider(
+            color: dividerColor.withValues(alpha: 0.3),
+            height: 48,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SkeletonBox(
+                width: 54,
+                height: 12,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 8),
+              SkeletonBox(
+                width: 240,
+                height: 11,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 4),
+              SkeletonBox(
+                width: 180,
+                height: 11,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 4),
+              SkeletonBox(
+                width: double.infinity,
+                height: 11,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              const SizedBox(height: 4),
+              SkeletonBox(
+                width: double.infinity,
+                height: 11,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+double _availableWidth(
+  double maxWidth,
+  double horizontalPadding,
+  double minItemWidth,
+) {
+  final availableWidth = maxWidth - horizontalPadding * 2;
+  return availableWidth >= minItemWidth ? availableWidth : minItemWidth;
+}
+
+int _visibleItemCount(double availableWidth, double itemWidth, double spacing) {
+  final rawCount = ((availableWidth + spacing) / (itemWidth + spacing)).floor();
+  return rawCount > 0 ? rawCount : 1;
 }

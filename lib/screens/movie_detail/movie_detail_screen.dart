@@ -43,7 +43,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
     final tmdbId = int.tryParse(_movie?.tmdbId ?? '');
-    final resp = await service.getWatchProgress('movie', widget.movieId, tmdbId: tmdbId);
+    final resp = await service.getWatchProgress(
+      'movie',
+      widget.movieId,
+      tmdbId: tmdbId,
+    );
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
       setState(() => _watchHistory = resp.data);
@@ -101,7 +105,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               )
               : null,
       body: movieAsync.when(
-        loading: () => const DetailSkeletonLoader(),
+        loading: () => const DetailSkeletonLoader.movie(),
         error:
             (error, stack) => AppErrorWidget(
               message: error.toString(),
@@ -154,7 +158,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               // 相关演员区（优先使用 cast_detail 以展示头像/角色；没有则回退 cast 姓名列表）
               if (cast.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _buildCastSection(context, theme, cast, serverBaseUrl, accessToken),
+                  child: _buildCastSection(
+                    context,
+                    theme,
+                    cast,
+                    serverBaseUrl,
+                    accessToken,
+                  ),
                 ),
 
               // 文件信息区
@@ -550,14 +560,23 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             onPressed: () => _downloadMovie(context, movie),
-            child: Icon(shadcn.LucideIcons.circleArrowDown, color: Colors.black, size: 22),
+            child: Icon(
+              shadcn.LucideIcons.circleArrowDown,
+              color: Colors.black,
+              size: 22,
+            ),
           ),
         Builder(
-          builder: (menuContext) => CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            onPressed: () => _showMobileActionsMenu(menuContext, movie),
-            child: const Icon(CupertinoIcons.ellipsis, color: Colors.black, size: 22),
-          ),
+          builder:
+              (menuContext) => CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onPressed: () => _showMobileActionsMenu(menuContext, movie),
+                child: const Icon(
+                  CupertinoIcons.ellipsis,
+                  color: Colors.black,
+                  size: 22,
+                ),
+              ),
         ),
       ],
     );
@@ -588,11 +607,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           onPressed: () => _downloadMovie(context, movie),
         ),
       Builder(
-        builder: (menuContext) => IconButton(
-          tooltip: '更多',
-          icon: const Icon(CupertinoIcons.ellipsis),
-          onPressed: () => _showDesktopActionsMenu(menuContext, movie),
-        ),
+        builder:
+            (menuContext) => IconButton(
+              tooltip: '更多',
+              icon: const Icon(CupertinoIcons.ellipsis),
+              onPressed: () => _showDesktopActionsMenu(menuContext, movie),
+            ),
       ),
     ];
   }
@@ -602,15 +622,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       context: context,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         return shadcn.Theme(
           data: noAccentTheme,
           child: shadcn.MenuGroup(
             direction: Axis.vertical,
-            builder: (context, children) => shadcn.MenuPopup(children: children),
+            builder:
+                (context, children) => shadcn.MenuPopup(children: children),
             children: [
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
@@ -648,15 +670,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       context: context,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         return shadcn.Theme(
           data: noAccentTheme,
           child: shadcn.MenuGroup(
             direction: Axis.vertical,
-            builder: (context, children) => shadcn.MenuPopup(children: children),
+            builder:
+                (context, children) => shadcn.MenuPopup(children: children),
             children: [
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
@@ -667,11 +691,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+                leading: const Icon(
+                  CupertinoIcons.photo_on_rectangle,
+                  size: 18,
+                ),
                 child: const Text('更换背景图'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _showImageSelector(context, movie, ImageSelectorType.backdrop);
+                  _showImageSelector(
+                    context,
+                    movie,
+                    ImageSelectorType.backdrop,
+                  );
                 },
               ),
               shadcn.MenuButton(
@@ -747,7 +778,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (service != null) {
       final tmdbId = int.tryParse(movie.tmdbId ?? '');
-      final historyResp = await service.getWatchProgress('movie', movie.id, tmdbId: tmdbId);
+      final historyResp = await service.getWatchProgress(
+        'movie',
+        movie.id,
+        tmdbId: tmdbId,
+      );
       if (historyResp.isSuccess && historyResp.data != null) {
         if (!historyResp.data!.completed) {
           position = historyResp.data!.position;
@@ -871,9 +906,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           height: 120,
           child: ListView.separated(
             controller: _castScrollController,
-            physics: ScrollableRowWithArrows.disableManualScroll
-                ? const NeverScrollableScrollPhysics()
-                : null,
+            physics:
+                ScrollableRowWithArrows.disableManualScroll
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: cast.length,
@@ -888,7 +924,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   /// 构建演员卡片
-  Widget _buildCastCard(CastMember member, String? serverBaseUrl, String? accessToken) {
+  Widget _buildCastCard(
+    CastMember member,
+    String? serverBaseUrl,
+    String? accessToken,
+  ) {
     final name = member.name;
     final role = member.character;
     final profileUrl = member.profilePath;
@@ -961,12 +1001,20 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final serverBaseUrl = ref.read(serverUrlProvider);
     final accessToken = ref.read(authProvider).tokens?.accessToken;
     if (service == null) {
-      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '未连接到服务器',
+        isError: true,
+      );
       return;
     }
 
     if (movie.tmdbId == null) {
-      DialogUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '无 TMDB ID，无法获取图片',
+        isError: true,
+      );
       return;
     }
 
@@ -988,12 +1036,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       return;
     }
 
-    final images = type == ImageSelectorType.poster
-        ? resp.data!.posters
-        : resp.data!.backdrops;
-    final currentUrl = type == ImageSelectorType.poster
-        ? movie.posterPath
-        : movie.backdropPath;
+    final images =
+        type == ImageSelectorType.poster
+            ? resp.data!.posters
+            : resp.data!.backdrops;
+    final currentUrl =
+        type == ImageSelectorType.poster
+            ? movie.posterPath
+            : movie.backdropPath;
 
     showImageSelector(
       context: context,
@@ -1005,9 +1055,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       onSelect: (url) async {
         DialogUtils.showLoadingDialog(context: context, message: '更新中...');
 
-        final updateResp = type == ImageSelectorType.poster
-            ? await service.updateMoviePoster(movie.id, posterPath: url)
-            : await service.updateMoviePoster(movie.id, backdropPath: url);
+        final updateResp =
+            type == ImageSelectorType.poster
+                ? await service.updateMoviePoster(movie.id, posterPath: url)
+                : await service.updateMoviePoster(movie.id, backdropPath: url);
 
         if (context.mounted) {
           Navigator.pop(context);
@@ -1032,7 +1083,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Future<void> _scrapeMovie(BuildContext context, int id) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
-      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '未连接到服务器',
+        isError: true,
+      );
       return;
     }
 

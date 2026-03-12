@@ -86,10 +86,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final availableWidth = viewportWidth - horizontalPadding * 2;
     final double itemWidth;
     if (WindowControls.isDesktop) {
-      final itemCount = ((availableWidth + itemSpacing) / (minItemWidth + itemSpacing)).floor();
-      itemWidth = itemCount > 0
-          ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
-          : minItemWidth;
+      final itemCount =
+          ((availableWidth + itemSpacing) / (minItemWidth + itemSpacing))
+              .floor();
+      itemWidth =
+          itemCount > 0
+              ? (availableWidth - (itemCount - 1) * itemSpacing) / itemCount
+              : minItemWidth;
     } else {
       itemWidth = minItemWidth;
     }
@@ -97,7 +100,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final adjustedIndex = targetIndex > 0 ? targetIndex - 1 : 0;
     final targetOffset = adjustedIndex * (itemWidth + itemSpacing);
 
-    return targetOffset.clamp(position.minScrollExtent, position.maxScrollExtent);
+    return targetOffset.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
   }
 
   Future<void> _autoScrollToWatchedEpisode({
@@ -197,7 +203,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               )
               : null,
       body: tvShowAsync.when(
-        loading: () => const DetailSkeletonLoader(),
+        loading: () => const DetailSkeletonLoader.tvShow(),
         error:
             (error, stack) => AppErrorWidget(
               message: error.toString(),
@@ -332,7 +338,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 )
               else if (cast.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: _buildCastSection(context, theme, cast, serverBaseUrl, accessToken),
+                  child: _buildCastSection(
+                    context,
+                    theme,
+                    cast,
+                    serverBaseUrl,
+                    accessToken,
+                  ),
                 ),
 
               // 文件信息区
@@ -368,7 +380,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       if ((imagePathRaw == null || imagePathRaw.isEmpty) &&
           tvShow.backdrops != null &&
           tvShow.backdrops!.isNotEmpty) {
-        imagePathRaw = tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length];
+        imagePathRaw =
+            tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length];
       }
       if (imagePathRaw == null || imagePathRaw.isEmpty) {
         imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
@@ -662,9 +675,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建顶部导航栏
-  Widget _buildAppBar(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+  Widget _buildAppBar(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
     final colors = context.appColors;
-    final hasDownloadableEpisodes = selectedSeason != null &&
+    final hasDownloadableEpisodes =
+        selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
 
@@ -685,27 +703,45 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         if (hasDownloadableEpisodes)
           CupertinoButton(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
-            child: Icon(shadcn.LucideIcons.circleArrowDown, color: colors.textPrimary, size: 22),
+            onPressed:
+                () => _navigateToDownload(context, tvShow, selectedSeason),
+            child: Icon(
+              shadcn.LucideIcons.circleArrowDown,
+              color: colors.textPrimary,
+              size: 22,
+            ),
           ),
         Builder(
-          builder: (menuContext) => CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            onPressed: () => _showMobileActionsMenu(menuContext, tvShow, selectedSeason),
-            child: Icon(CupertinoIcons.ellipsis, color: colors.textPrimary, size: 22),
-          ),
+          builder:
+              (menuContext) => CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onPressed:
+                    () => _showMobileActionsMenu(
+                      menuContext,
+                      tvShow,
+                      selectedSeason,
+                    ),
+                child: Icon(
+                  CupertinoIcons.ellipsis,
+                  color: colors.textPrimary,
+                  size: 22,
+                ),
+              ),
         ),
       ],
     );
   }
 
   void _navigateToDownload(BuildContext context, TvShow tvShow, Season season) {
-    context.push('/download-episodes', extra: {
-      'tvShowName': tvShow.name,
-      'seasonNumber': season.seasonNumber,
-      'season': season,
-      'storageName': tvShow.storageName,
-    });
+    context.push(
+      '/download-episodes',
+      extra: {
+        'tvShowName': tvShow.name,
+        'seasonNumber': season.seasonNumber,
+        'season': season,
+        'storageName': tvShow.storageName,
+      },
+    );
   }
 
   List<Widget> _buildDesktopActions(TvShow? tvShow) {
@@ -715,7 +751,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         tvShow.seasons != null && _selectedSeasonIndex < tvShow.seasons!.length
             ? tvShow.seasons![_selectedSeasonIndex]
             : null;
-    final hasDownloadableEpisodes = selectedSeason != null &&
+    final hasDownloadableEpisodes =
+        selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
 
@@ -727,36 +764,48 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           onPressed: () => _navigateToDownload(context, tvShow, selectedSeason),
         ),
       Builder(
-        builder: (menuContext) => IconButton(
-          tooltip: '更多',
-          icon: const Icon(CupertinoIcons.ellipsis),
-          onPressed: () => _showDesktopActionsMenu(menuContext, tvShow),
-        ),
+        builder:
+            (menuContext) => IconButton(
+              tooltip: '更多',
+              icon: const Icon(CupertinoIcons.ellipsis),
+              onPressed: () => _showDesktopActionsMenu(menuContext, tvShow),
+            ),
       ),
     ];
   }
 
-  void _showMobileActionsMenu(BuildContext context, TvShow tvShow, Season? selectedSeason) {
+  void _showMobileActionsMenu(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
     shadcn.showDropdown(
       context: context,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         return shadcn.Theme(
           data: noAccentTheme,
           child: shadcn.MenuGroup(
             direction: Axis.vertical,
-            builder: (context, children) => shadcn.MenuPopup(children: children),
+            builder:
+                (context, children) => shadcn.MenuPopup(children: children),
             children: [
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
                 child: const Text('更换海报'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _showImageSelector(context, tvShow, ImageSelectorType.poster, selectedSeason: selectedSeason);
+                  _showImageSelector(
+                    context,
+                    tvShow,
+                    ImageSelectorType.poster,
+                    selectedSeason: selectedSeason,
+                  );
                 },
               ),
               shadcn.MenuButton(
@@ -768,7 +817,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+                leading: const Icon(
+                  CupertinoIcons.arrow_2_circlepath,
+                  size: 18,
+                ),
                 child: const Text('同步季度'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
@@ -795,15 +847,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       context: context,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         return shadcn.Theme(
           data: noAccentTheme,
           child: shadcn.MenuGroup(
             direction: Axis.vertical,
-            builder: (context, children) => shadcn.MenuPopup(children: children),
+            builder:
+                (context, children) => shadcn.MenuPopup(children: children),
             children: [
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.photo, size: 18),
@@ -814,11 +868,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.photo_on_rectangle, size: 18),
+                leading: const Icon(
+                  CupertinoIcons.photo_on_rectangle,
+                  size: 18,
+                ),
                 child: const Text('更换背景图'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _showImageSelector(context, tvShow, ImageSelectorType.backdrop);
+                  _showImageSelector(
+                    context,
+                    tvShow,
+                    ImageSelectorType.backdrop,
+                  );
                 },
               ),
               shadcn.MenuButton(
@@ -830,7 +891,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+                leading: const Icon(
+                  CupertinoIcons.arrow_2_circlepath,
+                  size: 18,
+                ),
                 child: const Text('同步季度'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
@@ -896,7 +960,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   Future<void> _playFromHistory(BuildContext context) async {
     final history = _watchHistory;
-    if (history != null && history.episodeId != null && history.mediaInfo?.episodeInfo != null) {
+    if (history != null &&
+        history.episodeId != null &&
+        history.mediaInfo?.episodeInfo != null) {
       final ep = history.mediaInfo!.episodeInfo!;
       await context.push(
         '/player/episode/${widget.tvShowId}/${ep.seasonId}/${history.episodeId}',
@@ -1115,9 +1181,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           height: 120,
           child: ListView.separated(
             controller: _castScrollController,
-            physics: ScrollableRowWithArrows.disableManualScroll
-                ? const NeverScrollableScrollPhysics()
-                : null,
+            physics:
+                ScrollableRowWithArrows.disableManualScroll
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: cast.length,
@@ -1193,9 +1260,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           height: 120,
           child: ListView.separated(
             controller: _crewScrollController,
-            physics: ScrollableRowWithArrows.disableManualScroll
-                ? const NeverScrollableScrollPhysics()
-                : null,
+            physics:
+                ScrollableRowWithArrows.disableManualScroll
+                    ? const NeverScrollableScrollPhysics()
+                    : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
             itemCount: crew.length,
@@ -1209,7 +1277,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  Widget _buildCrewCard(CrewMember member, String? serverBaseUrl, String? accessToken) {
+  Widget _buildCrewCard(
+    CrewMember member,
+    String? serverBaseUrl,
+    String? accessToken,
+  ) {
     final name = member.name;
     final job =
         (member.job?.trim().isNotEmpty ?? false) ? member.job!.trim() : null;
@@ -1280,7 +1352,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   /// 构建演员卡片
-  Widget _buildCastCard(CastMember member, String? serverBaseUrl, String? accessToken) {
+  Widget _buildCastCard(
+    CastMember member,
+    String? serverBaseUrl,
+    String? accessToken,
+  ) {
     final name = member.name;
     final role = member.character;
     final profileUrl = member.profilePath;
@@ -1360,12 +1436,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final accessToken = ref.read(authProvider).tokens?.accessToken;
     final isDesktop = WindowControls.isDesktop;
     if (service == null) {
-      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '未连接到服务器',
+        isError: true,
+      );
       return;
     }
 
     if (tvShow.tmdbId == null) {
-      DialogUtils.showToast(context: context, message: '无 TMDB ID，无法获取图片', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '无 TMDB ID，无法获取图片',
+        isError: true,
+      );
       return;
     }
 
@@ -1387,14 +1471,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return;
     }
 
-    final images = type == ImageSelectorType.poster
-        ? resp.data!.posters
-        : resp.data!.backdrops;
+    final images =
+        type == ImageSelectorType.poster
+            ? resp.data!.posters
+            : resp.data!.backdrops;
 
     // 移动端海报使用季度海报，PC端使用剧集主海报/背景图
-    final currentUrl = type == ImageSelectorType.poster
-        ? (isDesktop ? tvShow.posterPath : (selectedSeason?.posterPath ?? tvShow.posterPath))
-        : tvShow.backdropPath;
+    final currentUrl =
+        type == ImageSelectorType.poster
+            ? (isDesktop
+                ? tvShow.posterPath
+                : (selectedSeason?.posterPath ?? tvShow.posterPath))
+            : tvShow.backdropPath;
 
     showImageSelector(
       context: context,
@@ -1407,7 +1495,9 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         DialogUtils.showLoadingDialog(context: context, message: '更新中...');
 
         ApiResponse<void> updateResp;
-        if (type == ImageSelectorType.poster && !isDesktop && selectedSeason != null) {
+        if (type == ImageSelectorType.poster &&
+            !isDesktop &&
+            selectedSeason != null) {
           // 移动端更换海报 -> 更新季度海报
           updateResp = await service.updateSeasonPoster(
             tvShow.id,
@@ -1416,10 +1506,16 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           );
         } else if (type == ImageSelectorType.poster) {
           // PC端更换海报 -> 更新剧集主海报
-          updateResp = await service.updateTvShowPoster(tvShow.id, posterPath: url);
+          updateResp = await service.updateTvShowPoster(
+            tvShow.id,
+            posterPath: url,
+          );
         } else {
           // 更换背景图 -> 更新剧集主背景图
-          updateResp = await service.updateTvShowPoster(tvShow.id, backdropPath: url);
+          updateResp = await service.updateTvShowPoster(
+            tvShow.id,
+            backdropPath: url,
+          );
         }
 
         if (context.mounted) {
@@ -1445,7 +1541,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Future<void> _scrapeTvShow(BuildContext context, int id) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
-      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '未连接到服务器',
+        isError: true,
+      );
       return;
     }
 
@@ -1480,10 +1580,18 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  Future<void> _syncTvShowSeasons(BuildContext context, int id, String? tmdbId) async {
+  Future<void> _syncTvShowSeasons(
+    BuildContext context,
+    int id,
+    String? tmdbId,
+  ) async {
     final service = ref.read(mediaServiceProvider);
     if (service == null) {
-      DialogUtils.showToast(context: context, message: '未连接到服务器', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '未连接到服务器',
+        isError: true,
+      );
       return;
     }
 
@@ -1649,23 +1757,27 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
     final pos = widget.scrollController.position;
     if (pos.pixels <= pos.minScrollExtent) return;
 
-    final itemCount = ((availableWidth + _EpisodesCarouselDirect._itemSpacing) /
-            (_EpisodesCarouselDirect._minItemWidth +
-                _EpisodesCarouselDirect._itemSpacing))
-        .floor();
-    final itemWidth = itemCount > 0
-        ? (availableWidth -
-                (itemCount - 1) * _EpisodesCarouselDirect._itemSpacing) /
-            itemCount
-        : _EpisodesCarouselDirect._minItemWidth;
+    final itemCount =
+        ((availableWidth + _EpisodesCarouselDirect._itemSpacing) /
+                (_EpisodesCarouselDirect._minItemWidth +
+                    _EpisodesCarouselDirect._itemSpacing))
+            .floor();
+    final itemWidth =
+        itemCount > 0
+            ? (availableWidth -
+                    (itemCount - 1) * _EpisodesCarouselDirect._itemSpacing) /
+                itemCount
+            : _EpisodesCarouselDirect._minItemWidth;
     final pageSize =
         (itemCount - 1) * (itemWidth + _EpisodesCarouselDirect._itemSpacing);
 
     if (pageSize > 0) {
       // 对齐到最近的页边界
       final currentPage = (pos.pixels / pageSize).round();
-      final alignedPosition =
-          (currentPage * pageSize).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      final alignedPosition = (currentPage * pageSize).clamp(
+        pos.minScrollExtent,
+        pos.maxScrollExtent,
+      );
       if ((pos.pixels - alignedPosition).abs() > 1) {
         widget.scrollController.jumpTo(alignedPosition);
       }
@@ -1686,7 +1798,8 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final availableWidth = constraints.maxWidth -
+        final availableWidth =
+            constraints.maxWidth -
             _EpisodesCarouselDirect._horizontalPadding * 2;
 
         // 窗口大小变化时重新对齐
@@ -1697,16 +1810,18 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
         }
         _lastWidth = availableWidth;
 
-        final itemCount = ((availableWidth +
-                    _EpisodesCarouselDirect._itemSpacing) /
-                (_EpisodesCarouselDirect._minItemWidth +
-                    _EpisodesCarouselDirect._itemSpacing))
-            .floor();
-        final itemWidth = itemCount > 0
-            ? (availableWidth -
-                    (itemCount - 1) * _EpisodesCarouselDirect._itemSpacing) /
-                itemCount
-            : _EpisodesCarouselDirect._minItemWidth;
+        final itemCount =
+            ((availableWidth + _EpisodesCarouselDirect._itemSpacing) /
+                    (_EpisodesCarouselDirect._minItemWidth +
+                        _EpisodesCarouselDirect._itemSpacing))
+                .floor();
+        final itemWidth =
+            itemCount > 0
+                ? (availableWidth -
+                        (itemCount - 1) *
+                            _EpisodesCarouselDirect._itemSpacing) /
+                    itemCount
+                : _EpisodesCarouselDirect._minItemWidth;
         return _buildList(itemWidth);
       },
     );
@@ -1719,15 +1834,18 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: ListView.separated(
           controller: widget.scrollController,
-          physics: ScrollableRowWithArrows.disableManualScroll
-              ? const NeverScrollableScrollPhysics()
-              : null,
+          physics:
+              ScrollableRowWithArrows.disableManualScroll
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
           padding: const EdgeInsets.symmetric(
-              horizontal: _EpisodesCarouselDirect._horizontalPadding),
+            horizontal: _EpisodesCarouselDirect._horizontalPadding,
+          ),
           scrollDirection: Axis.horizontal,
           itemCount: widget.episodes.length,
-          separatorBuilder: (_, _) =>
-              const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
+          separatorBuilder:
+              (_, _) =>
+                  const SizedBox(width: _EpisodesCarouselDirect._itemSpacing),
           itemBuilder: (context, index) {
             final episode = widget.episodes[index];
             return _EpisodeCard(
@@ -1784,20 +1902,26 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
     final pos = widget.scrollController.position;
     if (pos.pixels <= pos.minScrollExtent) return;
 
-    final itemCount = ((availableWidth + _EpisodesCarousel._itemSpacing) /
-            (_EpisodesCarousel._minItemWidth + _EpisodesCarousel._itemSpacing))
-        .floor();
-    final itemWidth = itemCount > 0
-        ? (availableWidth - (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
-            itemCount
-        : _EpisodesCarousel._minItemWidth;
+    final itemCount =
+        ((availableWidth + _EpisodesCarousel._itemSpacing) /
+                (_EpisodesCarousel._minItemWidth +
+                    _EpisodesCarousel._itemSpacing))
+            .floor();
+    final itemWidth =
+        itemCount > 0
+            ? (availableWidth -
+                    (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
+                itemCount
+            : _EpisodesCarousel._minItemWidth;
     final pageSize =
         (itemCount - 1) * (itemWidth + _EpisodesCarousel._itemSpacing);
 
     if (pageSize > 0) {
       final currentPage = (pos.pixels / pageSize).round();
-      final alignedPosition =
-          (currentPage * pageSize).clamp(pos.minScrollExtent, pos.maxScrollExtent);
+      final alignedPosition = (currentPage * pageSize).clamp(
+        pos.minScrollExtent,
+        pos.maxScrollExtent,
+      );
       if ((pos.pixels - alignedPosition).abs() > 1) {
         widget.scrollController.jumpTo(alignedPosition);
       }
@@ -1808,8 +1932,10 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
   Widget build(BuildContext context) {
     final serverBaseUrl = ref.watch(serverUrlProvider);
     final episodesAsync = ref.watch(
-      seasonEpisodesProvider(
-          (tvShowId: widget.tvShowId, seasonId: widget.seasonId)),
+      seasonEpisodesProvider((
+        tvShowId: widget.tvShowId,
+        seasonId: widget.seasonId,
+      )),
     );
 
     return episodesAsync.when(
@@ -1817,7 +1943,9 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
           () => SizedBox(
             height: 140,
             child: Center(
-              child: CircularProgressIndicator(color: context.appColors.textPrimary),
+              child: CircularProgressIndicator(
+                color: context.appColors.textPrimary,
+              ),
             ),
           ),
       error:
@@ -1825,7 +1953,9 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             padding: const EdgeInsets.all(24),
             child: Text(
               '加载失败: $error',
-              style: TextStyle(color: context.appColors.textPrimary.withValues(alpha: 0.7)),
+              style: TextStyle(
+                color: context.appColors.textPrimary.withValues(alpha: 0.7),
+              ),
             ),
           ),
       data: (episodes) {
@@ -1834,7 +1964,9 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             padding: const EdgeInsets.all(24),
             child: Text(
               '暂无剧集',
-              style: TextStyle(color: context.appColors.textPrimary.withValues(alpha: 0.7)),
+              style: TextStyle(
+                color: context.appColors.textPrimary.withValues(alpha: 0.7),
+              ),
             ),
           );
         }
@@ -1847,13 +1979,16 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
 
         if (!WindowControls.isDesktop) {
           return _buildList(
-              episodes, serverBaseUrl, _EpisodesCarousel._minItemWidth);
+            episodes,
+            serverBaseUrl,
+            _EpisodesCarousel._minItemWidth,
+          );
         }
 
         return LayoutBuilder(
           builder: (context, constraints) {
-            final availableWidth = constraints.maxWidth -
-                _EpisodesCarousel._horizontalPadding * 2;
+            final availableWidth =
+                constraints.maxWidth - _EpisodesCarousel._horizontalPadding * 2;
 
             if (_lastWidth != null && _lastWidth != availableWidth) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1862,15 +1997,17 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
             }
             _lastWidth = availableWidth;
 
-            final itemCount = ((availableWidth + _EpisodesCarousel._itemSpacing) /
-                    (_EpisodesCarousel._minItemWidth +
-                        _EpisodesCarousel._itemSpacing))
-                .floor();
-            final itemWidth = itemCount > 0
-                ? (availableWidth -
-                        (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
-                    itemCount
-                : _EpisodesCarousel._minItemWidth;
+            final itemCount =
+                ((availableWidth + _EpisodesCarousel._itemSpacing) /
+                        (_EpisodesCarousel._minItemWidth +
+                            _EpisodesCarousel._itemSpacing))
+                    .floor();
+            final itemWidth =
+                itemCount > 0
+                    ? (availableWidth -
+                            (itemCount - 1) * _EpisodesCarousel._itemSpacing) /
+                        itemCount
+                    : _EpisodesCarousel._minItemWidth;
             return _buildList(episodes, serverBaseUrl, itemWidth);
           },
         );
@@ -1879,22 +2016,27 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
   }
 
   Widget _buildList(
-      List<Episode> episodes, String? serverBaseUrl, double itemWidth) {
+    List<Episode> episodes,
+    String? serverBaseUrl,
+    double itemWidth,
+  ) {
     return SizedBox(
       height: 140,
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: ListView.separated(
           controller: widget.scrollController,
-          physics: ScrollableRowWithArrows.disableManualScroll
-              ? const NeverScrollableScrollPhysics()
-              : null,
+          physics:
+              ScrollableRowWithArrows.disableManualScroll
+                  ? const NeverScrollableScrollPhysics()
+                  : null,
           padding: const EdgeInsets.symmetric(
-              horizontal: _EpisodesCarousel._horizontalPadding),
+            horizontal: _EpisodesCarousel._horizontalPadding,
+          ),
           scrollDirection: Axis.horizontal,
           itemCount: episodes.length,
-          separatorBuilder: (_, _) =>
-              const SizedBox(width: _EpisodesCarousel._itemSpacing),
+          separatorBuilder:
+              (_, _) => const SizedBox(width: _EpisodesCarousel._itemSpacing),
           itemBuilder: (context, index) {
             final episode = episodes[index];
             return _EpisodeCard(
@@ -2050,7 +2192,11 @@ class _EpisodeCard extends ConsumerWidget {
     int? position;
 
     if (service != null) {
-      final historyResp = await service.getWatchProgress('tv', tvShowId, tmdbId: tmdbId);
+      final historyResp = await service.getWatchProgress(
+        'tv',
+        tvShowId,
+        tmdbId: tmdbId,
+      );
       if (historyResp.isSuccess &&
           historyResp.data != null &&
           historyResp.data!.episodeId == episode.id &&
@@ -2072,7 +2218,11 @@ class _EpisodeCard extends ConsumerWidget {
     ref.read(watchHistoryProvider.notifier).refresh();
   }
 
-  Widget _buildThumbnail(BuildContext context, double height, String? accessToken) {
+  Widget _buildThumbnail(
+    BuildContext context,
+    double height,
+    String? accessToken,
+  ) {
     final hasStill = episode.stillPath != null && episode.stillPath!.isNotEmpty;
     final imageUrl = hasStill ? episode.stillPath! : fallbackImageUrl;
     if (imageUrl != null && imageUrl.isNotEmpty) {
@@ -2255,8 +2405,7 @@ class _SourceGroupsSheet extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               itemCount: groups.length,
               separatorBuilder:
-                  (_, _) =>
-                      const Divider(height: 1, indent: 20, endIndent: 20),
+                  (_, _) => const Divider(height: 1, indent: 20, endIndent: 20),
               itemBuilder: (context, index) {
                 final group = groups[index];
                 return _SourceGroupTile(
@@ -2336,7 +2485,11 @@ class _SourceGroupTile extends StatelessWidget {
           // 文件夹路径
           Row(
             children: [
-              Icon(Icons.folder_outlined, size: 14, color: colors.textSecondary),
+              Icon(
+                Icons.folder_outlined,
+                size: 14,
+                color: colors.textSecondary,
+              ),
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
@@ -2427,15 +2580,22 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
     final pos = widget.controller.position;
     final viewportWidth = pos.viewportDimension;
     // 计算当前视口能显示多少个卡片
-    final availableWidth = viewportWidth - _EpisodesScrollButtons._horizontalPadding * 2;
-    final itemCount = ((availableWidth + _EpisodesScrollButtons._itemSpacing) /
-            (_EpisodesScrollButtons._minItemWidth + _EpisodesScrollButtons._itemSpacing))
-        .floor();
-    final itemWidth = itemCount > 0
-        ? (availableWidth - (itemCount - 1) * _EpisodesScrollButtons._itemSpacing) / itemCount
-        : _EpisodesScrollButtons._minItemWidth;
+    final availableWidth =
+        viewportWidth - _EpisodesScrollButtons._horizontalPadding * 2;
+    final itemCount =
+        ((availableWidth + _EpisodesScrollButtons._itemSpacing) /
+                (_EpisodesScrollButtons._minItemWidth +
+                    _EpisodesScrollButtons._itemSpacing))
+            .floor();
+    final itemWidth =
+        itemCount > 0
+            ? (availableWidth -
+                    (itemCount - 1) * _EpisodesScrollButtons._itemSpacing) /
+                itemCount
+            : _EpisodesScrollButtons._minItemWidth;
     // 滚动距离 = (itemCount - 1) 个卡片的宽度，让最后一个变成第一个
-    final scrollDistance = (itemCount - 1) * (itemWidth + _EpisodesScrollButtons._itemSpacing);
+    final scrollDistance =
+        (itemCount - 1) * (itemWidth + _EpisodesScrollButtons._itemSpacing);
     final target = (pos.pixels + (forward ? scrollDistance : -scrollDistance))
         .clamp(pos.minScrollExtent, pos.maxScrollExtent);
     widget.controller.animateTo(
@@ -2452,14 +2612,29 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _buildButton(context, Icons.chevron_left, _canScrollLeft, () => _scroll(false)),
+        _buildButton(
+          context,
+          Icons.chevron_left,
+          _canScrollLeft,
+          () => _scroll(false),
+        ),
         const SizedBox(width: 4),
-        _buildButton(context, Icons.chevron_right, _canScrollRight, () => _scroll(true)),
+        _buildButton(
+          context,
+          Icons.chevron_right,
+          _canScrollRight,
+          () => _scroll(true),
+        ),
       ],
     );
   }
 
-  Widget _buildButton(BuildContext context, IconData icon, bool enabled, VoidCallback onTap) {
+  Widget _buildButton(
+    BuildContext context,
+    IconData icon,
+    bool enabled,
+    VoidCallback onTap,
+  ) {
     final colors = context.appColors;
     return GestureDetector(
       onTap: enabled ? onTap : null,
@@ -2467,16 +2642,18 @@ class _EpisodesScrollButtonsState extends State<_EpisodesScrollButtons> {
         width: 28,
         height: 28,
         decoration: BoxDecoration(
-          color: enabled
-              ? colors.textPrimary.withValues(alpha: 0.1)
-              : colors.textPrimary.withValues(alpha: 0.05),
+          color:
+              enabled
+                  ? colors.textPrimary.withValues(alpha: 0.1)
+                  : colors.textPrimary.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(4),
         ),
         child: Icon(
           icon,
-          color: enabled
-              ? colors.textPrimary.withValues(alpha: 0.7)
-              : colors.textPrimary.withValues(alpha: 0.3),
+          color:
+              enabled
+                  ? colors.textPrimary.withValues(alpha: 0.7)
+                  : colors.textPrimary.withValues(alpha: 0.3),
           size: 20,
         ),
       ),
