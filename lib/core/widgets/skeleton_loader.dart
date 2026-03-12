@@ -374,7 +374,7 @@ class _WatchHistoryRowSkeleton extends StatelessWidget {
     );
     final itemCount =
         ((availableWidth + _itemSpacing) / (_mobileItemWidth + _itemSpacing))
-            .floor();
+            .ceil();
     final visibleCount = itemCount > 0 ? itemCount : 1;
 
     return SizedBox(
@@ -457,7 +457,7 @@ class _CategoryRowSkeleton extends StatelessWidget {
     );
     final itemCount =
         ((availableWidth + _itemSpacing) / (_mobileItemWidth + _itemSpacing))
-            .floor();
+            .ceil();
     final visibleCount = itemCount > 0 ? itemCount : 1;
 
     return SizedBox(
