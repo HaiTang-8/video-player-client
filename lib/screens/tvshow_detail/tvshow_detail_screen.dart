@@ -2279,6 +2279,7 @@ class _SourceGroupsSheet extends ConsumerWidget {
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
 
+    final container = ProviderScope.containerOf(context);
     Navigator.pop(context);
 
     final response = await service.setSeasonPrimarySource(
@@ -2287,10 +2288,10 @@ class _SourceGroupsSheet extends ConsumerWidget {
       group.folderPath,
     );
     if (response.isSuccess) {
-      ref.invalidate(
+      container.invalidate(
         seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)),
       );
-      ref.invalidate(tvShowDetailProvider(tvShowId));
+      container.invalidate(tvShowDetailProvider(tvShowId));
     }
   }
 }

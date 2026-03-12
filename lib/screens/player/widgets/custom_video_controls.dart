@@ -6,8 +6,11 @@ import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
-import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem, Theme;
-import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons, BootstrapIcons;
+import 'package:shadcn_flutter/shadcn_flutter.dart'
+    as shadcn
+    show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem, Theme;
+import 'package:shadcn_flutter/shadcn_flutter.dart'
+    show LucideIcons, BootstrapIcons;
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
@@ -34,6 +37,7 @@ class CustomVideoControls extends StatefulWidget {
   final void Function(double speed)? onSpeedChanged;
   final String? sourcePath;
   final Future<void> Function(SubtitleInfo sub)? onSelectExternalSubtitle;
+  final Future<void> Function(Duration position)? onSeekRequested;
 
   const CustomVideoControls({
     super.key,
@@ -56,6 +60,7 @@ class CustomVideoControls extends StatefulWidget {
     this.onSpeedChanged,
     this.sourcePath,
     this.onSelectExternalSubtitle,
+    this.onSeekRequested,
   });
 
   @override
@@ -67,8 +72,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   // iOS 横屏下 SafeArea/viewPadding 可能是“左右对称”的（例如 Dynamic Island 机型），
   // 仅凭 inset 无法判断刘海到底在左还是在右。为了满足“刘海在右侧才给播放列表右侧留安全距离”
   // 的需求，这里通过原生接口读取真实的 UIInterfaceOrientation。
-  static const MethodChannel _orientationChannel =
-      MethodChannel('media_player/orientation');
+  static const MethodChannel _orientationChannel = MethodChannel(
+    'media_player/orientation',
+  );
 
   // 是否判定“刘海在右侧”。用于播放列表弹层的右侧安全距离计算。
   // - iOS：由原生 UIInterfaceOrientation 决定（landscapeRight => true）。
@@ -241,7 +247,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       try {
         ScreenBrightness().resetApplicationScreenBrightness();
       } catch (e) {
-        LogService.instance.warn('VideoControls', 'Failed to reset brightness: $e');
+        LogService.instance.warn(
+          'VideoControls',
+          'Failed to reset brightness: $e',
+        );
       }
     }
     super.dispose();
@@ -270,7 +279,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     // - iOS：通过 UIInterfaceOrientation 推断（并按用户实测修正映射）
     // - Android：优先从 DisplayCutout 的位置推断（部分机型 viewPadding 可能左右对称，无法区分）
     try {
-      final side = await _orientationChannel.invokeMethod<String>('getNotchSide');
+      final side = await _orientationChannel.invokeMethod<String>(
+        'getNotchSide',
+      );
       switch (side) {
         case 'right':
           return true;
@@ -285,8 +296,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       // 兼容旧版本：iOS 先前只实现了 getInterfaceOrientation。
       if (!Platform.isIOS) return null;
       try {
-        final orientation =
-            await _orientationChannel.invokeMethod<String>('getInterfaceOrientation');
+        final orientation = await _orientationChannel.invokeMethod<String>(
+          'getInterfaceOrientation',
+        );
         switch (orientation) {
           // 注意：iOS 的 UIInterfaceOrientation 与“顶部（刘海）在屏幕哪一侧”的直觉容易相反。
           // 以用户反馈为准：当前实现反了，因此这里对调映射：
@@ -346,7 +358,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _panAccumulatedDy += details.delta.dy.abs();
 
     // 判断方向（需要累计一定位移后才锁定）
-    if (_panDirection == null && (_panAccumulatedDx > 10 || _panAccumulatedDy > 10)) {
+    if (_panDirection == null &&
+        (_panAccumulatedDx > 10 || _panAccumulatedDy > 10)) {
       if (_panAccumulatedDx > _panAccumulatedDy) {
         _panDirection = 'horizontal';
         // 初始化进度拖动
@@ -359,9 +372,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         });
       } else {
         final screenWidth = MediaQuery.of(context).size.width;
-        _panDirection = _panStartPosition!.dx < screenWidth / 2
-            ? 'vertical_left'
-            : 'vertical_right';
+        _panDirection =
+            _panStartPosition!.dx < screenWidth / 2
+                ? 'vertical_left'
+                : 'vertical_right';
       }
     }
 
@@ -369,7 +383,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
     if (_panDirection == 'horizontal') {
       final screenWidth = MediaQuery.of(context).size.width;
-      final delta = details.delta.dx / screenWidth * _duration.inMilliseconds * 0.3;
+      final delta =
+          details.delta.dx / screenWidth * _duration.inMilliseconds * 0.3;
       setState(() {
         _seekPosition = Duration(
           milliseconds: (_seekPosition.inMilliseconds + delta.toInt()).clamp(
@@ -388,7 +403,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           try {
             ScreenBrightness().setApplicationScreenBrightness(_brightness);
           } catch (e) {
-            LogService.instance.warn('VideoControls', 'Failed to set brightness: $e');
+            LogService.instance.warn(
+              'VideoControls',
+              'Failed to set brightness: $e',
+            );
           }
         } else {
           _volume = (_volume + delta).clamp(0.0, 1.0);
@@ -403,9 +421,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     if (WindowControls.isDesktop) return;
 
     if (_panDirection == 'horizontal') {
-      widget.player.seek(_seekPosition);
-      if (_wasPlayingBeforeSeek) widget.player.play();
-      setState(() => _showSeekOverlay = false);
+      unawaited(
+        _commitSeek(
+          _seekPosition,
+          resumeAfterSeek: _wasPlayingBeforeSeek,
+          hideSeekOverlay: true,
+        ),
+      );
     } else if (_panDirection == 'vertical_left') {
       setState(() => _showBrightnessOverlay = false);
     } else if (_panDirection == 'vertical_right') {
@@ -491,8 +513,47 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     final clamped = Duration(
       milliseconds: newPos.inMilliseconds.clamp(0, _duration.inMilliseconds),
     );
-    widget.player.seek(clamped);
-    _showControlsTemporarily();
+    unawaited(_commitSeek(clamped, showControlsAfterSeek: true));
+  }
+
+  Future<void> _commitSeek(
+    Duration target, {
+    bool resumeAfterSeek = false,
+    bool hideSeekOverlay = false,
+    bool showControlsAfterSeek = false,
+    bool restartHideTimer = false,
+  }) async {
+    setState(() {
+      _position = target;
+      _dragging = true;
+    });
+
+    try {
+      final onSeekRequested = widget.onSeekRequested;
+      if (onSeekRequested != null) {
+        await onSeekRequested(target);
+      } else {
+        await Future<void>.sync(() => widget.player.seek(target));
+      }
+      if (resumeAfterSeek) {
+        await Future<void>.sync(() => widget.player.play());
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _position = target;
+          _dragging = false;
+          if (hideSeekOverlay) {
+            _showSeekOverlay = false;
+          }
+        });
+        if (showControlsAfterSeek) {
+          _showControlsTemporarily();
+        } else if (restartHideTimer) {
+          _startHideTimer();
+        }
+      }
+    }
   }
 
   void _adjustVolume(double delta) {
@@ -590,7 +651,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }
       if (sampleRate.isNotEmpty) {
         final sr = int.tryParse(sampleRate);
-        info['采样率'] = sr != null ? '${(sr / 1000).toStringAsFixed(1)} kHz' : sampleRate;
+        info['采样率'] =
+            sr != null ? '${(sr / 1000).toStringAsFixed(1)} kHz' : sampleRate;
       }
       if (audioBitrate.isNotEmpty) {
         final br = int.tryParse(audioBitrate);
@@ -610,7 +672,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
       if (mounted) setState(() => _mediaInfo = info);
     } catch (e) {
-      LogService.instance.warn('VideoControls', 'Failed to fetch media info: $e');
+      LogService.instance.warn(
+        'VideoControls',
+        'Failed to fetch media info: $e',
+      );
     }
   }
 
@@ -735,129 +800,144 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         child: Stack(
           children: [
             Listener(
-              onPointerDown: WindowControls.isDesktop ? null : (_) {
-                _pointerCount++;
-                if (_pointerCount >= 3 && !_threeFingerTriggered) {
-                  _threeFingerTriggered = true;
-                  _toggleMediaInfo();
-                }
-              },
-              onPointerUp: WindowControls.isDesktop ? null : (_) {
-                _pointerCount = (_pointerCount - 1).clamp(0, 10);
-                if (_pointerCount == 0) _threeFingerTriggered = false;
-              },
-              onPointerCancel: WindowControls.isDesktop ? null : (_) {
-                _pointerCount = (_pointerCount - 1).clamp(0, 10);
-                if (_pointerCount == 0) _threeFingerTriggered = false;
-              },
-              child: GestureDetector(
-              onTap: () {
-                if (WindowControls.isDesktop) {
-                  widget.player.playOrPause();
-                  _showControlsTemporarily();
-                } else {
-                  _toggleVisibility();
-                }
-              },
-              onDoubleTap: WindowControls.isDesktop ? widget.onToggleFullscreen : null,
-              onLongPressStart:
-                  WindowControls.isDesktop || _isLocked
+              onPointerDown:
+                  WindowControls.isDesktop
                       ? null
-                      : (_) => _startLongPressSpeed(),
-              onLongPressEnd:
-                  WindowControls.isDesktop || _isLocked ? null : (_) => _endLongPressSpeed(),
-              onPanStart: WindowControls.isDesktop || _isLocked ? null : _onPanStart,
-              onPanUpdate: WindowControls.isDesktop || _isLocked ? null : _onPanUpdate,
-              onPanEnd: WindowControls.isDesktop || _isLocked ? null : _onPanEnd,
-              behavior: HitTestBehavior.translucent,
-              child: Video(
-                controller: widget.controller,
-                controls: NoVideoControls,
-                fit: _isFillMode ? BoxFit.cover : BoxFit.contain,
-              ),
-            ),
-            ),
-          // 亮度指示器
-          if (_showBrightnessOverlay) _buildBrightnessOverlay(),
-          // 音量指示器
-          if (_showVolumeOverlay) _buildVolumeOverlay(),
-          // 进度指示器
-          if (_showSeekOverlay) _buildSeekOverlay(),
-          // 媒体信息面板
-          if (_showMediaInfo) _buildMediaInfoPanel(),
-          // 控制栏
-          if (_visible) ...[
-            PlayerTopBar(
-              title: widget.title ?? '',
-              onBack: widget.onBack ?? () => Navigator.of(context).maybePop(),
-              isLocked: _isLocked,
-            ),
-            if (!_isLocked) _buildBottomBar(),
-            _buildProgressBar(),
-          ],
-          // 锁定按钮（仅移动端）
-          if (_visible && !WindowControls.isDesktop) _buildLockButton(),
-          // 缓冲指示器
-          if (_buffering)
-            const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: Colors.white),
-                  SizedBox(height: 16),
-                  Text(
-                    '缓冲中...',
-                    style: TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ],
-              ),
-            ),
-          // 长按倍速提示
-          if (_isLongPressSpeed)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    '倍速中 2x',
-                    style: TextStyle(color: Colors.white, fontSize: 14),
-                  ),
+                      : (_) {
+                        _pointerCount++;
+                        if (_pointerCount >= 3 && !_threeFingerTriggered) {
+                          _threeFingerTriggered = true;
+                          _toggleMediaInfo();
+                        }
+                      },
+              onPointerUp:
+                  WindowControls.isDesktop
+                      ? null
+                      : (_) {
+                        _pointerCount = (_pointerCount - 1).clamp(0, 10);
+                        if (_pointerCount == 0) _threeFingerTriggered = false;
+                      },
+              onPointerCancel:
+                  WindowControls.isDesktop
+                      ? null
+                      : (_) {
+                        _pointerCount = (_pointerCount - 1).clamp(0, 10);
+                        if (_pointerCount == 0) _threeFingerTriggered = false;
+                      },
+              child: GestureDetector(
+                onTap: () {
+                  if (WindowControls.isDesktop) {
+                    widget.player.playOrPause();
+                    _showControlsTemporarily();
+                  } else {
+                    _toggleVisibility();
+                  }
+                },
+                onDoubleTap:
+                    WindowControls.isDesktop ? widget.onToggleFullscreen : null,
+                onLongPressStart:
+                    WindowControls.isDesktop || _isLocked
+                        ? null
+                        : (_) => _startLongPressSpeed(),
+                onLongPressEnd:
+                    WindowControls.isDesktop || _isLocked
+                        ? null
+                        : (_) => _endLongPressSpeed(),
+                onPanStart:
+                    WindowControls.isDesktop || _isLocked ? null : _onPanStart,
+                onPanUpdate:
+                    WindowControls.isDesktop || _isLocked ? null : _onPanUpdate,
+                onPanEnd:
+                    WindowControls.isDesktop || _isLocked ? null : _onPanEnd,
+                behavior: HitTestBehavior.translucent,
+                child: Video(
+                  controller: widget.controller,
+                  controls: NoVideoControls,
+                  fit: _isFillMode ? BoxFit.cover : BoxFit.contain,
                 ),
               ),
             ),
-          // 菜单切换倍速提示
-          if (_showSpeedHint && !_isLongPressSpeed)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 20,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    '${_hintSpeed}x',
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+            // 亮度指示器
+            if (_showBrightnessOverlay) _buildBrightnessOverlay(),
+            // 音量指示器
+            if (_showVolumeOverlay) _buildVolumeOverlay(),
+            // 进度指示器
+            if (_showSeekOverlay) _buildSeekOverlay(),
+            // 媒体信息面板
+            if (_showMediaInfo) _buildMediaInfoPanel(),
+            // 控制栏
+            if (_visible) ...[
+              PlayerTopBar(
+                title: widget.title ?? '',
+                onBack: widget.onBack ?? () => Navigator.of(context).maybePop(),
+                isLocked: _isLocked,
+              ),
+              if (!_isLocked) _buildBottomBar(),
+              _buildProgressBar(),
+            ],
+            // 锁定按钮（仅移动端）
+            if (_visible && !WindowControls.isDesktop) _buildLockButton(),
+            // 缓冲指示器
+            if (_buffering)
+              const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: Colors.white),
+                    SizedBox(height: 16),
+                    Text(
+                      '缓冲中...',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+            // 长按倍速提示
+            if (_isLongPressSpeed)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      '倍速中 2x',
+                      style: TextStyle(color: Colors.white, fontSize: 14),
+                    ),
                   ),
                 ),
               ),
-            ),
+            // 菜单切换倍速提示
+            if (_showSpeedHint && !_isLongPressSpeed)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 20,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${_hintSpeed}x',
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -969,7 +1049,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-
   Widget _buildProgressBar() {
     final padding = MediaQuery.of(context).padding;
     final bottomPadding = WindowControls.isDesktop ? 0.0 : padding.bottom;
@@ -982,7 +1061,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         children: [
           Text(
             _formatDuration(_position),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -991,13 +1074,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               child: SliderTheme(
                 data: SliderTheme.of(context).copyWith(
                   trackHeight: 3,
-                  thumbShape: RoundSliderThumbShape(enabledThumbRadius: _isLocked ? 0 : 6),
-                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                  thumbShape: RoundSliderThumbShape(
+                    enabledThumbRadius: _isLocked ? 0 : 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
                 ),
                 child: Slider(
                   value:
                       _duration.inMilliseconds > 0
-                          ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
+                          ? (_position.inMilliseconds /
+                                  _duration.inMilliseconds)
+                              .clamp(0.0, 1.0)
                           : 0,
                   onChangeStart: (_) {
                     _dragging = true;
@@ -1011,13 +1100,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                     });
                   },
                   onChangeEnd: (v) {
-                    _dragging = false;
-                    widget.player.seek(
-                      Duration(
-                        milliseconds: (v * _duration.inMilliseconds).round(),
-                      ),
+                    final target = Duration(
+                      milliseconds: (v * _duration.inMilliseconds).round(),
                     );
-                    _startHideTimer();
+                    unawaited(_commitSeek(target, restartHideTimer: true));
                   },
                   activeColor: Colors.white,
                   inactiveColor: Colors.white38,
@@ -1028,7 +1114,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           const SizedBox(width: 8),
           Text(
             _formatDuration(_duration),
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),
@@ -1079,11 +1169,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                     _buildAudioTrackButton(),
                     _buildSubtitleButton(),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                      _buildIconButton(LucideIcons.list, _showPlaylistMenu,
-                          isLast: !WindowControls.isDesktop, size: 30),
+                      _buildIconButton(
+                        LucideIcons.list,
+                        _showPlaylistMenu,
+                        isLast: !WindowControls.isDesktop,
+                        size: 30,
+                      ),
                     if (WindowControls.isDesktop)
                       _buildIconButton(
-                        widget.isFullscreen ? LucideIcons.minimize : LucideIcons.maximize,
+                        widget.isFullscreen
+                            ? LucideIcons.minimize
+                            : LucideIcons.maximize,
                         widget.onToggleFullscreen,
                         isLast: true,
                       ),
@@ -1155,27 +1251,29 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
     final isDesktop = WindowControls.isDesktop;
     return Builder(
-      builder: (menuContext) => GestureDetector(
-        onTap: () {
-          _hideTimer?.cancel();
-          _showSpeedMenu(menuContext, speeds);
-        },
-        child: Padding(
-          padding: EdgeInsets.only(right: isDesktop ? 0 : 8),
-          child: Container(
-            constraints: isDesktop ? const BoxConstraints(minWidth: 48) : null,
-            alignment: isDesktop ? Alignment.center : null,
-            child: Text(
-              '${_playbackSpeed}x',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
+      builder:
+          (menuContext) => GestureDetector(
+            onTap: () {
+              _hideTimer?.cancel();
+              _showSpeedMenu(menuContext, speeds);
+            },
+            child: Padding(
+              padding: EdgeInsets.only(right: isDesktop ? 0 : 8),
+              child: Container(
+                constraints:
+                    isDesktop ? const BoxConstraints(minWidth: 48) : null,
+                alignment: isDesktop ? Alignment.center : null,
+                child: Text(
+                  '${_playbackSpeed}x',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
     );
   }
 
@@ -1187,19 +1285,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
     shadcn.showDropdown(
       context: context,
-      margin: isMobile
-          ? EdgeInsets.only(
-              left: padding.left,
-              right: padding.right,
-              top: padding.top,
-              bottom: padding.bottom,
-            )
-          : null,
+      margin:
+          isMobile
+              ? EdgeInsets.only(
+                left: padding.left,
+                right: padding.right,
+                top: padding.top,
+                bottom: padding.bottom,
+              )
+              : null,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         final children = <shadcn.MenuItem>[];
         for (var i = 0; i < speeds.length; i++) {
@@ -1207,9 +1307,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           final selected = (_playbackSpeed - s).abs() < 0.01;
           children.add(
             shadcn.MenuButton(
-              trailing: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.black)
-                  : null,
+              trailing:
+                  selected
+                      ? const Icon(Icons.check, size: 16, color: Colors.black)
+                      : null,
               child: Text('${s}x'),
               onPressed: (_) {
                 widget.player.setRate(s);
@@ -1228,7 +1329,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              behavior: ScrollConfiguration.of(
+                dropdownContext,
+              ).copyWith(scrollbars: false),
               child: shadcn.DropdownMenu(children: children),
             ),
           ),
@@ -1239,20 +1342,27 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Widget _buildAudioTrackButton({bool isLast = false}) {
     return Builder(
-      builder: (menuContext) => GestureDetector(
-        onTap: () {
-          _hideTimer?.cancel();
-          _showAudioTrackMenu(menuContext);
-        },
-        child: Padding(
-          padding: EdgeInsets.only(left: isLast ? 6 : 0),
-          child: const SizedBox(
-            width: 30,
-            height: 30,
-            child: Center(child: Icon(LucideIcons.audioLines, color: Colors.white, size: 26)),
+      builder:
+          (menuContext) => GestureDetector(
+            onTap: () {
+              _hideTimer?.cancel();
+              _showAudioTrackMenu(menuContext);
+            },
+            child: Padding(
+              padding: EdgeInsets.only(left: isLast ? 6 : 0),
+              child: const SizedBox(
+                width: 30,
+                height: 30,
+                child: Center(
+                  child: Icon(
+                    LucideIcons.audioLines,
+                    color: Colors.white,
+                    size: 26,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -1265,29 +1375,28 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
     shadcn.showDropdown(
       context: context,
-      margin: isMobile
-          ? EdgeInsets.only(
-              left: padding.left,
-              right: padding.right,
-              top: padding.top,
-              bottom: padding.bottom,
-            )
-          : null,
+      margin:
+          isMobile
+              ? EdgeInsets.only(
+                left: padding.left,
+                right: padding.right,
+                top: padding.top,
+                bottom: padding.bottom,
+              )
+              : null,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         if (tracks.isEmpty) {
           return shadcn.Theme(
             data: noAccentTheme,
             child: shadcn.DropdownMenu(
               children: [
-                shadcn.MenuButton(
-                  onPressed: null,
-                  child: const Text('无可用音轨'),
-                ),
+                shadcn.MenuButton(onPressed: null, child: const Text('无可用音轨')),
               ],
             ),
           );
@@ -1296,16 +1405,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         for (var i = 0; i < tracks.length; i++) {
           final t = tracks[i];
           final selected = _currentAudioTrack?.id == t.id;
-          children.add(shadcn.MenuButton(
-            trailing: selected
-                ? const Icon(Icons.check, size: 16, color: Colors.black)
-                : null,
-            child: Text(t.title ?? t.language ?? t.id),
-            onPressed: (_) {
-              widget.player.setAudioTrack(t);
-              _startHideTimer();
-            },
-          ));
+          children.add(
+            shadcn.MenuButton(
+              trailing:
+                  selected
+                      ? const Icon(Icons.check, size: 16, color: Colors.black)
+                      : null,
+              child: Text(t.title ?? t.language ?? t.id),
+              onPressed: (_) {
+                widget.player.setAudioTrack(t);
+                _startHideTimer();
+              },
+            ),
+          );
           if (i < tracks.length - 1) {
             children.add(const shadcn.MenuDivider());
           }
@@ -1315,7 +1427,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              behavior: ScrollConfiguration.of(
+                dropdownContext,
+              ).copyWith(scrollbars: false),
               child: shadcn.DropdownMenu(children: children),
             ),
           ),
@@ -1326,20 +1440,27 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Widget _buildSubtitleButton() {
     return Builder(
-      builder: (menuContext) => GestureDetector(
-        onTap: () {
-          _hideTimer?.cancel();
-          _showSubtitleMenu(menuContext);
-        },
-        child: Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: const SizedBox(
-            width: 30,
-            height: 30,
-            child: Center(child: Icon(LucideIcons.captions, color: Colors.white, size: 30)),
+      builder:
+          (menuContext) => GestureDetector(
+            onTap: () {
+              _hideTimer?.cancel();
+              _showSubtitleMenu(menuContext);
+            },
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: const SizedBox(
+                width: 30,
+                height: 30,
+                child: Center(
+                  child: Icon(
+                    LucideIcons.captions,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -1354,26 +1475,29 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
     shadcn.showDropdown(
       context: context,
-      margin: isMobile
-          ? EdgeInsets.only(
-              left: padding.left,
-              right: padding.right,
-              top: padding.top,
-              bottom: padding.bottom,
-            )
-          : null,
+      margin:
+          isMobile
+              ? EdgeInsets.only(
+                left: padding.left,
+                right: padding.right,
+                top: padding.top,
+                bottom: padding.bottom,
+              )
+              : null,
       builder: (dropdownContext) {
         final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme: () => shadcn.Theme.of(dropdownContext).colorScheme.copyWith(
-            accent: () => Colors.transparent,
-          ),
+          colorScheme:
+              () => shadcn.Theme.of(
+                dropdownContext,
+              ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
         final closeSelected = currentId == 'no' || currentId == null;
         final children = <shadcn.MenuItem>[
           shadcn.MenuButton(
-            trailing: closeSelected
-                ? const Icon(Icons.check, size: 16, color: Colors.black)
-                : null,
+            trailing:
+                closeSelected
+                    ? const Icon(Icons.check, size: 16, color: Colors.black)
+                    : null,
             child: const Text('关闭'),
             onPressed: (_) {
               widget.player.setSubtitleTrack(SubtitleTrack.no());
@@ -1387,16 +1511,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           for (var i = 0; i < embeddedTracks.length; i++) {
             final t = embeddedTracks[i];
             final selected = currentId == t.id;
-            children.add(shadcn.MenuButton(
-              trailing: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.black)
-                  : null,
-              child: Text(t.title ?? t.language ?? t.id),
-              onPressed: (_) {
-                widget.player.setSubtitleTrack(t);
-                _startHideTimer();
-              },
-            ));
+            children.add(
+              shadcn.MenuButton(
+                trailing:
+                    selected
+                        ? const Icon(Icons.check, size: 16, color: Colors.black)
+                        : null,
+                child: Text(t.title ?? t.language ?? t.id),
+                onPressed: (_) {
+                  widget.player.setSubtitleTrack(t);
+                  _startHideTimer();
+                },
+              ),
+            );
             if (i < embeddedTracks.length - 1) {
               children.add(const shadcn.MenuDivider());
             }
@@ -1408,16 +1535,19 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           for (var i = 0; i < externalSubs.length; i++) {
             final sub = externalSubs[i];
             final selected = _currentSubtitleTrack?.title == sub.displayName;
-            children.add(shadcn.MenuButton(
-              trailing: selected
-                  ? const Icon(Icons.check, size: 16, color: Colors.black)
-                  : null,
-              child: Text(sub.displayName),
-              onPressed: (_) {
-                widget.onSelectExternalSubtitle?.call(sub);
-                _startHideTimer();
-              },
-            ));
+            children.add(
+              shadcn.MenuButton(
+                trailing:
+                    selected
+                        ? const Icon(Icons.check, size: 16, color: Colors.black)
+                        : null,
+                child: Text(sub.displayName),
+                onPressed: (_) {
+                  widget.onSelectExternalSubtitle?.call(sub);
+                  _startHideTimer();
+                },
+              ),
+            );
             if (i < externalSubs.length - 1) {
               children.add(const shadcn.MenuDivider());
             }
@@ -1425,10 +1555,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         }
 
         if (embeddedTracks.isEmpty && externalSubs.isEmpty) {
-          children.add(shadcn.MenuButton(
-            onPressed: null,
-            child: const Text('无可用字幕'),
-          ));
+          children.add(
+            shadcn.MenuButton(onPressed: null, child: const Text('无可用字幕')),
+          );
         }
 
         return shadcn.Theme(
@@ -1436,7 +1565,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxHeight),
             child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(dropdownContext).copyWith(scrollbars: false),
+              behavior: ScrollConfiguration.of(
+                dropdownContext,
+              ).copyWith(scrollbars: false),
               child: shadcn.DropdownMenu(children: children),
             ),
           ),
@@ -1462,7 +1593,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         const SizedBox(width: 8),
         IconButton(
           icon: Icon(
-            _playing ? BootstrapIcons.stopCircleFill : BootstrapIcons.playCircleFill,
+            _playing
+                ? BootstrapIcons.stopCircleFill
+                : BootstrapIcons.playCircleFill,
             color: Colors.white,
             size: 32,
           ),
@@ -1502,11 +1635,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     if (isLast) {
       return Padding(
         padding: EdgeInsets.only(left: (minW - 28) / 2),
-        child: GestureDetector(
-          key: key,
-          onTap: onPressed,
-          child: iconWidget,
-        ),
+        child: GestureDetector(key: key, onTap: onPressed, child: iconWidget),
       );
     }
     return IconButton(
@@ -1614,7 +1743,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   valueListenable: _notchOnRight,
                   builder: (context, notchOnRight, _) {
                     final isLandscape = mq.orientation == Orientation.landscape;
-                    final needRightSafe = isLandscape && notchOnRight && vp.right > 0;
+                    final needRightSafe =
+                        isLandscape && notchOnRight && vp.right > 0;
                     final safePadding = EdgeInsets.only(
                       top: vp.top,
                       bottom: vp.bottom,
@@ -1672,8 +1802,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                                                 isCurrent
                                                     ? const Color(0xFF3A3A3C)
                                                     : const Color(0xFF2C2C2E),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                             border:
                                                 isCurrent
                                                     ? Border.all(
