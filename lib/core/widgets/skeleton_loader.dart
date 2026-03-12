@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../window/window_controls.dart';
+
 export 'loading_widget.dart' show AppErrorWidget, EmptyWidget;
 
 /// 骨架屏的 Shimmer 动画作用域。
@@ -40,9 +42,10 @@ class _SkeletonShimmerState extends State<SkeletonShimmer>
     _controller = AnimationController(duration: widget.duration, vsync: this)
       ..repeat();
     // -1 -> 2 的区间方便在 stops 上做“扫光”效果：中间高亮从左外侧扫到右外侧。
-    _animation = Tween<double>(begin: -1.0, end: 2.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: -1.0,
+      end: 2.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -60,10 +63,7 @@ class _SkeletonShimmerState extends State<SkeletonShimmer>
 class _SkeletonShimmerScope extends InheritedWidget {
   final Animation<double> animation;
 
-  const _SkeletonShimmerScope({
-    required this.animation,
-    required super.child,
-  });
+  const _SkeletonShimmerScope({required this.animation, required super.child});
 
   @override
   bool updateShouldNotify(_SkeletonShimmerScope oldWidget) {
@@ -81,19 +81,16 @@ class SkeletonBox extends StatelessWidget {
   final double? height;
   final BorderRadius? borderRadius;
 
-  const SkeletonBox({
-    super.key,
-    this.width,
-    this.height,
-    this.borderRadius,
-  });
+  const SkeletonBox({super.key, this.width, this.height, this.borderRadius});
 
   @override
   Widget build(BuildContext context) {
     final shimmer = SkeletonShimmer.maybeOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final baseColor = isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE0E0E0);
-    final highlightColor = isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
+    final baseColor =
+        isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE0E0E0);
+    final highlightColor =
+        isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
     final radius = borderRadius ?? BorderRadius.circular(8);
 
     if (shimmer == null) {
@@ -101,10 +98,7 @@ class SkeletonBox extends StatelessWidget {
       return Container(
         width: width,
         height: height,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          color: baseColor,
-        ),
+        decoration: BoxDecoration(borderRadius: radius, color: baseColor),
       );
     }
 
@@ -302,13 +296,136 @@ class LibrarySkeletonLoader extends StatelessWidget {
       child: ListView.builder(
         padding: const EdgeInsets.only(top: 8, bottom: 16),
         itemCount: categoryCount,
-        itemBuilder: (context, index) => const _CategoryRowSkeleton(),
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return const _WatchHistoryRowSkeleton();
+          }
+          return const _CategoryRowSkeleton();
+        },
+      ),
+    );
+  }
+}
+
+class _SectionHeaderSkeleton extends StatelessWidget {
+  final double titleWidth;
+
+  const _SectionHeaderSkeleton({required this.titleWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SkeletonBox(
+            width: titleWidth,
+            height: 20,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(width: 8),
+          SkeletonBox(
+            width: 24,
+            height: 16,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchHistoryRowSkeleton extends StatelessWidget {
+  static const double _mobileItemWidth = 220.0;
+  static const double _desktopMinItemWidth = 220.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 16.0;
+
+  const _WatchHistoryRowSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionHeaderSkeleton(titleWidth: 72),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (!WindowControls.isDesktop) {
+              return _buildMobileContent(context, constraints.maxWidth);
+            }
+            return _buildDesktopContent(context, constraints.maxWidth);
+          },
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _buildMobileContent(BuildContext context, double maxWidth) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final imageHeight = _mobileItemWidth * 9 / 16;
+    final listHeight = imageHeight + 8 + textScaler.scale(60);
+    final availableWidth = (maxWidth - _horizontalPadding * 2).clamp(
+      _mobileItemWidth,
+      double.infinity,
+    );
+    final itemCount =
+        ((availableWidth + _itemSpacing) / (_mobileItemWidth + _itemSpacing))
+            .floor();
+    final visibleCount = itemCount > 0 ? itemCount : 1;
+
+    return SizedBox(
+      height: listHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+        itemCount: visibleCount,
+        separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
+        itemBuilder:
+            (_, _) => const _WatchHistoryCardSkeleton(width: _mobileItemWidth),
+      ),
+    );
+  }
+
+  Widget _buildDesktopContent(BuildContext context, double maxWidth) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final availableWidth = (maxWidth - _horizontalPadding * 2).clamp(
+      _desktopMinItemWidth,
+      double.infinity,
+    );
+    final rawCount =
+        ((availableWidth + _itemSpacing) /
+                (_desktopMinItemWidth + _itemSpacing))
+            .floor();
+    final itemCount = rawCount > 0 ? rawCount : 1;
+    final itemWidth =
+        (availableWidth - (itemCount - 1) * _itemSpacing) / itemCount;
+    final textAreaHeight = textScaler.scale(40) + 2 + textScaler.scale(16);
+    final listHeight = itemWidth * 9 / 16 + 8 + textAreaHeight;
+
+    return SizedBox(
+      height: listHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+        itemCount: itemCount,
+        separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
+        itemBuilder: (_, _) => _WatchHistoryCardSkeleton(width: itemWidth),
       ),
     );
   }
 }
 
 class _CategoryRowSkeleton extends StatelessWidget {
+  static const double _mobileItemWidth = 88.0;
+  static const double _desktopItemWidth = 120.0;
+  static const double _itemSpacing = 16.0;
+  static const double _horizontalPadding = 16.0;
+
   const _CategoryRowSkeleton();
 
   @override
@@ -316,63 +433,159 @@ class _CategoryRowSkeleton extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              SkeletonBox(
-                width: 80,
-                height: 20,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              const SizedBox(width: 8),
-              SkeletonBox(
-                width: 24,
-                height: 16,
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 180,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: 6,
-            itemBuilder: (context, index) => Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: _PosterSkeleton(width: 88),
-            ),
-          ),
+        const _SectionHeaderSkeleton(titleWidth: 80),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            if (!WindowControls.isDesktop) {
+              return _buildMobileContent(context, constraints.maxWidth);
+            }
+            return _buildDesktopContent(context, constraints.maxWidth);
+          },
         ),
         const SizedBox(height: 10),
       ],
+    );
+  }
+
+  Widget _buildMobileContent(BuildContext context, double maxWidth) {
+    final textScaler = MediaQuery.textScalerOf(context);
+    final listHeight = _mobileItemWidth * 1.5 + 8 + textScaler.scale(40);
+    final availableWidth = (maxWidth - _horizontalPadding * 2).clamp(
+      _mobileItemWidth,
+      double.infinity,
+    );
+    final itemCount =
+        ((availableWidth + _itemSpacing) / (_mobileItemWidth + _itemSpacing))
+            .floor();
+    final visibleCount = itemCount > 0 ? itemCount : 1;
+
+    return SizedBox(
+      height: listHeight,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+        itemCount: visibleCount,
+        separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
+        itemBuilder: (_, _) => const _PosterSkeleton(width: _mobileItemWidth),
+      ),
+    );
+  }
+
+  Widget _buildDesktopContent(BuildContext context, double maxWidth) {
+    final availableWidth = (maxWidth - _horizontalPadding * 2).clamp(
+      _desktopItemWidth,
+      double.infinity,
+    );
+    final rawItemsPerRow =
+        ((availableWidth + _itemSpacing) / (_desktopItemWidth + _itemSpacing))
+            .floor();
+    final itemsPerRow = rawItemsPerRow > 0 ? rawItemsPerRow : 1;
+    final itemWidth =
+        (availableWidth - (itemsPerRow - 1) * _itemSpacing) / itemsPerRow;
+    final itemHeight = itemWidth / 0.48;
+    final displayCount = itemsPerRow * 2;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+      child: Wrap(
+        spacing: _itemSpacing,
+        runSpacing: _itemSpacing,
+        children: List.generate(
+          displayCount,
+          (_) => SizedBox(
+            width: itemWidth,
+            height: itemHeight,
+            child: _PosterSkeleton(width: itemWidth, height: itemHeight),
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _PosterSkeleton extends StatelessWidget {
   final double width;
+  final double? height;
 
-  const _PosterSkeleton({required this.width});
+  const _PosterSkeleton({required this.width, this.height});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: width,
+      height: height,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: height == null ? MainAxisSize.min : MainAxisSize.max,
         children: [
           SkeletonBox(
             width: width,
             height: width * 1.5,
             borderRadius: BorderRadius.circular(8),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           SkeletonBox(
             width: width * 0.8,
+            height: 14,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 4),
+          SkeletonBox(
+            width: width * 0.55,
+            height: 12,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          if (height != null) const Spacer(),
+        ],
+      ),
+    );
+  }
+}
+
+class _WatchHistoryCardSkeleton extends StatelessWidget {
+  final double width;
+
+  const _WatchHistoryCardSkeleton({required this.width});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progressColor = theme.colorScheme.primary.withValues(alpha: 0.28);
+
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Stack(
+              children: [
+                SkeletonBox(
+                  width: width,
+                  height: width * 9 / 16,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(height: 4, color: progressColor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          SkeletonBox(
+            width: width * 0.88,
+            height: 14,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          const SizedBox(height: 4),
+          SkeletonBox(
+            width: width * 0.38,
             height: 12,
             borderRadius: BorderRadius.circular(4),
           ),
@@ -413,9 +626,8 @@ class StoragesSkeletonLoader extends StatelessWidget {
             child: Column(
               children: List.generate(
                 itemCount,
-                (index) => _StorageTileSkeleton(
-                  showDivider: index < itemCount - 1,
-                ),
+                (index) =>
+                    _StorageTileSkeleton(showDivider: index < itemCount - 1),
               ),
             ),
           ),
@@ -559,24 +771,25 @@ class DetailSkeletonLoader extends StatelessWidget {
                       scrollDirection: Axis.horizontal,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: 6,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(right: 16),
-                        child: Column(
-                          children: [
-                            SkeletonBox(
-                              width: 56,
-                              height: 56,
-                              borderRadius: BorderRadius.circular(28),
+                      itemBuilder:
+                          (context, index) => Padding(
+                            padding: const EdgeInsets.only(right: 16),
+                            child: Column(
+                              children: [
+                                SkeletonBox(
+                                  width: 56,
+                                  height: 56,
+                                  borderRadius: BorderRadius.circular(28),
+                                ),
+                                const SizedBox(height: 6),
+                                SkeletonBox(
+                                  width: 50,
+                                  height: 12,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 6),
-                            SkeletonBox(
-                              width: 50,
-                              height: 12,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ],
-                        ),
-                      ),
+                          ),
                     ),
                   ),
                 ],
