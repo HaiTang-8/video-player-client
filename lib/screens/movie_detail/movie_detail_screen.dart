@@ -37,6 +37,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   final _castScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
   bool _historyLoaded = false;
+  bool _showSolidAppBar = false;
   Color? _mobileBackgroundColor;
   String? _mobileBackgroundImageUrl;
 
@@ -66,6 +67,25 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   void dispose() {
     _castScrollController.dispose();
     super.dispose();
+  }
+
+  bool _handleMainScroll(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final shouldShowSolidAppBar =
+        notification.metrics.maxScrollExtent > 0 &&
+        notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 16;
+    if (shouldShowSolidAppBar == _showSolidAppBar) {
+      return false;
+    }
+
+    setState(() {
+      _showSolidAppBar = shouldShowSolidAppBar;
+    });
+    return false;
   }
 
   Color _detailBackgroundColor(
@@ -269,37 +289,76 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                                 .toList()
                             : const <CastMember>[]);
 
-                return CustomScrollView(
-                  slivers: [
-                    if (!isDesktop) _buildAppBar(context, movie),
-                    SliverToBoxAdapter(
-                      child: _buildBackgroundWithHero(
-                        context,
-                        movie,
-                        heroImage,
-                        accessToken,
-                        backgroundColor: detailBackgroundColor,
-                        isDesktop: isDesktop,
-                      ),
-                    ),
-                    if (!isDesktop &&
-                        movie.overview != null &&
-                        movie.overview!.isNotEmpty)
-                      SliverToBoxAdapter(child: _buildOverviewSection(movie)),
-                    if (cast.isNotEmpty)
+                if (isDesktop) {
+                  return CustomScrollView(
+                    slivers: [
                       SliverToBoxAdapter(
-                        child: _buildCastSection(
+                        child: _buildBackgroundWithHero(
                           context,
-                          theme,
-                          cast,
-                          serverBaseUrl,
+                          movie,
+                          heroImage,
                           accessToken,
+                          backgroundColor: detailBackgroundColor,
+                          isDesktop: true,
                         ),
                       ),
-                    SliverToBoxAdapter(
-                      child: _buildFileInfoSection(context, theme, movie),
+                      if (cast.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _buildCastSection(
+                            context,
+                            theme,
+                            cast,
+                            serverBaseUrl,
+                            accessToken,
+                          ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: _buildFileInfoSection(context, theme, movie),
+                      ),
+                      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    ],
+                  );
+                }
+
+                return Stack(
+                  children: [
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _handleMainScroll,
+                      child: CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: _buildBackgroundWithHero(
+                              context,
+                              movie,
+                              heroImage,
+                              accessToken,
+                              backgroundColor: detailBackgroundColor,
+                              isDesktop: false,
+                            ),
+                          ),
+                          if (movie.overview != null &&
+                              movie.overview!.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _buildOverviewSection(movie),
+                            ),
+                          if (cast.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _buildCastSection(
+                                context,
+                                theme,
+                                cast,
+                                serverBaseUrl,
+                                accessToken,
+                              ),
+                            ),
+                          SliverToBoxAdapter(
+                            child: _buildFileInfoSection(context, theme, movie),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                        ],
+                      ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    _buildMobileAppBar(context, movie, solid: _showSolidAppBar),
                   ],
                 );
               },
@@ -348,6 +407,26 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           Container(height: imageHeight, color: Colors.grey[300]),
 
         // 渐变蒙版
+        if (!isDesktop)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).padding.top + 96,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.45),
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
         Positioned(
           left: 0,
           right: 0,
@@ -627,8 +706,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
   }
 
-  /// 构建顶部导航栏
-  Widget _buildAppBar(BuildContext context, Movie movie) {
+  Widget _buildMobileAppBar(
+    BuildContext context,
+    Movie movie, {
+    required bool solid,
+  }) {
     final colors = context.appColors;
     final hasFile = movie.filePath != null && movie.filePath!.isNotEmpty;
     final backgroundColor = _detailBackgroundColor(
@@ -636,43 +718,87 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
     );
 
-    return SliverAppBar(
-      backgroundColor: backgroundColor,
-      elevation: 0,
-      pinned: true,
-      toolbarHeight: 44,
-      centerTitle: true,
-      automaticallyImplyLeading: false,
-      leadingWidth: kAppBackButtonWidth,
-      leading: AppBackButton(
-        onPressed: () => context.pop(),
-        color: colors.textPrimary,
-      ),
-      title: Text(movie.title),
-      actions: [
-        if (hasFile)
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed: () => _downloadMovie(context, movie),
-            child: Icon(
-              shadcn.LucideIcons.circleArrowDown,
-              color: colors.textPrimary,
-              size: 22,
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        color: solid ? backgroundColor : Colors.transparent,
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 44,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (solid)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 92),
+                      child: Text(
+                        movie.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: kAppBackButtonWidth,
+                    child: AppBackButton(
+                      onPressed: () => context.pop(),
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasFile)
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          onPressed: () => _downloadMovie(context, movie),
+                          child: Icon(
+                            shadcn.LucideIcons.circleArrowDown,
+                            color: colors.textPrimary,
+                            size: 22,
+                          ),
+                        ),
+                      Builder(
+                        builder:
+                            (menuContext) => CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              onPressed:
+                                  () => _showMobileActionsMenu(
+                                    menuContext,
+                                    movie,
+                                  ),
+                              child: Icon(
+                                CupertinoIcons.ellipsis,
+                                color: colors.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-        Builder(
-          builder:
-              (menuContext) => CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                onPressed: () => _showMobileActionsMenu(menuContext, movie),
-                child: Icon(
-                  CupertinoIcons.ellipsis,
-                  color: colors.textPrimary,
-                  size: 22,
-                ),
-              ),
         ),
-      ],
+      ),
     );
   }
 

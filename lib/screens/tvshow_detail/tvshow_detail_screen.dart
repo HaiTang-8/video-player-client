@@ -43,6 +43,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _hasAutoScrolled = false;
   int? _lastAutoScrolledSeasonId;
   int? _tmdbId;
+  bool _showSolidAppBar = false;
   Color? _mobileBackgroundColor;
   String? _mobileBackgroundImageUrl;
 
@@ -162,6 +163,25 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     _castScrollController.dispose();
     _episodesScrollController.dispose();
     super.dispose();
+  }
+
+  bool _handleMainScroll(ScrollNotification notification) {
+    if (notification.depth != 0 || notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+
+    final shouldShowSolidAppBar =
+        notification.metrics.maxScrollExtent > 0 &&
+        notification.metrics.pixels >=
+            notification.metrics.maxScrollExtent - 16;
+    if (shouldShowSolidAppBar == _showSolidAppBar) {
+      return false;
+    }
+
+    setState(() {
+      _showSolidAppBar = shouldShowSolidAppBar;
+    });
+    return false;
   }
 
   Color _detailBackgroundColor(
@@ -428,97 +448,204 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   imageUrl: heroImage.imageUrl,
                 );
 
-                return CustomScrollView(
-                  slivers: [
-                    if (!isDesktop)
-                      _buildAppBar(context, tvShow, selectedSeason),
-                    SliverToBoxAdapter(
-                      child: _buildBackgroundWithHero(
-                        context,
-                        tvShow,
-                        selectedSeason,
-                        heroImage,
-                        accessToken,
-                        backgroundColor: detailBackgroundColor,
-                        isDesktop: isDesktop,
-                      ),
-                    ),
-                    if (tvShow.seasons != null && tvShow.seasons!.isNotEmpty)
+                if (isDesktop) {
+                  return CustomScrollView(
+                    slivers: [
                       SliverToBoxAdapter(
-                        child: _buildEpisodeSelector(context, theme, tvShow),
-                      ),
-                    if (selectedSeason != null &&
-                        selectedSeason.episodes != null &&
-                        selectedSeason.episodes!.isNotEmpty)
-                      SliverToBoxAdapter(
-                        child: _EpisodesCarouselDirect(
-                          episodes: selectedSeason.episodes!,
-                          tvShowId: widget.tvShowId,
-                          seasonId: selectedSeason.id,
-                          tvShowName: tvShow.name,
-                          serverBaseUrl: serverBaseUrl,
-                          fallbackImageUrl: episodeFallbackImage,
-                          scrollController: _episodesScrollController,
-                          tmdbId: _tmdbId,
-                          onEpisodesLoaded: (episodes) {
-                            _autoScrollToWatchedEpisode(
-                              episodes: episodes,
-                              seasonId: selectedSeason.id,
-                            );
-                          },
-                        ),
-                      )
-                    else if (_selectedSeasonId != null)
-                      SliverToBoxAdapter(
-                        child: _EpisodesCarousel(
-                          tvShowId: widget.tvShowId,
-                          seasonId: _selectedSeasonId!,
-                          tvShowName: tvShow.name,
-                          fallbackImageUrl: episodeFallbackImage,
-                          scrollController: _episodesScrollController,
-                          tmdbId: _tmdbId,
-                          onEpisodesLoaded: (episodes) {
-                            _autoScrollToWatchedEpisode(
-                              episodes: episodes,
-                              seasonId: _selectedSeasonId!,
-                            );
-                          },
-                        ),
-                      ),
-                    if (!isDesktop &&
-                        tvShow.overview != null &&
-                        tvShow.overview!.isNotEmpty)
-                      SliverToBoxAdapter(child: _buildOverviewSection(tvShow)),
-                    if (selectedSeason != null &&
-                        _hasSeasonRelatedCast(selectedSeason))
-                      SliverToBoxAdapter(
-                        child: _buildSeasonCreditsSection(
+                        child: _buildBackgroundWithHero(
                           context,
-                          theme,
+                          tvShow,
                           selectedSeason,
-                          serverBaseUrl,
+                          heroImage,
                           accessToken,
+                          backgroundColor: detailBackgroundColor,
+                          isDesktop: true,
                         ),
-                      )
-                    else if (cast.isNotEmpty)
+                      ),
+                      if (tvShow.seasons != null && tvShow.seasons!.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _buildEpisodeSelector(context, theme, tvShow),
+                        ),
+                      if (selectedSeason != null &&
+                          selectedSeason.episodes != null &&
+                          selectedSeason.episodes!.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _EpisodesCarouselDirect(
+                            episodes: selectedSeason.episodes!,
+                            tvShowId: widget.tvShowId,
+                            seasonId: selectedSeason.id,
+                            tvShowName: tvShow.name,
+                            serverBaseUrl: serverBaseUrl,
+                            fallbackImageUrl: episodeFallbackImage,
+                            scrollController: _episodesScrollController,
+                            tmdbId: _tmdbId,
+                            onEpisodesLoaded: (episodes) {
+                              _autoScrollToWatchedEpisode(
+                                episodes: episodes,
+                                seasonId: selectedSeason.id,
+                              );
+                            },
+                          ),
+                        )
+                      else if (_selectedSeasonId != null)
+                        SliverToBoxAdapter(
+                          child: _EpisodesCarousel(
+                            tvShowId: widget.tvShowId,
+                            seasonId: _selectedSeasonId!,
+                            tvShowName: tvShow.name,
+                            fallbackImageUrl: episodeFallbackImage,
+                            scrollController: _episodesScrollController,
+                            tmdbId: _tmdbId,
+                            onEpisodesLoaded: (episodes) {
+                              _autoScrollToWatchedEpisode(
+                                episodes: episodes,
+                                seasonId: _selectedSeasonId!,
+                              );
+                            },
+                          ),
+                        ),
+                      if (selectedSeason != null &&
+                          _hasSeasonRelatedCast(selectedSeason))
+                        SliverToBoxAdapter(
+                          child: _buildSeasonCreditsSection(
+                            context,
+                            theme,
+                            selectedSeason,
+                            serverBaseUrl,
+                            accessToken,
+                          ),
+                        )
+                      else if (cast.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: _buildCastSection(
+                            context,
+                            theme,
+                            cast,
+                            serverBaseUrl,
+                            accessToken,
+                          ),
+                        ),
                       SliverToBoxAdapter(
-                        child: _buildCastSection(
+                        child: _buildFileInfoSection(
                           context,
                           theme,
-                          cast,
-                          serverBaseUrl,
-                          accessToken,
+                          tvShow,
+                          selectedSeason,
                         ),
                       ),
-                    SliverToBoxAdapter(
-                      child: _buildFileInfoSection(
-                        context,
-                        theme,
-                        tvShow,
-                        selectedSeason,
+                      const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    ],
+                  );
+                }
+
+                return Stack(
+                  children: [
+                    NotificationListener<ScrollNotification>(
+                      onNotification: _handleMainScroll,
+                      child: CustomScrollView(
+                        slivers: [
+                          SliverToBoxAdapter(
+                            child: _buildBackgroundWithHero(
+                              context,
+                              tvShow,
+                              selectedSeason,
+                              heroImage,
+                              accessToken,
+                              backgroundColor: detailBackgroundColor,
+                              isDesktop: false,
+                            ),
+                          ),
+                          if (tvShow.seasons != null &&
+                              tvShow.seasons!.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _buildEpisodeSelector(
+                                context,
+                                theme,
+                                tvShow,
+                              ),
+                            ),
+                          if (selectedSeason != null &&
+                              selectedSeason.episodes != null &&
+                              selectedSeason.episodes!.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _EpisodesCarouselDirect(
+                                episodes: selectedSeason.episodes!,
+                                tvShowId: widget.tvShowId,
+                                seasonId: selectedSeason.id,
+                                tvShowName: tvShow.name,
+                                serverBaseUrl: serverBaseUrl,
+                                fallbackImageUrl: episodeFallbackImage,
+                                scrollController: _episodesScrollController,
+                                tmdbId: _tmdbId,
+                                onEpisodesLoaded: (episodes) {
+                                  _autoScrollToWatchedEpisode(
+                                    episodes: episodes,
+                                    seasonId: selectedSeason.id,
+                                  );
+                                },
+                              ),
+                            )
+                          else if (_selectedSeasonId != null)
+                            SliverToBoxAdapter(
+                              child: _EpisodesCarousel(
+                                tvShowId: widget.tvShowId,
+                                seasonId: _selectedSeasonId!,
+                                tvShowName: tvShow.name,
+                                fallbackImageUrl: episodeFallbackImage,
+                                scrollController: _episodesScrollController,
+                                tmdbId: _tmdbId,
+                                onEpisodesLoaded: (episodes) {
+                                  _autoScrollToWatchedEpisode(
+                                    episodes: episodes,
+                                    seasonId: _selectedSeasonId!,
+                                  );
+                                },
+                              ),
+                            ),
+                          if (tvShow.overview != null &&
+                              tvShow.overview!.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _buildOverviewSection(tvShow),
+                            ),
+                          if (selectedSeason != null &&
+                              _hasSeasonRelatedCast(selectedSeason))
+                            SliverToBoxAdapter(
+                              child: _buildSeasonCreditsSection(
+                                context,
+                                theme,
+                                selectedSeason,
+                                serverBaseUrl,
+                                accessToken,
+                              ),
+                            )
+                          else if (cast.isNotEmpty)
+                            SliverToBoxAdapter(
+                              child: _buildCastSection(
+                                context,
+                                theme,
+                                cast,
+                                serverBaseUrl,
+                                accessToken,
+                              ),
+                            ),
+                          SliverToBoxAdapter(
+                            child: _buildFileInfoSection(
+                              context,
+                              theme,
+                              tvShow,
+                              selectedSeason,
+                            ),
+                          ),
+                          const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                        ],
                       ),
                     ),
-                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                    _buildMobileAppBar(
+                      context,
+                      tvShow,
+                      selectedSeason,
+                      solid: _showSolidAppBar,
+                    ),
                   ],
                 );
               },
@@ -568,6 +695,26 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           Container(height: imageHeight, color: Colors.grey[300]),
 
         // 渐变蒙版
+        if (!isDesktop)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: MediaQuery.of(context).padding.top + 96,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.45),
+                    Colors.black.withValues(alpha: 0.18),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
+          ),
         Positioned(
           left: 0,
           right: 0,
@@ -790,12 +937,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  /// 构建顶部导航栏
-  Widget _buildAppBar(
+  Widget _buildMobileAppBar(
     BuildContext context,
     TvShow tvShow,
-    Season? selectedSeason,
-  ) {
+    Season? selectedSeason, {
+    required bool solid,
+  }) {
     final colors = context.appColors;
     final hasDownloadableEpisodes =
         selectedSeason != null &&
@@ -806,49 +953,93 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
     );
 
-    return SliverAppBar(
-      backgroundColor: backgroundColor,
-      elevation: 0,
-      pinned: true,
-      toolbarHeight: 44,
-      centerTitle: true,
-      automaticallyImplyLeading: false,
-      leadingWidth: kAppBackButtonWidth,
-      leading: AppBackButton(
-        onPressed: () => context.pop(),
-        color: colors.textPrimary,
-      ),
-      title: Text(tvShow.name),
-      actions: [
-        if (hasDownloadableEpisodes)
-          CupertinoButton(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            onPressed:
-                () => _navigateToDownload(context, tvShow, selectedSeason),
-            child: Icon(
-              shadcn.LucideIcons.circleArrowDown,
-              color: colors.textPrimary,
-              size: 22,
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        color: solid ? backgroundColor : Colors.transparent,
+        child: SafeArea(
+          bottom: false,
+          child: SizedBox(
+            height: 44,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (solid)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 92),
+                      child: Text(
+                        tvShow.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: colors.textPrimary,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: SizedBox(
+                    width: kAppBackButtonWidth,
+                    child: AppBackButton(
+                      onPressed: () => context.pop(),
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (hasDownloadableEpisodes)
+                        CupertinoButton(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          onPressed:
+                              () => _navigateToDownload(
+                                context,
+                                tvShow,
+                                selectedSeason,
+                              ),
+                          child: Icon(
+                            shadcn.LucideIcons.circleArrowDown,
+                            color: colors.textPrimary,
+                            size: 22,
+                          ),
+                        ),
+                      Builder(
+                        builder:
+                            (menuContext) => CupertinoButton(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              onPressed:
+                                  () => _showMobileActionsMenu(
+                                    menuContext,
+                                    tvShow,
+                                    selectedSeason,
+                                  ),
+                              child: Icon(
+                                CupertinoIcons.ellipsis,
+                                color: colors.textPrimary,
+                                size: 22,
+                              ),
+                            ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
-        Builder(
-          builder:
-              (menuContext) => CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                onPressed:
-                    () => _showMobileActionsMenu(
-                      menuContext,
-                      tvShow,
-                      selectedSeason,
-                    ),
-                child: Icon(
-                  CupertinoIcons.ellipsis,
-                  color: colors.textPrimary,
-                  size: 22,
-                ),
-              ),
         ),
-      ],
+      ),
     );
   }
 
