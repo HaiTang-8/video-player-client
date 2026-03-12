@@ -52,16 +52,17 @@ class _OverviewPreviewTextState extends State<OverviewPreviewText> {
           return Text(widget.overview, style: widget.style);
         }
 
-        final linkStyle =
-            widget.linkStyle ?? widget.style.copyWith(color: Colors.blue);
+        final linkStyle = widget.linkStyle ?? widget.style;
         final lineHeight = basePainter.preferredLineHeight;
         final totalHeight = lineHeight * widget.maxLines;
+        final overlayColor =
+            Scaffold.maybeOf(context)?.widget.backgroundColor ??
+            Theme.of(context).scaffoldBackgroundColor;
 
         return SizedBox(
           height: totalHeight,
           child: Stack(
             children: [
-              // 文本内容
               Positioned.fill(
                 child: Text(
                   widget.overview,
@@ -70,7 +71,6 @@ class _OverviewPreviewTextState extends State<OverviewPreviewText> {
                   overflow: TextOverflow.clip,
                 ),
               ),
-              // 右下角渐变遮罩 + "... 全部>"
               Positioned(
                 right: 0,
                 bottom: 0,
@@ -80,9 +80,9 @@ class _OverviewPreviewTextState extends State<OverviewPreviewText> {
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.white.withValues(alpha: 0),
-                          Colors.white,
-                          Colors.white,
+                          overlayColor.withValues(alpha: 0),
+                          overlayColor,
+                          overlayColor,
                         ],
                         stops: const [0.0, 0.3, 1.0],
                       ),

@@ -1002,7 +1002,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   ) {
     final colors = context.appColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.only(top: 24, bottom: 12),
       child: ScrollableRowWithArrows(
         controller: _castScrollController,
         itemWidth: 80,
@@ -1270,7 +1270,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Divider(
             color: colors.textPrimary.withValues(alpha: 0.1),
-            height: 48,
+            height: 24,
           ),
         ),
 

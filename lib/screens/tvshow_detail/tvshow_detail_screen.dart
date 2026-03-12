@@ -38,7 +38,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   int? _selectedSeasonId;
   int _selectedSeasonIndex = 0;
   final _castScrollController = ScrollController();
-  final _crewScrollController = ScrollController();
   final _episodesScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
   bool _hasAutoScrolled = false;
@@ -161,7 +160,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   @override
   void dispose() {
     _castScrollController.dispose();
-    _crewScrollController.dispose();
     _episodesScrollController.dispose();
     super.dispose();
   }
@@ -178,6 +176,39 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return fallbackColor;
     }
     return _mobileBackgroundColor ?? fallbackColor;
+  }
+
+  List<CrewMember> _seasonDirectors(Season? season) {
+    final crew = season?.crewDetail;
+    if (crew == null || crew.isEmpty) {
+      return const <CrewMember>[];
+    }
+
+    return crew
+        .where((member) => member.name.trim().isNotEmpty && _isDirector(member))
+        .toList();
+  }
+
+  bool _hasSeasonRelatedCast(Season? season) {
+    if (_seasonDirectors(season).isNotEmpty) {
+      return true;
+    }
+
+    return season?.castDetail?.any((member) => member.name.trim().isNotEmpty) ??
+        false;
+  }
+
+  bool _isDirector(CrewMember member) {
+    final job = member.job?.trim().toLowerCase();
+    if (job == 'director' || job == '导演') {
+      return true;
+    }
+    if (job != null && job.isNotEmpty) {
+      return false;
+    }
+
+    final department = member.department?.trim().toLowerCase();
+    return department == 'directing' || department == '导演';
   }
 
   void _resolveMobileBackgroundColor(
@@ -458,10 +489,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                         tvShow.overview != null &&
                         tvShow.overview!.isNotEmpty)
                       SliverToBoxAdapter(child: _buildOverviewSection(tvShow)),
-                    if ((selectedSeason?.castDetail != null &&
-                            selectedSeason!.castDetail!.isNotEmpty) ||
-                        (selectedSeason?.crewDetail != null &&
-                            selectedSeason!.crewDetail!.isNotEmpty))
+                    if (selectedSeason != null &&
+                        _hasSeasonRelatedCast(selectedSeason))
                       SliverToBoxAdapter(
                         child: _buildSeasonCreditsSection(
                           context,
@@ -1257,7 +1286,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }) {
     final colors = context.appColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.only(top: 24, bottom: 12),
       child: ScrollableRowWithArrows(
         controller: _castScrollController,
         itemWidth: 80,
@@ -1298,51 +1327,33 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     String? serverBaseUrl,
     String? accessToken,
   ) {
-    final cast = season.castDetail ?? const <CastMember>[];
-    final crew = season.crewDetail ?? const <CrewMember>[];
+    final directors = _seasonDirectors(season);
+    final cast =
+        (season.castDetail ?? const <CastMember>[])
+            .where((member) => member.name.trim().isNotEmpty)
+            .toList();
+    final items = <Widget>[
+      ...directors.map(
+        (member) => _buildCrewCard(member, serverBaseUrl, accessToken),
+      ),
+      ...cast.map(
+        (member) => _buildCastCard(member, serverBaseUrl, accessToken),
+      ),
+    ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (crew.isNotEmpty)
-          _buildCrewSection(
-            context,
-            theme,
-            crew,
-            serverBaseUrl,
-            accessToken,
-            title: '${season.displayName} 职员',
-          ),
-        if (cast.isNotEmpty)
-          _buildCastSection(
-            context,
-            theme,
-            cast,
-            serverBaseUrl,
-            accessToken,
-            title: '${season.displayName} 演员',
-          ),
-      ],
-    );
-  }
+    if (items.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-  Widget _buildCrewSection(
-    BuildContext context,
-    ThemeData theme,
-    List<CrewMember> crew,
-    String? serverBaseUrl,
-    String? accessToken, {
-    String title = '职员',
-  }) {
     final colors = context.appColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.only(top: 24, bottom: 12),
       child: ScrollableRowWithArrows(
-        controller: _crewScrollController,
+        controller: _castScrollController,
         itemWidth: 80,
         itemSpacing: 8,
         title: Text(
-          title,
+          '相关演员',
           style: TextStyle(
             color: colors.textPrimary,
             fontSize: 18,
@@ -1352,17 +1363,17 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         child: SizedBox(
           height: 120,
           child: ListView.separated(
-            controller: _crewScrollController,
+            controller: _castScrollController,
             physics:
                 ScrollableRowWithArrows.disableManualScroll
                     ? const NeverScrollableScrollPhysics()
                     : null,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             scrollDirection: Axis.horizontal,
-            itemCount: crew.length,
+            itemCount: items.length,
             separatorBuilder: (_, _) => const SizedBox(width: 8),
             itemBuilder: (context, index) {
-              return _buildCrewCard(crew[index], serverBaseUrl, accessToken);
+              return items[index];
             },
           ),
         ),
@@ -1427,15 +1438,25 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 textAlign: TextAlign.center,
               ),
               if (role != null && role.isNotEmpty)
-                Text(
-                  role,
-                  style: TextStyle(
-                    color: colors.textPrimary.withValues(alpha: 0.5),
-                    fontSize: 10,
+                _buildSubtitleSlot(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    decoration: BoxDecoration(
+                      color: colors.textPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: colors.textPrimary.withValues(alpha: 0.14),
+                      ),
+                    ),
+                    child: Text(
+                      '导演',
+                      style: TextStyle(
+                        color: colors.textPrimary.withValues(alpha: 0.72),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                 ),
             ],
           ),
@@ -1501,21 +1522,27 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
               // 角色信息（TMDB credits 可提供 character；其它来源可能为空）
               if (role != null && role.isNotEmpty)
-                Text(
-                  '饰 $role',
-                  style: TextStyle(
-                    color: colors.textPrimary.withValues(alpha: 0.5),
-                    fontSize: 10,
+                _buildSubtitleSlot(
+                  child: Text(
+                    '饰 $role',
+                    style: TextStyle(
+                      color: colors.textPrimary.withValues(alpha: 0.5),
+                      fontSize: 10,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
                 ),
             ],
           ),
         );
       },
     );
+  }
+
+  Widget _buildSubtitleSlot({required Widget child}) {
+    return SizedBox(height: 18, child: Center(child: child));
   }
 
   Future<void> _showImageSelector(
@@ -1737,7 +1764,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Divider(
             color: colors.textPrimary.withValues(alpha: 0.1),
-            height: 48,
+            height: 24,
           ),
         ),
 
