@@ -511,7 +511,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                         ),
                       ),
                     SliverToBoxAdapter(
-                      child: _buildFileInfoSection(context, theme, tvShow),
+                      child: _buildFileInfoSection(
+                        context,
+                        theme,
+                        tvShow,
+                        selectedSeason,
+                      ),
                     ),
                     const SliverToBoxAdapter(child: SizedBox(height: 32)),
                   ],
@@ -1754,8 +1759,22 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     BuildContext context,
     ThemeData theme,
     TvShow tvShow,
+    Season? selectedSeason,
   ) {
     final colors = context.appColors;
+    final sourceGroups =
+        selectedSeason == null
+            ? null
+            : ref
+                .watch(
+                  seasonSourceGroupsProvider((
+                    tvShowId: widget.tvShowId,
+                    seasonId: selectedSeason.id,
+                  )),
+                )
+                .maybeWhen(data: (groups) => groups, orElse: () => null);
+    final selectedFolder = _resolveSelectedSourceFolder(tvShow, sourceGroups);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1813,18 +1832,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     ),
                   ),
                 ),
-              if (tvShow.sourceFolders != null &&
-                  tvShow.sourceFolders!.isNotEmpty)
-                ...tvShow.sourceFolders!.map(
-                  (folder) => Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '路径: $folder',
-                      style: TextStyle(
-                        color: colors.textPrimary.withValues(alpha: 0.3),
-                        fontSize: 11,
-                        fontFamily: 'monospace',
-                      ),
+              if (selectedFolder != null && selectedFolder.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '路径: $selectedFolder',
+                    style: TextStyle(
+                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      fontSize: 11,
+                      fontFamily: 'monospace',
                     ),
                   ),
                 ),
@@ -1833,6 +1849,35 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
       ],
     );
+  }
+
+  String? _resolveSelectedSourceFolder(
+    TvShow tvShow,
+    List<SourceGroup>? sourceGroups,
+  ) {
+    if (sourceGroups != null && sourceGroups.isNotEmpty) {
+      for (final group in sourceGroups) {
+        if (group.isPrimary && group.folderPath.isNotEmpty) {
+          return group.folderPath;
+        }
+      }
+      for (final group in sourceGroups) {
+        if (group.folderPath.isNotEmpty) {
+          return group.folderPath;
+        }
+      }
+    }
+
+    final sourceFolders = tvShow.sourceFolders;
+    if (sourceFolders == null || sourceFolders.isEmpty) {
+      return null;
+    }
+    for (final folder in sourceFolders) {
+      if (folder.isNotEmpty) {
+        return folder;
+      }
+    }
+    return null;
   }
 }
 
