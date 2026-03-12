@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/detail_background_palette.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -19,6 +21,8 @@ import '../../data/models/models.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
+
+typedef _TvHeroImage = ({double imageHeight, String? imageUrl});
 
 /// Emby 风格剧集详情页面
 class TvShowDetailScreen extends ConsumerStatefulWidget {
@@ -40,6 +44,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _hasAutoScrolled = false;
   int? _lastAutoScrolledSeasonId;
   int? _tmdbId;
+  Color? _mobileBackgroundColor;
+  String? _mobileBackgroundImageUrl;
 
   @override
   void initState() {
@@ -160,223 +166,67 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final tvShowAsync = ref.watch(tvShowDetailProvider(widget.tvShowId));
-    final theme = Theme.of(context);
-    final colors = context.appColors;
-    final screenSize = MediaQuery.of(context).size;
-    final isDesktop = WindowControls.isDesktop;
-    final serverBaseUrl = ref.watch(serverUrlProvider);
-    final accessToken = ref.watch(authProvider).tokens?.accessToken;
-
-    return Scaffold(
-      backgroundColor: colors.cardBackground,
-      appBar:
-          isDesktop
-              ? tvShowAsync.when(
-                loading:
-                    () => DesktopAppBar(
-                      title: const Text('加载中...'),
-                      onBack: () => context.pop(),
-                    ),
-                error:
-                    (error, stack) => DesktopAppBar(
-                      title: const Text('剧集详情'),
-                      onBack: () => context.pop(),
-                      actions: [
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed:
-                              () => ref.invalidate(
-                                tvShowDetailProvider(widget.tvShowId),
-                              ),
-                        ),
-                      ],
-                    ),
-                data:
-                    (tvShow) => DesktopAppBar(
-                      title: Text(tvShow?.name ?? '剧集详情'),
-                      onBack: () => context.pop(),
-                      actions: _buildDesktopActions(tvShow),
-                    ),
-              )
-              : null,
-      body: tvShowAsync.when(
-        loading: () => const DetailSkeletonLoader.tvShow(),
-        error:
-            (error, stack) => AppErrorWidget(
-              message: error.toString(),
-              onRetry:
-                  () => ref.invalidate(tvShowDetailProvider(widget.tvShowId)),
-            ),
-        data: (tvShow) {
-          if (tvShow == null) {
-            return const AppErrorWidget(message: '剧集不存在');
-          }
-          _tmdbId = int.tryParse(tvShow.tmdbId ?? '');
-
-          final cast =
-              (tvShow.castDetail != null && tvShow.castDetail!.isNotEmpty)
-                  ? tvShow.castDetail!
-                  : (tvShow.cast != null
-                      ? tvShow.cast!
-                          .where((e) => e.trim().isNotEmpty)
-                          .map((e) => CastMember(name: e.trim()))
-                          .toList()
-                      : const <CastMember>[]);
-
-          // 默认选中第一季
-          if (_selectedSeasonId == null &&
-              tvShow.seasons != null &&
-              tvShow.seasons!.isNotEmpty) {
-            _selectedSeasonId = tvShow.seasons!.first.id;
-            _selectedSeasonIndex = 0;
-            _loadSeasonWatchHistory(_selectedSeasonId!);
-          }
-
-          final selectedSeason =
-              tvShow.seasons != null &&
-                      _selectedSeasonIndex < tvShow.seasons!.length
-                  ? tvShow.seasons![_selectedSeasonIndex]
-                  : null;
-
-          final seasonBackdrop =
-              tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
-                  ? tvShow.backdrops![_selectedSeasonIndex %
-                      tvShow.backdrops!.length]
-                  : null;
-          final episodeFallbackImage =
-              seasonBackdrop ??
-              selectedSeason?.posterPath ??
-              tvShow.backdropPath ??
-              tvShow.posterPath;
-
-          return CustomScrollView(
-            slivers: [
-              // 顶部导航栏
-              if (!isDesktop) _buildAppBar(context, tvShow, selectedSeason),
-
-              // 背景图区域（含渐变蒙版和 Hero 内容）
-              SliverToBoxAdapter(
-                child: _buildBackgroundWithHero(
-                  context,
-                  tvShow,
-                  selectedSeason,
-                  screenSize,
-                  serverBaseUrl,
-                  accessToken,
-                  isDesktop: isDesktop,
-                ),
-              ),
-
-              // 剧集选择区
-              if (tvShow.seasons != null && tvShow.seasons!.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _buildEpisodeSelector(context, theme, tvShow),
-                ),
-
-              // 剧集卡片列表
-              if (selectedSeason != null &&
-                  selectedSeason.episodes != null &&
-                  selectedSeason.episodes!.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _EpisodesCarouselDirect(
-                    episodes: selectedSeason.episodes!,
-                    tvShowId: widget.tvShowId,
-                    seasonId: selectedSeason.id,
-                    tvShowName: tvShow.name,
-                    serverBaseUrl: serverBaseUrl,
-                    fallbackImageUrl: episodeFallbackImage,
-                    scrollController: _episodesScrollController,
-                    tmdbId: _tmdbId,
-                    onEpisodesLoaded: (episodes) {
-                      _autoScrollToWatchedEpisode(
-                        episodes: episodes,
-                        seasonId: selectedSeason.id,
-                      );
-                    },
-                  ),
-                )
-              else if (_selectedSeasonId != null)
-                SliverToBoxAdapter(
-                  child: _EpisodesCarousel(
-                    tvShowId: widget.tvShowId,
-                    seasonId: _selectedSeasonId!,
-                    tvShowName: tvShow.name,
-                    fallbackImageUrl: episodeFallbackImage,
-                    scrollController: _episodesScrollController,
-                    tmdbId: _tmdbId,
-                    onEpisodesLoaded: (episodes) {
-                      _autoScrollToWatchedEpisode(
-                        episodes: episodes,
-                        seasonId: _selectedSeasonId!,
-                      );
-                    },
-                  ),
-                ),
-
-              // 剧情简介
-              if (!isDesktop &&
-                  tvShow.overview != null &&
-                  tvShow.overview!.isNotEmpty)
-                SliverToBoxAdapter(child: _buildOverviewSection(tvShow)),
-
-              // 相关演员区
-              if ((selectedSeason?.castDetail != null &&
-                      selectedSeason!.castDetail!.isNotEmpty) ||
-                  (selectedSeason?.crewDetail != null &&
-                      selectedSeason!.crewDetail!.isNotEmpty))
-                SliverToBoxAdapter(
-                  child: _buildSeasonCreditsSection(
-                    context,
-                    theme,
-                    selectedSeason,
-                    serverBaseUrl,
-                    accessToken,
-                  ),
-                )
-              else if (cast.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _buildCastSection(
-                    context,
-                    theme,
-                    cast,
-                    serverBaseUrl,
-                    accessToken,
-                  ),
-                ),
-
-              // 文件信息区
-              SliverToBoxAdapter(
-                child: _buildFileInfoSection(context, theme, tvShow),
-              ),
-
-              // 底部间距
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            ],
-          );
-        },
-      ),
-    );
+  Color _detailBackgroundColor(
+    BuildContext context, {
+    required String? imageUrl,
+  }) {
+    final fallbackColor = context.appColors.cardBackground;
+    if (WindowControls.isDesktop ||
+        imageUrl == null ||
+        imageUrl.isEmpty ||
+        _mobileBackgroundImageUrl != imageUrl) {
+      return fallbackColor;
+    }
+    return _mobileBackgroundColor ?? fallbackColor;
   }
 
-  /// 构建背景图（含渐变蒙版和 Hero 内容）
-  Widget _buildBackgroundWithHero(
-    BuildContext context,
+  void _resolveMobileBackgroundColor(
+    String? imageUrl,
+    String? accessToken, {
+    required bool isDesktop,
+  }) {
+    if (isDesktop || imageUrl == null || imageUrl.isEmpty) {
+      return;
+    }
+    if (_mobileBackgroundImageUrl == imageUrl) {
+      return;
+    }
+
+    _mobileBackgroundImageUrl = imageUrl;
+    _mobileBackgroundColor = DetailBackgroundPalette.getCached(imageUrl);
+    final headers =
+        accessToken != null
+            ? <String, String>{'Authorization': 'Bearer $accessToken'}
+            : null;
+
+    DetailBackgroundPalette.resolve(
+      imageUrl,
+      provider: CachedNetworkImageProvider(imageUrl, headers: headers),
+      fallbackColor: AppColors.dark.cardBackground,
+    ).then((color) {
+      if (!mounted || _mobileBackgroundImageUrl != imageUrl) {
+        return;
+      }
+      if (_mobileBackgroundColor == color) {
+        return;
+      }
+      setState(() {
+        _mobileBackgroundColor = color;
+      });
+    });
+  }
+
+  _TvHeroImage _resolveHeroImage(
     TvShow tvShow,
     Season? selectedSeason,
     Size screenSize,
-    String? serverBaseUrl,
-    String? accessToken, {
+    String? serverBaseUrl, {
     required bool isDesktop,
   }) {
     String? imagePathRaw;
     bool usePoster = false;
     if (isDesktop) {
-      // 优先使用 backdropPath（用户可能手动选择过）
       imagePathRaw = tvShow.backdropPath;
-      // 如果 backdropPath 为空，再从 backdrops 列表中取
       if ((imagePathRaw == null || imagePathRaw.isEmpty) &&
           tvShow.backdrops != null &&
           tvShow.backdrops!.isNotEmpty) {
@@ -396,7 +246,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       }
     }
 
-    String? imagePath = imagePathRaw;
+    var imagePath = imagePathRaw;
     if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
       final uri = Uri.tryParse(imagePathRaw);
       final segments = uri?.pathSegments ?? const <String>[];
@@ -422,11 +272,242 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           return idealHeight.clamp(minHeight, maxHeight);
         })().ceilToDouble();
 
-    final gradientHeight = (imageHeight * 0.5).ceilToDouble();
     final imageUrl =
         imagePath != null && imagePath.isNotEmpty
             ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
             : null;
+
+    return (imageHeight: imageHeight, imageUrl: imageUrl);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tvShowAsync = ref.watch(tvShowDetailProvider(widget.tvShowId));
+    final baseTheme = Theme.of(context);
+    final screenSize = MediaQuery.of(context).size;
+    final isDesktop = WindowControls.isDesktop;
+    final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
+
+    return Theme(
+      data: isDesktop ? baseTheme : AppTheme.mobileDetailDarkTheme(baseTheme),
+      child: Builder(
+        builder: (context) {
+          final theme = Theme.of(context);
+
+          return Scaffold(
+            backgroundColor: _detailBackgroundColor(
+              context,
+              imageUrl: _mobileBackgroundImageUrl,
+            ),
+            appBar:
+                isDesktop
+                    ? tvShowAsync.when(
+                      loading:
+                          () => DesktopAppBar(
+                            title: const Text('加载中...'),
+                            onBack: () => context.pop(),
+                          ),
+                      error:
+                          (error, stack) => DesktopAppBar(
+                            title: const Text('剧集详情'),
+                            onBack: () => context.pop(),
+                            actions: [
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                onPressed:
+                                    () => ref.invalidate(
+                                      tvShowDetailProvider(widget.tvShowId),
+                                    ),
+                              ),
+                            ],
+                          ),
+                      data:
+                          (tvShow) => DesktopAppBar(
+                            title: Text(tvShow?.name ?? '剧集详情'),
+                            onBack: () => context.pop(),
+                            actions: _buildDesktopActions(tvShow),
+                          ),
+                    )
+                    : null,
+            body: tvShowAsync.when(
+              loading: () => const DetailSkeletonLoader.tvShow(),
+              error:
+                  (error, stack) => AppErrorWidget(
+                    message: error.toString(),
+                    onRetry:
+                        () => ref.invalidate(
+                          tvShowDetailProvider(widget.tvShowId),
+                        ),
+                  ),
+              data: (tvShow) {
+                if (tvShow == null) {
+                  return const AppErrorWidget(message: '剧集不存在');
+                }
+                _tmdbId = int.tryParse(tvShow.tmdbId ?? '');
+
+                final cast =
+                    (tvShow.castDetail != null && tvShow.castDetail!.isNotEmpty)
+                        ? tvShow.castDetail!
+                        : (tvShow.cast != null
+                            ? tvShow.cast!
+                                .where((e) => e.trim().isNotEmpty)
+                                .map((e) => CastMember(name: e.trim()))
+                                .toList()
+                            : const <CastMember>[]);
+
+                if (_selectedSeasonId == null &&
+                    tvShow.seasons != null &&
+                    tvShow.seasons!.isNotEmpty) {
+                  _selectedSeasonId = tvShow.seasons!.first.id;
+                  _selectedSeasonIndex = 0;
+                  _loadSeasonWatchHistory(_selectedSeasonId!);
+                }
+
+                final selectedSeason =
+                    tvShow.seasons != null &&
+                            _selectedSeasonIndex < tvShow.seasons!.length
+                        ? tvShow.seasons![_selectedSeasonIndex]
+                        : null;
+
+                final seasonBackdrop =
+                    tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
+                        ? tvShow.backdrops![_selectedSeasonIndex %
+                            tvShow.backdrops!.length]
+                        : null;
+                final episodeFallbackImage =
+                    seasonBackdrop ??
+                    selectedSeason?.posterPath ??
+                    tvShow.backdropPath ??
+                    tvShow.posterPath;
+                final heroImage = _resolveHeroImage(
+                  tvShow,
+                  selectedSeason,
+                  screenSize,
+                  serverBaseUrl,
+                  isDesktop: isDesktop,
+                );
+                _resolveMobileBackgroundColor(
+                  heroImage.imageUrl,
+                  accessToken,
+                  isDesktop: isDesktop,
+                );
+                final detailBackgroundColor = _detailBackgroundColor(
+                  context,
+                  imageUrl: heroImage.imageUrl,
+                );
+
+                return CustomScrollView(
+                  slivers: [
+                    if (!isDesktop)
+                      _buildAppBar(context, tvShow, selectedSeason),
+                    SliverToBoxAdapter(
+                      child: _buildBackgroundWithHero(
+                        context,
+                        tvShow,
+                        selectedSeason,
+                        heroImage,
+                        accessToken,
+                        backgroundColor: detailBackgroundColor,
+                        isDesktop: isDesktop,
+                      ),
+                    ),
+                    if (tvShow.seasons != null && tvShow.seasons!.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: _buildEpisodeSelector(context, theme, tvShow),
+                      ),
+                    if (selectedSeason != null &&
+                        selectedSeason.episodes != null &&
+                        selectedSeason.episodes!.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: _EpisodesCarouselDirect(
+                          episodes: selectedSeason.episodes!,
+                          tvShowId: widget.tvShowId,
+                          seasonId: selectedSeason.id,
+                          tvShowName: tvShow.name,
+                          serverBaseUrl: serverBaseUrl,
+                          fallbackImageUrl: episodeFallbackImage,
+                          scrollController: _episodesScrollController,
+                          tmdbId: _tmdbId,
+                          onEpisodesLoaded: (episodes) {
+                            _autoScrollToWatchedEpisode(
+                              episodes: episodes,
+                              seasonId: selectedSeason.id,
+                            );
+                          },
+                        ),
+                      )
+                    else if (_selectedSeasonId != null)
+                      SliverToBoxAdapter(
+                        child: _EpisodesCarousel(
+                          tvShowId: widget.tvShowId,
+                          seasonId: _selectedSeasonId!,
+                          tvShowName: tvShow.name,
+                          fallbackImageUrl: episodeFallbackImage,
+                          scrollController: _episodesScrollController,
+                          tmdbId: _tmdbId,
+                          onEpisodesLoaded: (episodes) {
+                            _autoScrollToWatchedEpisode(
+                              episodes: episodes,
+                              seasonId: _selectedSeasonId!,
+                            );
+                          },
+                        ),
+                      ),
+                    if (!isDesktop &&
+                        tvShow.overview != null &&
+                        tvShow.overview!.isNotEmpty)
+                      SliverToBoxAdapter(child: _buildOverviewSection(tvShow)),
+                    if ((selectedSeason?.castDetail != null &&
+                            selectedSeason!.castDetail!.isNotEmpty) ||
+                        (selectedSeason?.crewDetail != null &&
+                            selectedSeason!.crewDetail!.isNotEmpty))
+                      SliverToBoxAdapter(
+                        child: _buildSeasonCreditsSection(
+                          context,
+                          theme,
+                          selectedSeason,
+                          serverBaseUrl,
+                          accessToken,
+                        ),
+                      )
+                    else if (cast.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: _buildCastSection(
+                          context,
+                          theme,
+                          cast,
+                          serverBaseUrl,
+                          accessToken,
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: _buildFileInfoSection(context, theme, tvShow),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  ],
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 构建背景图（含渐变蒙版和 Hero 内容）
+  Widget _buildBackgroundWithHero(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+    _TvHeroImage heroImage,
+    String? accessToken, {
+    required Color backgroundColor,
+    required bool isDesktop,
+  }) {
+    final imageHeight = heroImage.imageHeight;
+    final gradientHeight = (imageHeight * 0.5).ceilToDouble();
+    final imageUrl = heroImage.imageUrl;
 
     return Stack(
       children: [
@@ -458,26 +539,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           right: 0,
           bottom: 0,
           height: gradientHeight,
-          child: Builder(
-            builder: (context) {
-              final bgColor = context.appColors.cardBackground;
-              return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      bgColor.withValues(alpha: 0.0),
-                      bgColor.withValues(alpha: 0.2),
-                      bgColor.withValues(alpha: 0.5),
-                      bgColor.withValues(alpha: 0.8),
-                      bgColor,
-                    ],
-                    stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
-                  ),
-                ),
-              );
-            },
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  backgroundColor.withValues(alpha: 0.0),
+                  backgroundColor.withValues(alpha: 0.2),
+                  backgroundColor.withValues(alpha: 0.5),
+                  backgroundColor.withValues(alpha: 0.8),
+                  backgroundColor,
+                ],
+                stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+              ),
+            ),
           ),
         ),
 
@@ -599,6 +675,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   Widget _buildFullWidthPlayButton(BuildContext context) {
+    final colors = context.appColors;
+    final buttonBackground = colors.textPrimary;
+    final buttonForeground = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
     final history = _watchHistory;
     String buttonText = '播放';
     if (history != null && history.mediaInfo?.episodeInfo != null) {
@@ -611,22 +693,22 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(8),
+        color: buttonBackground,
+        borderRadius: BorderRadius.circular(6),
         child: InkWell(
           onTap: () => _playFromHistory(context),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                Icon(Icons.play_arrow, color: buttonForeground, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   buttonText,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: buttonForeground,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -685,9 +767,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
+    final backgroundColor = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
 
     return SliverAppBar(
-      backgroundColor: colors.cardBackground,
+      backgroundColor: backgroundColor,
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
@@ -918,6 +1004,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
+    final colors = context.appColors;
+    final buttonBackground = colors.textPrimary;
+    final buttonForeground = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
     final history = _watchHistory;
     String buttonText = '播放';
     if (history != null && history.mediaInfo?.episodeInfo != null) {
@@ -928,11 +1020,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       buttonText = '第${ep.episodeNumber}集 $m:$s';
     }
     return Material(
-      color: Colors.black,
-      borderRadius: BorderRadius.circular(8),
+      color: buttonBackground,
+      borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () => _playFromHistory(context),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: WindowControls.isDesktop ? 48 : 32,
@@ -941,12 +1033,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+              Icon(Icons.play_arrow, color: buttonForeground, size: 24),
               const SizedBox(width: 8),
               Text(
                 buttonText,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: buttonForeground,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1080,6 +1172,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     ThemeData theme,
     TvShow tvShow,
   ) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
@@ -1126,7 +1219,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   decoration: BoxDecoration(
                                     color:
                                         isSelected
-                                            ? Colors.black
+                                            ? colors.textPrimary
                                             : Colors.transparent,
                                     borderRadius: BorderRadius.circular(1.5),
                                   ),

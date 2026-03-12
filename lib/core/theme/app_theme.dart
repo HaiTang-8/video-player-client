@@ -188,11 +188,49 @@ class AppTheme {
     ),
   );
 
+  static ThemeData mobileDetailDarkTheme(ThemeData baseTheme) {
+    const colors = AppColors.dark;
+    final titleTextStyle =
+        baseTheme.appBarTheme.titleTextStyle ??
+        const TextStyle(fontSize: 16, fontWeight: FontWeight.w600);
+
+    return baseTheme.copyWith(
+      scaffoldBackgroundColor: colors.cardBackground,
+      colorScheme: baseTheme.colorScheme.copyWith(
+        brightness: Brightness.dark,
+        surface: colors.cardBackground,
+        onSurface: colors.textPrimary,
+        onSurfaceVariant: colors.textSecondary,
+      ),
+      appBarTheme: baseTheme.appBarTheme.copyWith(
+        backgroundColor: colors.cardBackground,
+        surfaceTintColor: Colors.transparent,
+        titleTextStyle: titleTextStyle.copyWith(color: colors.textPrimary),
+        iconTheme: IconThemeData(color: colors.textPrimary),
+        actionsIconTheme: IconThemeData(color: colors.textPrimary),
+      ),
+      dividerColor: colors.divider,
+      textTheme: baseTheme.textTheme.apply(
+        bodyColor: colors.textPrimary,
+        displayColor: colors.textPrimary,
+      ),
+      cupertinoOverrideTheme: (baseTheme.cupertinoOverrideTheme ??
+              const CupertinoThemeData())
+          .copyWith(
+            brightness: Brightness.dark,
+            scaffoldBackgroundColor: colors.cardBackground,
+            barBackgroundColor: colors.cardBackground,
+            primaryColor: colors.textPrimary,
+          ),
+      extensions: const [AppColors.dark],
+    );
+  }
+
   // shadcn_flutter 主题配置
   static final shadcn.Typography _shadcnTypography =
       const shadcn.Typography.geist().copyWith(
-    sans: () => const TextStyle(fontFamily: _fontFamily),
-  );
+        sans: () => const TextStyle(fontFamily: _fontFamily),
+      );
 
   static shadcn.ThemeData shadcnLightTheme = shadcn.ThemeData(
     colorScheme: shadcn.ColorSchemes.lightSlate,

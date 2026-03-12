@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/detail_background_palette.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
@@ -17,6 +19,8 @@ import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+
+typedef _MovieHeroImage = ({double imageHeight, String? imageUrl});
 
 /// 电影详情页面
 class MovieDetailScreen extends ConsumerStatefulWidget {
@@ -33,6 +37,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   final _castScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
   bool _historyLoaded = false;
+  Color? _mobileBackgroundColor;
+  String? _mobileBackgroundImageUrl;
 
   @override
   void initState() {
@@ -62,132 +68,60 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final movieAsync = ref.watch(movieDetailProvider(widget.movieId));
-    final theme = Theme.of(context);
-    final colors = context.appColors;
-    final screenSize = MediaQuery.of(context).size;
-    final isDesktop = WindowControls.isDesktop;
-    final serverBaseUrl = ref.watch(serverUrlProvider);
-    final accessToken = ref.watch(authProvider).tokens?.accessToken;
-
-    return Scaffold(
-      backgroundColor: colors.cardBackground,
-      appBar:
-          isDesktop
-              ? movieAsync.when(
-                loading:
-                    () => DesktopAppBar(
-                      title: const Text('加载中...'),
-                      onBack: () => context.pop(),
-                    ),
-                error:
-                    (error, stack) => DesktopAppBar(
-                      title: const Text('电影详情'),
-                      onBack: () => context.pop(),
-                      actions: [
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          onPressed:
-                              () => ref.invalidate(
-                                movieDetailProvider(widget.movieId),
-                              ),
-                        ),
-                      ],
-                    ),
-                data:
-                    (movie) => DesktopAppBar(
-                      title: Text(movie?.title ?? '电影详情'),
-                      onBack: () => context.pop(),
-                      actions: _buildDesktopActions(movie),
-                    ),
-              )
-              : null,
-      body: movieAsync.when(
-        loading: () => const DetailSkeletonLoader.movie(),
-        error:
-            (error, stack) => AppErrorWidget(
-              message: error.toString(),
-              onRetry:
-                  () => ref.invalidate(movieDetailProvider(widget.movieId)),
-            ),
-        data: (movie) {
-          if (movie == null) {
-            return const AppErrorWidget(message: '电影不存在');
-          }
-          _movie = movie;
-          if (!_historyLoaded) {
-            _historyLoaded = true;
-            _loadWatchHistory();
-          }
-
-          final cast =
-              (movie.castDetail != null && movie.castDetail!.isNotEmpty)
-                  ? movie.castDetail!
-                  : (movie.cast != null
-                      ? movie.cast!
-                          .where((e) => e.trim().isNotEmpty)
-                          .map((e) => CastMember(name: e.trim()))
-                          .toList()
-                      : const <CastMember>[]);
-
-          return CustomScrollView(
-            slivers: [
-              // 顶部导航栏
-              if (!isDesktop) _buildAppBar(context, movie),
-
-              // 背景图区域（含渐变蒙版和 Hero 内容）
-              SliverToBoxAdapter(
-                child: _buildBackgroundWithHero(
-                  context,
-                  movie,
-                  screenSize,
-                  serverBaseUrl,
-                  accessToken,
-                  isDesktop: isDesktop,
-                ),
-              ),
-
-              // 剧情简介（移动端）
-              if (!isDesktop &&
-                  movie.overview != null &&
-                  movie.overview!.isNotEmpty)
-                SliverToBoxAdapter(child: _buildOverviewSection(movie)),
-
-              // 相关演员区（优先使用 cast_detail 以展示头像/角色；没有则回退 cast 姓名列表）
-              if (cast.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: _buildCastSection(
-                    context,
-                    theme,
-                    cast,
-                    serverBaseUrl,
-                    accessToken,
-                  ),
-                ),
-
-              // 文件信息区
-              SliverToBoxAdapter(
-                child: _buildFileInfoSection(context, theme, movie),
-              ),
-
-              // 底部间距
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            ],
-          );
-        },
-      ),
-    );
+  Color _detailBackgroundColor(
+    BuildContext context, {
+    required String? imageUrl,
+  }) {
+    final fallbackColor = context.appColors.cardBackground;
+    if (WindowControls.isDesktop ||
+        imageUrl == null ||
+        imageUrl.isEmpty ||
+        _mobileBackgroundImageUrl != imageUrl) {
+      return fallbackColor;
+    }
+    return _mobileBackgroundColor ?? fallbackColor;
   }
 
-  /// 构建背景图（含渐变蒙版和 Hero 内容）
-  Widget _buildBackgroundWithHero(
-    BuildContext context,
+  void _resolveMobileBackgroundColor(
+    String? imageUrl,
+    String? accessToken, {
+    required bool isDesktop,
+  }) {
+    if (isDesktop || imageUrl == null || imageUrl.isEmpty) {
+      return;
+    }
+    if (_mobileBackgroundImageUrl == imageUrl) {
+      return;
+    }
+
+    _mobileBackgroundImageUrl = imageUrl;
+    _mobileBackgroundColor = DetailBackgroundPalette.getCached(imageUrl);
+    final headers =
+        accessToken != null
+            ? <String, String>{'Authorization': 'Bearer $accessToken'}
+            : null;
+
+    DetailBackgroundPalette.resolve(
+      imageUrl,
+      provider: CachedNetworkImageProvider(imageUrl, headers: headers),
+      fallbackColor: AppColors.dark.cardBackground,
+    ).then((color) {
+      if (!mounted || _mobileBackgroundImageUrl != imageUrl) {
+        return;
+      }
+      if (_mobileBackgroundColor == color) {
+        return;
+      }
+      setState(() {
+        _mobileBackgroundColor = color;
+      });
+    });
+  }
+
+  _MovieHeroImage _resolveHeroImage(
     Movie movie,
     Size screenSize,
-    String? serverBaseUrl,
-    String? accessToken, {
+    String? serverBaseUrl, {
     required bool isDesktop,
   }) {
     String? imagePathRaw;
@@ -207,7 +141,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       }
     }
 
-    String? imagePath = imagePathRaw;
+    var imagePath = imagePathRaw;
     if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
       final uri = Uri.tryParse(imagePathRaw);
       final segments = uri?.pathSegments ?? const <String>[];
@@ -233,11 +167,161 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           return idealHeight.clamp(minHeight, maxHeight);
         })().ceilToDouble();
 
-    final gradientHeight = (imageHeight * 0.5).ceilToDouble();
     final imageUrl =
         imagePath != null && imagePath.isNotEmpty
             ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
             : null;
+
+    return (imageHeight: imageHeight, imageUrl: imageUrl);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final movieAsync = ref.watch(movieDetailProvider(widget.movieId));
+    final baseTheme = Theme.of(context);
+    final screenSize = MediaQuery.of(context).size;
+    final isDesktop = WindowControls.isDesktop;
+    final serverBaseUrl = ref.watch(serverUrlProvider);
+    final accessToken = ref.watch(authProvider).tokens?.accessToken;
+
+    return Theme(
+      data: isDesktop ? baseTheme : AppTheme.mobileDetailDarkTheme(baseTheme),
+      child: Builder(
+        builder: (context) {
+          final theme = Theme.of(context);
+
+          return Scaffold(
+            backgroundColor: _detailBackgroundColor(
+              context,
+              imageUrl: _mobileBackgroundImageUrl,
+            ),
+            appBar:
+                isDesktop
+                    ? movieAsync.when(
+                      loading:
+                          () => DesktopAppBar(
+                            title: const Text('加载中...'),
+                            onBack: () => context.pop(),
+                          ),
+                      error:
+                          (error, stack) => DesktopAppBar(
+                            title: const Text('电影详情'),
+                            onBack: () => context.pop(),
+                            actions: [
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                onPressed:
+                                    () => ref.invalidate(
+                                      movieDetailProvider(widget.movieId),
+                                    ),
+                              ),
+                            ],
+                          ),
+                      data:
+                          (movie) => DesktopAppBar(
+                            title: Text(movie?.title ?? '电影详情'),
+                            onBack: () => context.pop(),
+                            actions: _buildDesktopActions(movie),
+                          ),
+                    )
+                    : null,
+            body: movieAsync.when(
+              loading: () => const DetailSkeletonLoader.movie(),
+              error:
+                  (error, stack) => AppErrorWidget(
+                    message: error.toString(),
+                    onRetry:
+                        () =>
+                            ref.invalidate(movieDetailProvider(widget.movieId)),
+                  ),
+              data: (movie) {
+                if (movie == null) {
+                  return const AppErrorWidget(message: '电影不存在');
+                }
+                _movie = movie;
+                final heroImage = _resolveHeroImage(
+                  movie,
+                  screenSize,
+                  serverBaseUrl,
+                  isDesktop: isDesktop,
+                );
+                _resolveMobileBackgroundColor(
+                  heroImage.imageUrl,
+                  accessToken,
+                  isDesktop: isDesktop,
+                );
+                final detailBackgroundColor = _detailBackgroundColor(
+                  context,
+                  imageUrl: heroImage.imageUrl,
+                );
+                if (!_historyLoaded) {
+                  _historyLoaded = true;
+                  _loadWatchHistory();
+                }
+
+                final cast =
+                    (movie.castDetail != null && movie.castDetail!.isNotEmpty)
+                        ? movie.castDetail!
+                        : (movie.cast != null
+                            ? movie.cast!
+                                .where((e) => e.trim().isNotEmpty)
+                                .map((e) => CastMember(name: e.trim()))
+                                .toList()
+                            : const <CastMember>[]);
+
+                return CustomScrollView(
+                  slivers: [
+                    if (!isDesktop) _buildAppBar(context, movie),
+                    SliverToBoxAdapter(
+                      child: _buildBackgroundWithHero(
+                        context,
+                        movie,
+                        heroImage,
+                        accessToken,
+                        backgroundColor: detailBackgroundColor,
+                        isDesktop: isDesktop,
+                      ),
+                    ),
+                    if (!isDesktop &&
+                        movie.overview != null &&
+                        movie.overview!.isNotEmpty)
+                      SliverToBoxAdapter(child: _buildOverviewSection(movie)),
+                    if (cast.isNotEmpty)
+                      SliverToBoxAdapter(
+                        child: _buildCastSection(
+                          context,
+                          theme,
+                          cast,
+                          serverBaseUrl,
+                          accessToken,
+                        ),
+                      ),
+                    SliverToBoxAdapter(
+                      child: _buildFileInfoSection(context, theme, movie),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  ],
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  /// 构建背景图（含渐变蒙版和 Hero 内容）
+  Widget _buildBackgroundWithHero(
+    BuildContext context,
+    Movie movie,
+    _MovieHeroImage heroImage,
+    String? accessToken, {
+    required Color backgroundColor,
+    required bool isDesktop,
+  }) {
+    final imageHeight = heroImage.imageHeight;
+    final gradientHeight = (imageHeight * 0.5).ceilToDouble();
+    final imageUrl = heroImage.imageUrl;
 
     return Stack(
       children: [
@@ -275,11 +359,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.white.withValues(alpha: 0.0),
-                  Colors.white.withValues(alpha: 0.2),
-                  Colors.white.withValues(alpha: 0.5),
-                  Colors.white.withValues(alpha: 0.8),
-                  Colors.white,
+                  backgroundColor.withValues(alpha: 0.0),
+                  backgroundColor.withValues(alpha: 0.2),
+                  backgroundColor.withValues(alpha: 0.5),
+                  backgroundColor.withValues(alpha: 0.8),
+                  backgroundColor,
                 ],
                 stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
               ),
@@ -302,14 +386,15 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildDesktopHeroContent(BuildContext context, Movie movie) {
+    final colors = context.appColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           movie.title,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 28,
             fontWeight: FontWeight.bold,
             height: 1.2,
@@ -325,13 +410,13 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMetadataRow(movie, forOverlay: false),
+                  _buildMetadataRow(context, movie, forOverlay: false),
                   if (movie.overview != null && movie.overview!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
                       movie.overview!,
                       style: TextStyle(
-                        color: Colors.black.withValues(alpha: 0.8),
+                        color: colors.textPrimary.withValues(alpha: 0.8),
                         fontSize: 14,
                         height: 1.5,
                       ),
@@ -349,6 +434,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildMobileHeroContent(BuildContext context, Movie movie) {
+    final colors = context.appColors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -356,34 +442,31 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         // 第一行：标题
         Text(
           movie.title,
-          style: const TextStyle(
-            color: Colors.black,
+          style: TextStyle(
+            color: colors.textPrimary,
             fontSize: 24,
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 8),
-        // 第二行：评分 | 发布时间 | 时长
-        _buildMobileMetadataRow1(movie),
+        _buildMobileMetadataRow1(context, movie),
         const SizedBox(height: 6),
-        // 第三行：类型 | 文件大小
-        _buildMobileMetadataRow2(movie),
+        _buildMobileMetadataRow2(context, movie),
         const SizedBox(height: 12),
-        // 第四行：播放按钮
         _buildFullWidthPlayButton(context),
       ],
     );
   }
 
-  Widget _buildMobileMetadataRow1(Movie movie) {
+  Widget _buildMobileMetadataRow1(BuildContext context, Movie movie) {
+    final colors = context.appColors;
     final items = <Widget>[];
     final textStyle = TextStyle(
-      color: Colors.black.withValues(alpha: 0.7),
+      color: colors.textPrimary.withValues(alpha: 0.7),
       fontSize: 13,
     );
-    final iconColor = Colors.black.withValues(alpha: 0.5);
+    final iconColor = colors.textPrimary.withValues(alpha: 0.5);
 
-    // 评分
     if (movie.rating != null && movie.rating! > 0) {
       items.add(
         Text(
@@ -399,7 +482,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     // 发布时间
     if (movie.releaseDate != null || movie.year != null) {
-      if (items.isNotEmpty) items.add(_buildDivider());
+      if (items.isNotEmpty) items.add(_buildDivider(context));
       final dateText =
           movie.releaseDate != null
               ? '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}'
@@ -416,9 +499,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       );
     }
 
-    // 时长
     if (movie.runtime != null) {
-      if (items.isNotEmpty) items.add(_buildDivider());
+      if (items.isNotEmpty) items.add(_buildDivider(context));
       items.add(
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -434,34 +516,34 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     return Wrap(spacing: 0, runSpacing: 6, children: items);
   }
 
-  Widget _buildMobileMetadataRow2(Movie movie) {
+  Widget _buildMobileMetadataRow2(BuildContext context, Movie movie) {
+    final colors = context.appColors;
     final items = <Widget>[];
     final textStyle = TextStyle(
-      color: Colors.black.withValues(alpha: 0.7),
+      color: colors.textPrimary.withValues(alpha: 0.7),
       fontSize: 13,
     );
 
-    // 类型
     if (movie.genres != null && movie.genres!.isNotEmpty) {
       items.add(Text(movie.genres!.join(' / '), style: textStyle));
     }
 
-    // 文件大小
     if (movie.fileSize != null) {
-      if (items.isNotEmpty) items.add(_buildDivider());
+      if (items.isNotEmpty) items.add(_buildDivider(context));
       items.add(Text(movie.formattedFileSize, style: textStyle));
     }
 
     return Wrap(spacing: 0, runSpacing: 6, children: items);
   }
 
-  Widget _buildDivider() {
+  Widget _buildDivider(BuildContext context) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Text(
         '|',
         style: TextStyle(
-          color: Colors.black.withValues(alpha: 0.3),
+          color: colors.textPrimary.withValues(alpha: 0.3),
           fontSize: 13,
         ),
       ),
@@ -469,6 +551,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildFullWidthPlayButton(BuildContext context) {
+    final colors = context.appColors;
+    final buttonBackground = colors.textPrimary;
+    final buttonForeground = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
     final history = _watchHistory;
     String buttonText = '播放';
     if (history != null) {
@@ -480,22 +568,22 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     return SizedBox(
       width: double.infinity,
       child: Material(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(8),
+        color: buttonBackground,
+        borderRadius: BorderRadius.circular(6),
         child: InkWell(
           onTap: () => _playMovie(context),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(6),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+                Icon(Icons.play_arrow, color: buttonForeground, size: 24),
                 const SizedBox(width: 8),
                 Text(
                   buttonText,
-                  style: const TextStyle(
-                    color: Colors.white,
+                  style: TextStyle(
+                    color: buttonForeground,
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -509,15 +597,16 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildOverviewSection(Movie movie) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             '剧情简介',
             style: TextStyle(
-              color: Colors.black,
+              color: colors.textPrimary,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -528,7 +617,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             overview: movie.overview!,
             maxLines: 3,
             style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.7),
+              color: colors.textPrimary.withValues(alpha: 0.7),
               fontSize: 13,
               height: 1.6,
             ),
@@ -540,10 +629,15 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   /// 构建顶部导航栏
   Widget _buildAppBar(BuildContext context, Movie movie) {
+    final colors = context.appColors;
     final hasFile = movie.filePath != null && movie.filePath!.isNotEmpty;
+    final backgroundColor = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
 
     return SliverAppBar(
-      backgroundColor: Colors.white,
+      backgroundColor: backgroundColor,
       elevation: 0,
       pinned: true,
       toolbarHeight: 44,
@@ -552,7 +646,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       leadingWidth: kAppBackButtonWidth,
       leading: AppBackButton(
         onPressed: () => context.pop(),
-        color: Colors.black,
+        color: colors.textPrimary,
       ),
       title: Text(movie.title),
       actions: [
@@ -562,7 +656,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             onPressed: () => _downloadMovie(context, movie),
             child: Icon(
               shadcn.LucideIcons.circleArrowDown,
-              color: Colors.black,
+              color: colors.textPrimary,
               size: 22,
             ),
           ),
@@ -571,9 +665,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               (menuContext) => CupertinoButton(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 onPressed: () => _showMobileActionsMenu(menuContext, movie),
-                child: const Icon(
+                child: Icon(
                   CupertinoIcons.ellipsis,
-                  color: Colors.black,
+                  color: colors.textPrimary,
                   size: 22,
                 ),
               ),
@@ -730,6 +824,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   /// 构建播放按钮
   Widget _buildPlayButton(BuildContext context) {
+    final colors = context.appColors;
+    final buttonBackground = colors.textPrimary;
+    final buttonForeground = _detailBackgroundColor(
+      context,
+      imageUrl: _mobileBackgroundImageUrl,
+    );
     final history = _watchHistory;
     String buttonText = '播放';
     if (history != null) {
@@ -739,11 +839,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       buttonText = '续播 $m:$s';
     }
     return Material(
-      color: Colors.black,
-      borderRadius: BorderRadius.circular(8),
+      color: buttonBackground,
+      borderRadius: BorderRadius.circular(6),
       child: InkWell(
         onTap: () => _playMovie(context),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
           padding: EdgeInsets.symmetric(
             horizontal: WindowControls.isDesktop ? 48 : 32,
@@ -752,12 +852,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.play_arrow, color: Colors.white, size: 24),
+              Icon(Icons.play_arrow, color: buttonForeground, size: 24),
               const SizedBox(width: 8),
               Text(
                 buttonText,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: buttonForeground,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
@@ -801,13 +901,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   /// 构建元数据行
-  Widget _buildMetadataRow(Movie movie, {bool forOverlay = false}) {
+  Widget _buildMetadataRow(
+    BuildContext context,
+    Movie movie, {
+    bool forOverlay = false,
+  }) {
     final items = <Widget>[];
 
-    // 评分
     if (movie.rating != null && movie.rating! > 0) {
       items.add(
         _buildMetadataItem(
+          context,
           '豆 ${movie.rating!.toStringAsFixed(1)}',
           Colors.green,
           forOverlay: forOverlay,
@@ -815,21 +919,27 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       );
     }
 
-    // 发布时间
     if (movie.releaseDate != null) {
       final dateText =
           '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}';
-      items.add(_buildMetadataItem(dateText, null, forOverlay: forOverlay));
+      items.add(
+        _buildMetadataItem(context, dateText, null, forOverlay: forOverlay),
+      );
     } else if (movie.year != null) {
       items.add(
-        _buildMetadataItem('${movie.year}', null, forOverlay: forOverlay),
+        _buildMetadataItem(
+          context,
+          '${movie.year}',
+          null,
+          forOverlay: forOverlay,
+        ),
       );
     }
 
-    // 时长
     if (movie.runtime != null) {
       items.add(
         _buildMetadataItem(
+          context,
           movie.formattedRuntime,
           null,
           forOverlay: forOverlay,
@@ -837,10 +947,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       );
     }
 
-    // 文件大小
     if (movie.fileSize != null) {
       items.add(
         _buildMetadataItem(
+          context,
           movie.formattedFileSize,
           null,
           forOverlay: forOverlay,
@@ -852,14 +962,16 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildMetadataItem(
+    BuildContext context,
     String text,
     Color? color, {
     bool forOverlay = false,
   }) {
+    final colors = context.appColors;
     final defaultColor =
         forOverlay
             ? Colors.white.withValues(alpha: 0.85)
-            : Colors.black.withValues(alpha: 0.7);
+            : colors.textPrimary.withValues(alpha: 0.7);
     return Text(
       text,
       style: TextStyle(
@@ -888,16 +1000,17 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     String? serverBaseUrl,
     String? accessToken,
   ) {
+    final colors = context.appColors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 24),
       child: ScrollableRowWithArrows(
         controller: _castScrollController,
         itemWidth: 80,
         itemSpacing: 4,
-        title: const Text(
+        title: Text(
           '相关演员',
           style: TextStyle(
-            color: Colors.black,
+            color: colors.textPrimary,
             fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
@@ -915,7 +1028,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             itemCount: cast.length,
             separatorBuilder: (_, _) => const SizedBox(width: 4),
             itemBuilder: (context, index) {
-              return _buildCastCard(cast[index], serverBaseUrl, accessToken);
+              return _buildCastCard(
+                context,
+                cast[index],
+                serverBaseUrl,
+                accessToken,
+              );
             },
           ),
         ),
@@ -925,10 +1043,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
   /// 构建演员卡片
   Widget _buildCastCard(
+    BuildContext context,
     CastMember member,
     String? serverBaseUrl,
     String? accessToken,
   ) {
+    final colors = context.appColors;
     final name = member.name;
     final role = member.character;
     final profileUrl = member.profilePath;
@@ -943,9 +1063,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             height: 64,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.black.withValues(alpha: 0.1),
+              color: colors.textPrimary.withValues(alpha: 0.1),
               border: Border.all(
-                color: Colors.black.withValues(alpha: 0.2),
+                color: colors.textPrimary.withValues(alpha: 0.2),
                 width: 2,
               ),
             ),
@@ -955,7 +1075,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 imageUrl: profileUrl,
                 serverBaseUrl: serverBaseUrl,
                 accessToken: accessToken,
-                iconColor: Colors.black.withValues(alpha: 0.5),
+                iconColor: colors.textPrimary.withValues(alpha: 0.5),
                 iconSize: 32,
               ),
             ),
@@ -965,8 +1085,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           // 姓名
           Text(
             name,
-            style: const TextStyle(
-              color: Colors.black,
+            style: TextStyle(
+              color: colors.textPrimary,
               fontSize: 12,
               fontWeight: FontWeight.w500,
             ),
@@ -980,7 +1100,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             Text(
               '饰 $role',
               style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.5),
+                color: colors.textPrimary.withValues(alpha: 0.5),
                 fontSize: 10,
               ),
               maxLines: 1,
@@ -1128,6 +1248,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     ThemeData theme,
     Movie movie,
   ) {
+    final colors = context.appColors;
     // 从路径中提取文件名
     String? fileName;
     String? dirPath;
@@ -1148,7 +1269,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Divider(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: colors.textPrimary.withValues(alpha: 0.1),
             height: 48,
           ),
         ),
@@ -1162,7 +1283,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: Colors.black.withValues(alpha: 0.5),
+                  color: colors.textPrimary.withValues(alpha: 0.5),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1171,7 +1292,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               Text(
                 'TMDB ID: ${movie.tmdbId ?? "未知"} | IMDB: ${movie.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: Colors.black.withValues(alpha: 0.3),
+                  color: colors.textPrimary.withValues(alpha: 0.3),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -1182,7 +1303,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '类型: ${movie.genres!.join(", ")}',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
@@ -1193,7 +1314,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '存储: ${movie.storageName}',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                     ),
                   ),
@@ -1204,7 +1325,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '文件: $fileName',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),
@@ -1216,7 +1337,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '路径: $dirPath',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.3),
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),

@@ -87,6 +87,7 @@ dependencies:
 
   # Windows/macOS 自动更新
   auto_updater: ^0.1.7
+  palette_generator: ^0.3.3+7
 
 dev_dependencies:
   flutter_test:
