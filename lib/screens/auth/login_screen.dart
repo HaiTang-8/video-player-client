@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
@@ -30,21 +31,35 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     super.dispose();
   }
 
+  void _dismissKeyboard() {
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
   Future<void> _handleLogin() async {
+    _dismissKeyboard();
     final username = _usernameController.text.trim();
     final password = _passwordController.text;
 
     if (username.isEmpty || password.isEmpty) {
-      DialogUtils.showToast(context: context, message: '请输入用户名和密码', isError: true);
+      DialogUtils.showToast(
+        context: context,
+        message: '请输入用户名和密码',
+        isError: true,
+      );
       return;
     }
 
     setState(() => _isLoading = true);
     try {
       await ref.read(authProvider.notifier).login(username, password);
+      TextInput.finishAutofillContext();
     } catch (e) {
       if (mounted) {
-        DialogUtils.showToast(context: context, message: e.toString().replaceFirst('Exception: ', ''), isError: true);
+        DialogUtils.showToast(
+          context: context,
+          message: e.toString().replaceFirst('Exception: ', ''),
+          isError: true,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -58,10 +73,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     if (isDesktop) {
       return Scaffold(
-        appBar: const DesktopTitleBar(
-          title: Text('登录'),
-          centerTitle: true,
-        ),
+        appBar: const DesktopTitleBar(title: Text('登录'), centerTitle: true),
         body: Center(child: _buildForm(isDark)),
       );
     }
@@ -95,61 +107,81 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildForm(bool isDark) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.fromLTRB(
+        32,
+        0,
+        32,
+        MediaQuery.viewInsetsOf(context).bottom + 32,
+      ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 48),
-            Icon(
-              CupertinoIcons.play_circle_fill,
-              size: 64,
-              color: CupertinoTheme.of(context).primaryColor,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Media Player',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: isDark ? CupertinoColors.white : CupertinoColors.black,
+        child: AutofillGroup(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 48),
+              Icon(
+                CupertinoIcons.play_circle_fill,
+                size: 64,
+                color: CupertinoTheme.of(context).primaryColor,
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '请登录以继续',
-              style: TextStyle(
-                fontSize: 15,
-                color: CupertinoColors.secondaryLabel.resolveFrom(context),
+              const SizedBox(height: 16),
+              Text(
+                'Media Player',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? CupertinoColors.white : CupertinoColors.black,
+                ),
               ),
-            ),
-            const SizedBox(height: 40),
-            _buildServerIndicator(),
-            const SizedBox(height: 24),
-            shadcn.TextField(
-              controller: _usernameController,
-              placeholder: const Text('用户名'),
-              textInputAction: TextInputAction.next,
-              onSubmitted: (_) => _passwordFocusNode.requestFocus(),
-            ),
-            const SizedBox(height: 16),
-            PasswordTextField(
-              controller: _passwordController,
-              placeholder: const Text('密码'),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: CupertinoButton.filled(
-                onPressed: _isLoading ? null : _handleLogin,
-                child: _isLoading
-                    ? const CupertinoActivityIndicator(color: CupertinoColors.white)
-                    : const Text('登录'),
+              const SizedBox(height: 8),
+              Text(
+                '请登录以继续',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                ),
               ),
-            ),
-            const SizedBox(height: 48),
-          ],
+              const SizedBox(height: 40),
+              _buildServerIndicator(),
+              const SizedBox(height: 24),
+              shadcn.TextField(
+                controller: _usernameController,
+                placeholder: const Text('用户名'),
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.username],
+                autocorrect: false,
+                enableSuggestions: false,
+                onTapOutside: (_) => _dismissKeyboard(),
+                onSubmitted: (_) => _passwordFocusNode.requestFocus(),
+              ),
+              const SizedBox(height: 16),
+              PasswordTextField(
+                controller: _passwordController,
+                focusNode: _passwordFocusNode,
+                placeholder: const Text('密码'),
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                onTapOutside: (_) => _dismissKeyboard(),
+                onSubmitted: (_) => _handleLogin(),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: CupertinoButton.filled(
+                  onPressed: _isLoading ? null : _handleLogin,
+                  child:
+                      _isLoading
+                          ? const CupertinoActivityIndicator(
+                            color: CupertinoColors.white,
+                          )
+                          : const Text('登录'),
+                ),
+              ),
+              const SizedBox(height: 48),
+            ],
+          ),
         ),
       ),
     );
@@ -192,7 +224,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     currentServer.url,
                     style: TextStyle(
                       fontSize: 12,
-                      color: CupertinoColors.secondaryLabel.resolveFrom(context),
+                      color: CupertinoColors.secondaryLabel.resolveFrom(
+                        context,
+                      ),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
