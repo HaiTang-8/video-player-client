@@ -53,7 +53,7 @@ class PlayerTopBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
-                Flexible(
+                Expanded(
                   child: Text(
                     title,
                     style: const TextStyle(
@@ -65,7 +65,6 @@ class PlayerTopBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Spacer(),
                 if (WindowControls.isWindows) ...[
                   const SizedBox(width: 16),
                   _WindowCaptionButton(
