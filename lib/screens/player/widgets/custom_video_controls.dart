@@ -100,6 +100,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  int _seekRequestVersion = 0;
   bool _playing = true; // 初始为 true，视频加载后自动播放
   bool _buffering = true; // 初始为 true，显示加载指示器
   double _volume = 1.0;
@@ -523,6 +524,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     bool showControlsAfterSeek = false,
     bool restartHideTimer = false,
   }) async {
+    final seekRequestVersion = ++_seekRequestVersion;
     setState(() {
       _position = target;
       _dragging = true;
@@ -540,17 +542,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }
     } finally {
       if (mounted) {
+        final isLatestSeek = seekRequestVersion == _seekRequestVersion;
         setState(() {
-          _position = target;
-          _dragging = false;
+          if (isLatestSeek) {
+            _position = target;
+            _dragging = false;
+          }
           if (hideSeekOverlay) {
             _showSeekOverlay = false;
           }
         });
-        if (showControlsAfterSeek) {
-          _showControlsTemporarily();
-        } else if (restartHideTimer) {
-          _startHideTimer();
+        if (isLatestSeek) {
+          if (showControlsAfterSeek) {
+            _showControlsTemporarily();
+          } else if (restartHideTimer) {
+            _startHideTimer();
+          }
         }
       }
     }

@@ -73,6 +73,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _hasAppliedPlaybackSettings = false;
   bool _initialLoadStarted = false;
   Future<void>? _activeSeekOperation;
+  int _seekRequestVersion = 0;
   final List<StreamSubscription> _subscriptions = [];
 
   @override
@@ -426,9 +427,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     });
   }
 
-  Future<void> _waitForPlayerPosition(Duration target) async {
+  Future<void> _waitForPlayerPosition(
+    Duration target,
+    int seekRequestVersion,
+  ) async {
     const toleranceMs = 1000;
     for (var i = 0; i < 10; i++) {
+      if (seekRequestVersion != _seekRequestVersion) return;
       final current = _player.state.position;
       if ((current.inMilliseconds - target.inMilliseconds).abs() <=
           toleranceMs) {
@@ -438,32 +443,38 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  Future<void> _performUserSeek(Duration position) async {
+  Future<void> _performUserSeek(
+    Duration position,
+    int seekRequestVersion,
+  ) async {
     _pendingSeekPosition = null;
     _routeInitialPosition = null;
     _hasSeekToInitialPosition = true;
     await Future<void>.sync(() => _player.seek(position));
-    await _waitForPlayerPosition(position);
+    if (seekRequestVersion != _seekRequestVersion) return;
+    await _waitForPlayerPosition(position, seekRequestVersion);
+    if (seekRequestVersion != _seekRequestVersion) return;
     await _saveProgress(force: true);
   }
 
-  Future<void> _handleUserSeek(Duration position) async {
+  Future<void> _handleUserSeek(Duration position) {
+    final seekRequestVersion = ++_seekRequestVersion;
     final previousOperation = _activeSeekOperation;
-    if (previousOperation != null) {
-      try {
-        await previousOperation;
-      } catch (_) {}
-    }
-
-    final operation = _performUserSeek(position);
+    final operation = Future<void>.sync(() async {
+      if (previousOperation != null) {
+        try {
+          await previousOperation;
+        } catch (_) {}
+      }
+      if (seekRequestVersion != _seekRequestVersion) return;
+      await _performUserSeek(position, seekRequestVersion);
+    });
     _activeSeekOperation = operation;
-    try {
-      await operation;
-    } finally {
+    return operation.whenComplete(() {
       if (identical(_activeSeekOperation, operation)) {
         _activeSeekOperation = null;
       }
-    }
+    });
   }
 
   Future<void> _awaitActiveSeekOperation() async {
