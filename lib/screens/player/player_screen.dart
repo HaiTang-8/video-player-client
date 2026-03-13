@@ -12,6 +12,7 @@ import '../../core/utils/http_utils.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import 'widgets/player_top_bar.dart';
+import 'widgets/ripple_loading_indicator.dart';
 import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
 import '../../data/models/storage.dart';
@@ -1072,18 +1073,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(color: Colors.white),
-                  const SizedBox(height: 16),
-                  Text(
-                    _currentStreamUrl == null ? '正在获取播放地址...' : '正在加载视频...',
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ],
-              ),
+            RippleLoadingIndicator(
+              hintText: _currentStreamUrl == null ? '正在获取播放地址' : '正在加载视频',
             ),
             PlayerTopBar(
               title: _displayTitle.isNotEmpty ? _displayTitle : '加载中...',

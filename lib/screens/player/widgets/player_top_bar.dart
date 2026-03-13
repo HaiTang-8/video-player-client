@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 
@@ -51,7 +53,7 @@ class PlayerTopBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                 ],
-                Expanded(
+                Flexible(
                   child: Text(
                     title,
                     style: const TextStyle(
@@ -63,6 +65,7 @@ class PlayerTopBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const Spacer(),
                 if (WindowControls.isWindows) ...[
                   const SizedBox(width: 16),
                   _WindowCaptionButton(
@@ -82,6 +85,7 @@ class PlayerTopBar extends StatelessWidget {
               ],
             ),
           ),
+          const IgnorePointer(child: Center(child: _ClockText())),
         ],
       ),
     );
@@ -162,6 +166,52 @@ class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
           color: bg,
           child: Center(child: Icon(widget.icon, color: Colors.white)),
         ),
+      ),
+    );
+  }
+}
+
+class _ClockText extends StatefulWidget {
+  const _ClockText();
+
+  @override
+  State<_ClockText> createState() => _ClockTextState();
+}
+
+class _ClockTextState extends State<_ClockText> {
+  late Timer _timer;
+  String _time = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _updateTime();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _updateTime());
+  }
+
+  void _updateTime() {
+    final now = DateTime.now();
+    final t =
+        '${now.hour.toString().padLeft(2, '0')}:'
+        '${now.minute.toString().padLeft(2, '0')}:'
+        '${now.second.toString().padLeft(2, '0')}';
+    if (t != _time && mounted) setState(() => _time = t);
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _time,
+      style: const TextStyle(
+        color: Colors.white70,
+        fontSize: 13,
+        fontFeatures: [FontFeature.tabularFigures()],
       ),
     );
   }

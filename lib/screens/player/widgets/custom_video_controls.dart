@@ -16,6 +16,7 @@ import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
 import 'player_top_bar.dart';
+import 'ripple_loading_indicator.dart';
 
 class CustomVideoControls extends StatefulWidget {
   final Player player;
@@ -143,6 +144,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   final FocusNode _focusNode = FocusNode();
   double _volumeBeforeMute = 1.0;
 
+  Timer? _speedTimer;
+  String? _speedText;
+
   @override
   void initState() {
     super.initState();
@@ -193,7 +197,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
     _subscriptions.add(
       widget.player.stream.buffering.listen((b) {
-        if (mounted) setState(() => _buffering = b);
+        if (!mounted) return;
+        setState(() => _buffering = b);
+        if (b) {
+          _startSpeedPolling();
+        } else {
+          _stopSpeedPolling();
+        }
       }),
     );
     _subscriptions.add(
@@ -228,6 +238,42 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
+  void _startSpeedPolling() {
+    _speedTimer?.cancel();
+    _speedTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) async {
+      final platform = widget.player.platform;
+      if (platform is! NativePlayer || !mounted) return;
+      try {
+        final raw = await platform.getProperty('cache-speed');
+        final bytes = double.tryParse(raw) ?? 0;
+        if (!mounted) return;
+        setState(() {
+          _speedText = bytes > 0 ? _formatSpeed(bytes) : null;
+        });
+      } catch (e) {
+        LogService.instance.warn('VideoControls', 'Failed to get cache-speed: $e');
+      }
+    });
+  }
+
+  void _stopSpeedPolling() {
+    _speedTimer?.cancel();
+    _speedTimer = null;
+    if (mounted) setState(() => _speedText = null);
+  }
+
+  static String _formatSpeed(double bytesPerSecond) {
+    if (bytesPerSecond < 1024) {
+      return '${bytesPerSecond.toStringAsFixed(0)} B/s';
+    }
+    final kb = bytesPerSecond / 1024;
+    if (kb < 1024) {
+      return '${kb.toStringAsFixed(0)} KB/s';
+    }
+    final mb = kb / 1024;
+    return '${mb.toStringAsFixed(1)} MB/s';
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -236,6 +282,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
     _speedHintTimer?.cancel();
+    _speedTimer?.cancel();
     // 确保长按倍速状态被重置
     if (_isLongPressSpeed) {
       widget.player.setRate(_originalSpeed);
@@ -886,18 +933,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             if (_visible && !WindowControls.isDesktop) _buildLockButton(),
             // 缓冲指示器
             if (_buffering)
-              const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircularProgressIndicator(color: Colors.white),
-                    SizedBox(height: 16),
-                    Text(
-                      '缓冲中...',
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ],
-                ),
+              RippleLoadingIndicator(
+                speedText: _speedText,
+                hintText: '缓冲中',
               ),
             // 长按倍速提示
             if (_isLongPressSpeed)
