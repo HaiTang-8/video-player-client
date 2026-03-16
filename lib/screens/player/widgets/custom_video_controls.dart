@@ -584,7 +584,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       } else {
         await Future<void>.sync(() => widget.player.seek(target));
       }
-      if (resumeAfterSeek) {
+      if (resumeAfterSeek && seekRequestVersion == _seekRequestVersion) {
         await Future<void>.sync(() => widget.player.play());
       }
     } finally {
