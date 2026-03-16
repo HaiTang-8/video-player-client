@@ -1290,8 +1290,38 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         await _loadSeasonWatchHistory(_selectedSeasonId!);
       }
       ref.read(watchHistoryProvider.notifier).refresh();
+      return;
     }
-    // TODO: 无历史时播放第一集
+
+    final seasonId = _selectedSeasonId;
+    if (seasonId == null) return;
+
+    final tvShow = ref.read(tvShowDetailProvider(widget.tvShowId)).asData?.value;
+    List<Episode>? episodes;
+    if (tvShow?.seasons != null &&
+        _selectedSeasonIndex < tvShow!.seasons!.length) {
+      episodes = tvShow.seasons![_selectedSeasonIndex].episodes;
+    }
+    episodes ??= ref.read(
+      seasonEpisodesProvider(
+        (tvShowId: widget.tvShowId, seasonId: seasonId),
+      ),
+    ).asData?.value;
+    if (episodes == null || episodes.isEmpty) return;
+
+    final episode = episodes.first;
+    final title =
+        tvShow?.name != null
+            ? '${tvShow!.name} - ${episode.displayTitle}'
+            : episode.displayTitle;
+
+    await context.push(
+      '/player/episode/${widget.tvShowId}/$seasonId/${episode.id}',
+      extra: {'title': title, 'episodes': episodes},
+    );
+    if (!mounted) return;
+    await _loadSeasonWatchHistory(seasonId);
+    ref.read(watchHistoryProvider.notifier).refresh();
   }
 
   /// 构建元数据行
