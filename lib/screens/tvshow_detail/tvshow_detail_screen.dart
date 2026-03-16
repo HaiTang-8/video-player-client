@@ -314,7 +314,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     final imageHeight =
         (() {
           if (usePoster) {
-            return screenSize.height * 0.7;
+            return screenSize.height * 0.75;
           }
           const backdropAspect = 16 / 9;
           final idealHeight = screenSize.width / backdropAspect;
@@ -682,8 +682,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     : null,
             width: double.infinity,
             height: imageHeight,
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
+            fit: isDesktop ? BoxFit.cover : BoxFit.fitWidth,
+            alignment: Alignment.topCenter,
             errorWidget:
                 (_, _, _) =>
                     Container(height: imageHeight, color: Colors.grey[300]),
