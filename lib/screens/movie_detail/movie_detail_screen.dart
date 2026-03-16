@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
@@ -210,7 +211,9 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         builder: (context) {
           final theme = Theme.of(context);
 
-          return Scaffold(
+          return AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.light,
+            child: Scaffold(
             backgroundColor: _detailBackgroundColor(
               context,
               imageUrl: _mobileBackgroundImageUrl,
@@ -362,6 +365,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   ],
                 );
               },
+            ),
             ),
           );
         },
