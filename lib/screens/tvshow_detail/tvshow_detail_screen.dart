@@ -845,10 +845,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         // 第二行：元数据
         _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         // 第三行：全宽播放按钮
         _buildFullWidthPlayButton(context),
       ],
@@ -927,6 +927,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 style: TextStyle(
                   color: colors.textPrimary.withValues(alpha: 0.7),
                   fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  height: 1.6,
+                ),
+                linkStyle: TextStyle(
+                  color: colors.textPrimary.withValues(alpha: 0.9),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
                   height: 1.6,
                 ),
               ),
@@ -1336,7 +1343,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     if (tvShow.rating != null && tvShow.rating! > 0) {
       items.add(
         _buildMetadataItem(
-          '豆 ${tvShow.rating!.toStringAsFixed(1)}',
+          'TMDB ${tvShow.rating!.toStringAsFixed(1)}',
           Colors.green,
           forOverlay: forOverlay,
         ),
@@ -1404,7 +1411,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           style: TextStyle(
             color: color ?? defaultColor,
             fontSize: 14,
-            fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
+            fontWeight: FontWeight.bold,
             shadows:
                 forOverlay
                     ? const [
@@ -2017,7 +2024,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: colors.textPrimary.withValues(alpha: 0.5),
+                  color: colors.textPrimary.withValues(alpha: 0.7),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -2026,7 +2033,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               Text(
                 'TMDB ID: ${tvShow.tmdbId ?? "未知"} | IMDB: ${tvShow.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: colors.textPrimary.withValues(alpha: 0.3),
+                  color: colors.textPrimary.withValues(alpha: 0.5),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -2037,7 +2044,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '类型: ${tvShow.genres!.join(", ")}',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                     ),
                   ),
@@ -2048,7 +2055,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '存储: ${tvShow.storageName}',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                     ),
                   ),
@@ -2059,7 +2066,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   child: Text(
                     '路径: $selectedFolder',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),

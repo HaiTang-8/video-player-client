@@ -527,11 +527,11 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         _buildMobileMetadataRow1(context, movie),
         const SizedBox(height: 6),
         _buildMobileMetadataRow2(context, movie),
-        const SizedBox(height: 12),
+        const SizedBox(height: 20),
         _buildFullWidthPlayButton(context),
       ],
     );
@@ -542,17 +542,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final items = <Widget>[];
     final textStyle = TextStyle(
       color: colors.textPrimary.withValues(alpha: 0.7),
-      fontSize: 13,
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
     );
     final iconColor = colors.textPrimary.withValues(alpha: 0.5);
 
     if (movie.rating != null && movie.rating! > 0) {
       items.add(
         Text(
-          '豆 ${movie.rating!.toStringAsFixed(1)}',
+          'TMDB ${movie.rating!.toStringAsFixed(1)}',
           style: const TextStyle(
             color: Colors.green,
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -570,7 +571,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_today, size: 14, color: iconColor),
+            Icon(shadcn.LucideIcons.calendar, size: 16, color: iconColor),
             const SizedBox(width: 4),
             Text(dateText, style: textStyle),
           ],
@@ -584,7 +585,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.access_time, size: 14, color: iconColor),
+            Icon(shadcn.LucideIcons.clock, size: 16, color: iconColor),
             const SizedBox(width: 4),
             Text(movie.formattedRuntime, style: textStyle),
           ],
@@ -600,7 +601,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final items = <Widget>[];
     final textStyle = TextStyle(
       color: colors.textPrimary.withValues(alpha: 0.7),
-      fontSize: 13,
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
     );
 
     if (movie.genres != null && movie.genres!.isNotEmpty) {
@@ -676,33 +678,44 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }
 
   Widget _buildOverviewSection(Movie movie) {
-    final colors = context.appColors;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '剧情简介',
-            style: TextStyle(
-              color: colors.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+    return Builder(
+      builder: (context) {
+        final colors = context.appColors;
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '剧情简介',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              OverviewPreviewText(
+                title: movie.title,
+                overview: movie.overview!,
+                maxLines: 3,
+                style: TextStyle(
+                  color: colors.textPrimary.withValues(alpha: 0.7),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  height: 1.6,
+                ),
+                linkStyle: TextStyle(
+                  color: colors.textPrimary.withValues(alpha: 0.9),
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  height: 1.6,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          OverviewPreviewText(
-            title: movie.title,
-            overview: movie.overview!,
-            maxLines: 3,
-            style: TextStyle(
-              color: colors.textPrimary.withValues(alpha: 0.7),
-              fontSize: 13,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1409,7 +1422,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               Text(
                 '媒体信息',
                 style: TextStyle(
-                  color: colors.textPrimary.withValues(alpha: 0.5),
+                  color: colors.textPrimary.withValues(alpha: 0.7),
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
                 ),
@@ -1418,7 +1431,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               Text(
                 'TMDB ID: ${movie.tmdbId ?? "未知"} | IMDB: ${movie.imdbId ?? "未知"}',
                 style: TextStyle(
-                  color: colors.textPrimary.withValues(alpha: 0.3),
+                  color: colors.textPrimary.withValues(alpha: 0.5),
                   fontSize: 11,
                   fontFamily: 'monospace',
                 ),
@@ -1429,7 +1442,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '类型: ${movie.genres!.join(", ")}',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                     ),
                   ),
@@ -1440,7 +1453,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '存储: ${movie.storageName}',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                     ),
                   ),
@@ -1451,7 +1464,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '文件: $fileName',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),
@@ -1463,7 +1476,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                   child: Text(
                     '路径: $dirPath',
                     style: TextStyle(
-                      color: colors.textPrimary.withValues(alpha: 0.3),
+                      color: colors.textPrimary.withValues(alpha: 0.5),
                       fontSize: 11,
                       fontFamily: 'monospace',
                     ),

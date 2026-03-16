@@ -125,9 +125,9 @@ class Movie {
     final hours = runtime! ~/ 60;
     final minutes = runtime! % 60;
     if (hours > 0) {
-      return '${hours}h ${minutes}m';
+      return minutes > 0 ? '$hours小时$minutes分钟' : '$hours小时';
     }
-    return '${minutes}m';
+    return '$minutes分钟';
   }
 
   /// 格式化文件大小
