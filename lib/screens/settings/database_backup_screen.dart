@@ -328,7 +328,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
     final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '确认回滚',
-      content: '回滚将替换当前数据库，服务器会自动重启。确定要回滚到 ${backup.name} 吗？',
+      content: '回滚将替换当前数据库，并立即加载新库。确定要回滚到 ${backup.name} 吗？',
       confirmText: '回滚',
       isDestructive: true,
     );
@@ -339,7 +339,7 @@ class _DatabaseBackupScreenState extends ConsumerState<DatabaseBackupScreen> {
       if (mounted) {
         DialogUtils.showToast(
           context: context,
-          message: success ? '回滚成功，服务器即将重启' : '回滚失败',
+          message: success ? '回滚成功，已加载新数据库' : '回滚失败',
           isError: !success,
         );
       }

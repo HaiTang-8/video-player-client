@@ -9,9 +9,13 @@ final databaseBackupServiceProvider = Provider<DatabaseBackupService?>((ref) {
   return DatabaseBackupService(client);
 });
 
-final databaseBackupsProvider = NotifierProvider<DatabaseBackupsNotifier, AsyncValue<List<DatabaseBackupInfo>>>(DatabaseBackupsNotifier.new);
+final databaseBackupsProvider = NotifierProvider<
+  DatabaseBackupsNotifier,
+  AsyncValue<List<DatabaseBackupInfo>>
+>(DatabaseBackupsNotifier.new);
 
-class DatabaseBackupsNotifier extends Notifier<AsyncValue<List<DatabaseBackupInfo>>> {
+class DatabaseBackupsNotifier
+    extends Notifier<AsyncValue<List<DatabaseBackupInfo>>> {
   @override
   AsyncValue<List<DatabaseBackupInfo>> build() => const AsyncValue.loading();
 
@@ -45,7 +49,11 @@ class DatabaseBackupsNotifier extends Notifier<AsyncValue<List<DatabaseBackupInf
     final service = ref.read(databaseBackupServiceProvider);
     if (service == null) return false;
     final response = await service.rollback(backupName);
-    return response.isSuccess;
+    if (response.isSuccess) {
+      await loadBackups();
+      return true;
+    }
+    return false;
   }
 
   Future<bool> deleteBackup(String backupName) async {
