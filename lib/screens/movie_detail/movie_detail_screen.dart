@@ -681,7 +681,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMetadataRow(context, movie, forOverlay: false),
+                  _buildPrimaryMetadataRow(context, movie),
+                  if ((movie.genres != null && movie.genres!.isNotEmpty) ||
+                      movie.fileSize != null) ...[
+                    const SizedBox(height: 6),
+                    _buildSecondaryMetadataRow(context, movie),
+                  ],
                   if (movie.overview != null && movie.overview!.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(
@@ -720,16 +725,19 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        _buildMobileMetadataRow1(context, movie),
-        const SizedBox(height: 6),
-        _buildMobileMetadataRow2(context, movie),
+        _buildPrimaryMetadataRow(context, movie),
+        if ((movie.genres != null && movie.genres!.isNotEmpty) ||
+            movie.fileSize != null) ...[
+          const SizedBox(height: 6),
+          _buildSecondaryMetadataRow(context, movie),
+        ],
         const SizedBox(height: 20),
         _buildFullWidthPlayButton(context),
       ],
     );
   }
 
-  Widget _buildMobileMetadataRow1(BuildContext context, Movie movie) {
+  Widget _buildPrimaryMetadataRow(BuildContext context, Movie movie) {
     final colors = context.appColors;
     final items = <Widget>[];
     final textStyle = TextStyle(
@@ -740,16 +748,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     final iconColor = colors.textPrimary.withValues(alpha: 0.5);
 
     if (movie.rating != null && movie.rating! > 0) {
-      items.add(
-        Text(
-          'TMDB ${movie.rating!.toStringAsFixed(1)}',
-          style: const TextStyle(
-            color: Colors.green,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      );
+      items.add(_buildTmdbRatingBadge(context, movie.rating!, textStyle));
     }
 
     // 发布时间
@@ -788,7 +787,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     return Wrap(spacing: 0, runSpacing: 6, children: items);
   }
 
-  Widget _buildMobileMetadataRow2(BuildContext context, Movie movie) {
+  Widget _buildSecondaryMetadataRow(BuildContext context, Movie movie) {
     final colors = context.appColors;
     final items = <Widget>[];
     final textStyle = TextStyle(
@@ -820,6 +819,38 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           fontSize: 13,
         ),
       ),
+    );
+  }
+
+  Widget _buildTmdbRatingBadge(
+    BuildContext context,
+    double rating,
+    TextStyle textStyle,
+  ) {
+    const tmdbBackground = Color(0xFF032541);
+    const tmdbAccent = Color(0xFF90CEA1);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: tmdbBackground,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0x4090CEA1)),
+          ),
+          child: Text(
+            'TMDB',
+            style: TextStyle(
+              color: tmdbAccent,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(rating.toStringAsFixed(1), style: textStyle),
+      ],
     );
   }
 
@@ -1232,98 +1263,6 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     if (!mounted) return;
     await _loadWatchHistory();
     ref.read(watchHistoryProvider.notifier).refresh();
-  }
-
-  /// 构建元数据行
-  Widget _buildMetadataRow(
-    BuildContext context,
-    Movie movie, {
-    bool forOverlay = false,
-  }) {
-    final items = <Widget>[];
-
-    if (movie.rating != null && movie.rating! > 0) {
-      items.add(
-        _buildMetadataItem(
-          context,
-          '豆 ${movie.rating!.toStringAsFixed(1)}',
-          Colors.green,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    if (movie.releaseDate != null) {
-      final dateText =
-          '${movie.releaseDate!.year}-${movie.releaseDate!.month.toString().padLeft(2, '0')}-${movie.releaseDate!.day.toString().padLeft(2, '0')}';
-      items.add(
-        _buildMetadataItem(context, dateText, null, forOverlay: forOverlay),
-      );
-    } else if (movie.year != null) {
-      items.add(
-        _buildMetadataItem(
-          context,
-          '${movie.year}',
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    if (movie.runtime != null) {
-      items.add(
-        _buildMetadataItem(
-          context,
-          movie.formattedRuntime,
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    if (movie.fileSize != null) {
-      items.add(
-        _buildMetadataItem(
-          context,
-          movie.formattedFileSize,
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    return Wrap(spacing: 16, runSpacing: 8, children: items);
-  }
-
-  Widget _buildMetadataItem(
-    BuildContext context,
-    String text,
-    Color? color, {
-    bool forOverlay = false,
-  }) {
-    final colors = context.appColors;
-    final defaultColor =
-        forOverlay
-            ? Colors.white.withValues(alpha: 0.85)
-            : colors.textPrimary.withValues(alpha: 0.7);
-    return Text(
-      text,
-      style: TextStyle(
-        color: color ?? defaultColor,
-        fontSize: 14,
-        fontWeight: color != null ? FontWeight.bold : FontWeight.normal,
-        shadows:
-            forOverlay
-                ? const [
-                  Shadow(
-                    offset: Offset(0, 1),
-                    blurRadius: 2,
-                    color: Colors.black45,
-                  ),
-                ]
-                : null,
-      ),
-    );
   }
 
   /// 构建相关演员区

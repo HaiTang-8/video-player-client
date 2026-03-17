@@ -982,7 +982,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
+                  _buildPrimaryMetadataRow(context, tvShow, selectedSeason),
+                  if ((tvShow.status != null && tvShow.status!.isNotEmpty) ||
+                      (tvShow.genres != null && tvShow.genres!.isNotEmpty)) ...[
+                    const SizedBox(height: 6),
+                    _buildStatusAndGenresRow(context, tvShow),
+                  ],
                   if (selectedSeason?.overview != null &&
                       selectedSeason!.overview!.isNotEmpty) ...[
                     const SizedBox(height: 8),
@@ -1044,12 +1049,160 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         ),
         const SizedBox(height: 16),
         // 第二行：元数据
-        _buildMetadataRow(tvShow, selectedSeason, forOverlay: false),
+        _buildPrimaryMetadataRow(context, tvShow, selectedSeason),
+        const SizedBox(height: 6),
+        _buildStatusAndGenresRow(context, tvShow),
         const SizedBox(height: 20),
         // 第三行：全宽播放按钮
         _buildFullWidthPlayButton(context),
       ],
     );
+  }
+
+  Widget _buildPrimaryMetadataRow(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
+    final colors = context.appColors;
+    final items = <Widget>[];
+    final textStyle = TextStyle(
+      color: colors.textPrimary.withValues(alpha: 0.7),
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+    );
+    final iconColor = colors.textPrimary.withValues(alpha: 0.5);
+
+    if (tvShow.rating != null && tvShow.rating! > 0) {
+      items.add(_buildTmdbRatingBadge(context, tvShow.rating!, textStyle));
+    }
+
+    if (tvShow.firstAirDate != null || tvShow.year != null) {
+      if (items.isNotEmpty) items.add(_buildDivider(context));
+      final dateText =
+          tvShow.firstAirDate != null
+              ? '${tvShow.firstAirDate!.year}-${tvShow.firstAirDate!.month.toString().padLeft(2, '0')}-${tvShow.firstAirDate!.day.toString().padLeft(2, '0')}'
+              : '${tvShow.year}';
+      items.add(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(shadcn.LucideIcons.calendar, size: 16, color: iconColor),
+            const SizedBox(width: 4),
+            Text(dateText, style: textStyle),
+          ],
+        ),
+      );
+    }
+
+    final episodeCountText = _buildEpisodeCountText(tvShow, selectedSeason);
+    if (episodeCountText != null) {
+      if (items.isNotEmpty) items.add(_buildDivider(context));
+      items.add(Text(episodeCountText, style: textStyle));
+    }
+
+    return Wrap(spacing: 0, runSpacing: 6, children: items);
+  }
+
+  Widget _buildStatusAndGenresRow(BuildContext context, TvShow tvShow) {
+    final colors = context.appColors;
+    final items = <Widget>[];
+    final textStyle = TextStyle(
+      color: colors.textPrimary.withValues(alpha: 0.7),
+      fontSize: 14,
+      fontWeight: FontWeight.bold,
+    );
+
+    if (tvShow.status != null && tvShow.status!.isNotEmpty) {
+      items.add(Text(tvShow.statusText, style: textStyle));
+    }
+
+    if (tvShow.genres != null && tvShow.genres!.isNotEmpty) {
+      if (items.isNotEmpty) items.add(_buildDivider(context));
+      items.add(Text(tvShow.genres!.join(' / '), style: textStyle));
+    }
+
+    return Wrap(spacing: 0, runSpacing: 6, children: items);
+  }
+
+  Widget _buildDivider(BuildContext context) {
+    final colors = context.appColors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Text(
+        '|',
+        style: TextStyle(
+          color: colors.textPrimary.withValues(alpha: 0.3),
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTmdbRatingBadge(
+    BuildContext context,
+    double rating,
+    TextStyle textStyle,
+  ) {
+    const tmdbBackground = Color(0xFF032541);
+    const tmdbAccent = Color(0xFF90CEA1);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: tmdbBackground,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(color: const Color(0x4090CEA1)),
+          ),
+          child: Text(
+            'TMDB',
+            style: TextStyle(
+              color: tmdbAccent,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(rating.toStringAsFixed(1), style: textStyle),
+      ],
+    );
+  }
+
+  String? _buildEpisodeCountText(TvShow tvShow, Season? selectedSeason) {
+    final episodeCount =
+        selectedSeason?.episodeCount ?? tvShow.numberOfEpisodes;
+    if (episodeCount == null) return null;
+
+    final libraryEpisodeCount = _countLibraryEpisodes(tvShow, selectedSeason);
+    if (libraryEpisodeCount == null) {
+      return '共$episodeCount集';
+    }
+    return '共$episodeCount集（库中有$libraryEpisodeCount集）';
+  }
+
+  int? _countLibraryEpisodes(TvShow tvShow, Season? selectedSeason) {
+    if (selectedSeason != null) {
+      final episodes = selectedSeason.episodes;
+      if (episodes == null) return null;
+      return episodes.where((episode) => episode.hasFile).length;
+    }
+
+    final seasons = tvShow.seasons;
+    if (seasons == null) return null;
+
+    var hasEpisodes = false;
+    var libraryEpisodeCount = 0;
+    for (final season in seasons) {
+      final episodes = season.episodes;
+      if (episodes == null) continue;
+      hasEpisodes = true;
+      libraryEpisodeCount +=
+          episodes.where((episode) => episode.hasFile).length;
+    }
+    return hasEpisodes ? libraryEpisodeCount : null;
   }
 
   Widget _buildFullWidthPlayButton(BuildContext context) {
@@ -1535,103 +1688,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     if (!mounted) return;
     await _loadSeasonWatchHistory(seasonId);
     ref.read(watchHistoryProvider.notifier).refresh();
-  }
-
-  /// 构建元数据行
-  Widget _buildMetadataRow(
-    TvShow tvShow,
-    Season? selectedSeason, {
-    bool forOverlay = false,
-  }) {
-    final items = <Widget>[];
-
-    // 评分
-    if (tvShow.rating != null && tvShow.rating! > 0) {
-      items.add(
-        _buildMetadataItem(
-          'TMDB ${tvShow.rating!.toStringAsFixed(1)}',
-          Colors.green,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    // 首播日期
-    if (tvShow.firstAirDate != null) {
-      items.add(
-        _buildMetadataItem(
-          '${tvShow.firstAirDate!.year}-${tvShow.firstAirDate!.month.toString().padLeft(2, '0')}-${tvShow.firstAirDate!.day.toString().padLeft(2, '0')}',
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    } else if (tvShow.year != null) {
-      items.add(
-        _buildMetadataItem('${tvShow.year}', null, forOverlay: forOverlay),
-      );
-    }
-
-    // 剧集数
-    if (selectedSeason?.episodeCount != null) {
-      items.add(
-        _buildMetadataItem(
-          '共${selectedSeason!.episodeCount}集',
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    } else if (tvShow.numberOfEpisodes != null) {
-      items.add(
-        _buildMetadataItem(
-          '共${tvShow.numberOfEpisodes}集',
-          null,
-          forOverlay: forOverlay,
-        ),
-      );
-    }
-
-    // 状态
-    if (tvShow.status != null) {
-      items.add(
-        _buildMetadataItem(tvShow.statusText, null, forOverlay: forOverlay),
-      );
-    }
-
-    return Wrap(spacing: 16, runSpacing: 8, children: items);
-  }
-
-  Widget _buildMetadataItem(
-    String text,
-    Color? color, {
-    bool forOverlay = false,
-  }) {
-    return Builder(
-      builder: (context) {
-        final colors = context.appColors;
-        final defaultColor =
-            forOverlay
-                ? Colors.white.withValues(alpha: 0.85)
-                : colors.textPrimary.withValues(alpha: 0.7);
-        return Text(
-          text,
-          style: TextStyle(
-            color: color ?? defaultColor,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-            shadows:
-                forOverlay
-                    ? const [
-                      Shadow(
-                        offset: Offset(0, 1),
-                        blurRadius: 2,
-                        color: Colors.black45,
-                      ),
-                    ]
-                    : null,
-          ),
-        );
-      },
-    );
   }
 
   /// 构建剧集选择区 - 季度标签页
