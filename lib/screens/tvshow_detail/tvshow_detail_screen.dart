@@ -24,7 +24,12 @@ import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
 
 typedef _TvHeroImage =
-    ({double imageHeight, double layoutHeight, String? imageUrl});
+    ({
+      double imageHeight,
+      double layoutHeight,
+      String? imageUrl,
+      bool usePoster,
+    });
 
 /// Emby 风格剧集详情页面
 class TvShowDetailScreen extends ConsumerStatefulWidget {
@@ -49,6 +54,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   bool _showSolidAppBar = false;
   Color? _mobileBackgroundColor;
   String? _mobileBackgroundImageUrl;
+  DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
+      DetailBackgroundPaletteMode.fullImage;
 
   @override
   void initState() {
@@ -190,16 +197,67 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Color _detailBackgroundColor(
     BuildContext context, {
     required String? imageUrl,
+    required DetailBackgroundPaletteMode mode,
   }) {
     final fallbackColor = context.appColors.cardBackground;
     if (WindowControls.isDesktop || imageUrl == null || imageUrl.isEmpty) {
       return fallbackColor;
     }
-    final cachedColor = DetailBackgroundPalette.getCached(imageUrl);
-    if (_mobileBackgroundImageUrl == imageUrl) {
+    final cachedColor = DetailBackgroundPalette.getCached(imageUrl, mode: mode);
+    if (_mobileBackgroundImageUrl == imageUrl &&
+        _mobileBackgroundPaletteMode == mode) {
       return _mobileBackgroundColor ?? cachedColor ?? fallbackColor;
     }
     return cachedColor ?? fallbackColor;
+  }
+
+  Color _detailSurfaceColor(
+    BuildContext context, {
+    required String? imageUrl,
+    required DetailBackgroundPaletteMode mode,
+  }) {
+    final baseColor = _detailBackgroundColor(
+      context,
+      imageUrl: imageUrl,
+      mode: mode,
+    );
+    return _detailSurfaceColorFromBase(context, baseColor);
+  }
+
+  Color _detailSurfaceColorFromBase(
+    BuildContext context,
+    Color backgroundColor,
+  ) {
+    final fallbackColor = context.appColors.cardBackground;
+    return Color.lerp(backgroundColor, fallbackColor, 0.24) ?? fallbackColor;
+  }
+
+  Color _detailGradientHighlightColor(Color backgroundColor) {
+    final hsl = HSLColor.fromColor(backgroundColor);
+    return hsl
+        .withSaturation((hsl.saturation * 1.12).clamp(0.0, 0.62))
+        .withLightness((hsl.lightness + 0.05).clamp(0.12, 0.30))
+        .toColor();
+  }
+
+  Color _detailGradientBridgeColor(Color backgroundColor, Color surfaceColor) {
+    return Color.lerp(
+          _detailGradientHighlightColor(backgroundColor),
+          surfaceColor,
+          0.42,
+        ) ??
+        surfaceColor;
+  }
+
+  String _backgroundDebugContext(
+    String imageUrl,
+    DetailBackgroundPaletteMode mode,
+  ) {
+    return 'screen=tvshow_detail '
+        'tvShowId=${widget.tvShowId} '
+        'seasonId=${_selectedSeasonId ?? "none"} '
+        'mode=${mode.name} '
+        'imageUrl=$imageUrl';
   }
 
   List<CrewMember> _seasonDirectors(Season? season) {
@@ -239,16 +297,22 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     String? imageUrl,
     String? accessToken, {
     required bool isDesktop,
+    required DetailBackgroundPaletteMode mode,
   }) {
     if (isDesktop || imageUrl == null || imageUrl.isEmpty) {
       return;
     }
-    if (_mobileBackgroundImageUrl == imageUrl) {
+    if (_mobileBackgroundImageUrl == imageUrl &&
+        _mobileBackgroundPaletteMode == mode) {
       return;
     }
 
     _mobileBackgroundImageUrl = imageUrl;
-    _mobileBackgroundColor = DetailBackgroundPalette.getCached(imageUrl);
+    _mobileBackgroundPaletteMode = mode;
+    _mobileBackgroundColor = DetailBackgroundPalette.getCached(
+      imageUrl,
+      mode: mode,
+    );
     final headers =
         accessToken != null
             ? <String, String>{'Authorization': 'Bearer $accessToken'}
@@ -258,8 +322,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       imageUrl,
       provider: CachedNetworkImageProvider(imageUrl, headers: headers),
       fallbackColor: AppColors.dark.cardBackground,
+      mode: mode,
+      debugContext: _backgroundDebugContext(imageUrl, mode),
     ).then((color) {
-      if (!mounted || _mobileBackgroundImageUrl != imageUrl) {
+      if (!mounted ||
+          _mobileBackgroundImageUrl != imageUrl ||
+          _mobileBackgroundPaletteMode != mode) {
         return;
       }
       if (_mobileBackgroundColor == color) {
@@ -347,6 +415,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       imageHeight: imageHeight,
       layoutHeight: layoutHeight,
       imageUrl: imageUrl,
+      usePoster: usePoster,
     );
   }
 
@@ -384,12 +453,23 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           final scaffoldBackgroundColor = _detailBackgroundColor(
             context,
             imageUrl: resolvedHeroImage?.imageUrl ?? _mobileBackgroundImageUrl,
+            mode:
+                resolvedHeroImage?.usePoster == true
+                    ? DetailBackgroundPaletteMode.posterBottom
+                    : _mobileBackgroundPaletteMode,
           );
+          final resolvedSurfaceBackgroundColor =
+              isDesktop
+                  ? scaffoldBackgroundColor
+                  : _detailSurfaceColorFromBase(
+                    context,
+                    scaffoldBackgroundColor,
+                  );
 
           return AnnotatedRegion<SystemUiOverlayStyle>(
             value: SystemUiOverlayStyle.light,
             child: Scaffold(
-              backgroundColor: scaffoldBackgroundColor,
+              backgroundColor: resolvedSurfaceBackgroundColor,
               appBar:
                   isDesktop
                       ? tvShowAsync.when(
@@ -484,11 +564,26 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                     heroImage.imageUrl,
                     accessToken,
                     isDesktop: isDesktop,
+                    mode:
+                        heroImage.usePoster
+                            ? DetailBackgroundPaletteMode.posterBottom
+                            : DetailBackgroundPaletteMode.fullImage,
                   );
                   final detailBackgroundColor = _detailBackgroundColor(
                     context,
                     imageUrl: heroImage.imageUrl,
+                    mode:
+                        heroImage.usePoster
+                            ? DetailBackgroundPaletteMode.posterBottom
+                            : DetailBackgroundPaletteMode.fullImage,
                   );
+                  final detailSurfaceColor =
+                      isDesktop
+                          ? detailBackgroundColor
+                          : _detailSurfaceColorFromBase(
+                            context,
+                            detailBackgroundColor,
+                          );
 
                   if (isDesktop) {
                     return CustomScrollView(
@@ -501,6 +596,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                             heroImage,
                             accessToken,
                             backgroundColor: detailBackgroundColor,
+                            surfaceColor: detailSurfaceColor,
                             isDesktop: true,
                           ),
                         ),
@@ -599,6 +695,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                 heroImage,
                                 accessToken,
                                 backgroundColor: detailBackgroundColor,
+                                surfaceColor: detailSurfaceColor,
                                 isDesktop: false,
                               ),
                             ),
@@ -714,20 +811,30 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     _TvHeroImage heroImage,
     String? accessToken, {
     required Color backgroundColor,
+    required Color surfaceColor,
     required bool isDesktop,
   }) {
     final imageHeight = heroImage.imageHeight;
     final layoutHeight = heroImage.layoutHeight;
     final gradientHeight =
         ((imageHeight * 0.5) + (layoutHeight - imageHeight)).ceilToDouble();
+    final bottomMaskHeight =
+        (gradientHeight * 1.45).clamp(0.0, layoutHeight).toDouble();
     final imageUrl = heroImage.imageUrl;
+    final gradientHighlightColor = _detailGradientHighlightColor(
+      backgroundColor,
+    );
+    final gradientBridgeColor = _detailGradientBridgeColor(
+      backgroundColor,
+      surfaceColor,
+    );
 
     return Stack(
       children: [
         Container(
           width: double.infinity,
           height: layoutHeight,
-          color: backgroundColor,
+          color: isDesktop ? backgroundColor : surfaceColor,
         ),
         // 背景图
         if (imageUrl != null && imageUrl.isNotEmpty)
@@ -782,18 +889,51 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  backgroundColor.withValues(alpha: 0.0),
-                  backgroundColor.withValues(alpha: 0.2),
-                  backgroundColor.withValues(alpha: 0.5),
-                  backgroundColor.withValues(alpha: 0.8),
-                  backgroundColor,
-                ],
-                stops: const [0.0, 0.25, 0.5, 0.75, 1.0],
+                colors:
+                    isDesktop
+                        ? [
+                          backgroundColor.withValues(alpha: 0.0),
+                          backgroundColor.withValues(alpha: 0.2),
+                          backgroundColor.withValues(alpha: 0.5),
+                          backgroundColor.withValues(alpha: 0.8),
+                          backgroundColor,
+                        ]
+                        : [
+                          gradientHighlightColor.withValues(alpha: 0.0),
+                          gradientHighlightColor.withValues(alpha: 0.18),
+                          gradientBridgeColor.withValues(alpha: 0.48),
+                          surfaceColor.withValues(alpha: 0.82),
+                          surfaceColor,
+                        ],
+                stops: const [0.0, 0.18, 0.45, 0.78, 1.0],
               ),
             ),
           ),
         ),
+        if (!isDesktop)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: bottomMaskHeight,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    surfaceColor.withValues(alpha: 0.06),
+                    surfaceColor.withValues(alpha: 0.18),
+                    surfaceColor.withValues(alpha: 0.42),
+                    surfaceColor.withValues(alpha: 0.74),
+                    surfaceColor.withValues(alpha: 0.94),
+                    surfaceColor,
+                  ],
+                  stops: const [0.0, 0.2, 0.42, 0.66, 0.86, 1.0],
+                ),
+              ),
+            ),
+          ),
 
         // Hero 内容（叠加在渐变蒙版上）
         Positioned(
@@ -915,9 +1055,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget _buildFullWidthPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailBackgroundColor(
+    final buttonForeground = _detailSurfaceColor(
       context,
       imageUrl: _mobileBackgroundImageUrl,
+      mode: _mobileBackgroundPaletteMode,
     );
     final history = _watchHistory;
     String buttonText = '播放';
@@ -1012,9 +1153,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
-    final backgroundColor = _detailBackgroundColor(
+    final backgroundColor = _detailSurfaceColor(
       context,
       imageUrl: _mobileBackgroundImageUrl,
+      mode: _mobileBackgroundPaletteMode,
     );
 
     return Positioned(
@@ -1295,9 +1437,10 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget _buildPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailBackgroundColor(
+    final buttonForeground = _detailSurfaceColor(
       context,
       imageUrl: _mobileBackgroundImageUrl,
+      mode: _mobileBackgroundPaletteMode,
     );
     final history = _watchHistory;
     String buttonText = '播放';
