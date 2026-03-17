@@ -73,6 +73,37 @@ class _SkeletonShimmerScope extends InheritedWidget {
   }
 }
 
+class _SkeletonColorPalette {
+  final Color baseColor;
+  final Color highlightColor;
+  final double shimmerSpread;
+
+  const _SkeletonColorPalette({
+    required this.baseColor,
+    required this.highlightColor,
+    required this.shimmerSpread,
+  });
+}
+
+class _SkeletonColorScope extends InheritedWidget {
+  final _SkeletonColorPalette palette;
+
+  const _SkeletonColorScope({required this.palette, required super.child});
+
+  static _SkeletonColorPalette? maybeOf(BuildContext context) {
+    return context
+        .dependOnInheritedWidgetOfExactType<_SkeletonColorScope>()
+        ?.palette;
+  }
+
+  @override
+  bool updateShouldNotify(_SkeletonColorScope oldWidget) {
+    return palette.baseColor != oldWidget.palette.baseColor ||
+        palette.highlightColor != oldWidget.palette.highlightColor ||
+        palette.shimmerSpread != oldWidget.palette.shimmerSpread;
+  }
+}
+
 /// 单个骨架块（矩形/圆角矩形）。
 ///
 /// - 如果外层存在 [SkeletonShimmer]，则使用共享动画；
@@ -87,11 +118,15 @@ class SkeletonBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shimmer = SkeletonShimmer.maybeOf(context);
+    final palette = _SkeletonColorScope.maybeOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final baseColor =
-        isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE0E0E0);
+        palette?.baseColor ??
+        (isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE0E0E0));
     final highlightColor =
-        isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5);
+        palette?.highlightColor ??
+        (isDark ? const Color(0xFF3A3A3A) : const Color(0xFFF5F5F5));
+    final shimmerSpread = palette?.shimmerSpread ?? 0.3;
     final radius = borderRadius ?? BorderRadius.circular(8);
 
     if (shimmer == null) {
@@ -114,6 +149,7 @@ class SkeletonBox extends StatelessWidget {
           shimmer: shimmer,
           baseColor: baseColor,
           highlightColor: highlightColor,
+          shimmerSpread: shimmerSpread,
           borderRadius: radius,
         ),
       ),
@@ -125,12 +161,14 @@ class _SkeletonBoxPainter extends CustomPainter {
   final Animation<double> shimmer;
   final Color baseColor;
   final Color highlightColor;
+  final double shimmerSpread;
   final BorderRadius borderRadius;
 
   _SkeletonBoxPainter({
     required this.shimmer,
     required this.baseColor,
     required this.highlightColor,
+    required this.shimmerSpread,
     required this.borderRadius,
   }) : super(repaint: shimmer);
 
@@ -145,9 +183,9 @@ class _SkeletonBoxPainter extends CustomPainter {
       end: Alignment.centerRight,
       colors: [baseColor, highlightColor, baseColor],
       stops: [
-        (v - 0.3).clamp(0.0, 1.0),
+        (v - shimmerSpread).clamp(0.0, 1.0),
         v.clamp(0.0, 1.0),
-        (v + 0.3).clamp(0.0, 1.0),
+        (v + shimmerSpread).clamp(0.0, 1.0),
       ],
     ).createShader(rect);
 
@@ -716,55 +754,119 @@ class DetailSkeletonLoader extends StatelessWidget {
   const DetailSkeletonLoader.tvShow({super.key})
     : variant = DetailSkeletonVariant.tvShow;
 
+  static Color resolveLoadingBackgroundColor(BuildContext context) {
+    final colors = context.appColors;
+    return colors.cardBackground;
+  }
+
+  static _SkeletonColorPalette _resolveColorPalette(
+    BuildContext context,
+    Color backgroundColor,
+  ) {
+    if (Theme.of(context).brightness != Brightness.dark) {
+      return const _SkeletonColorPalette(
+        baseColor: Color(0xFFE0E0E0),
+        highlightColor: Color(0xFFF5F5F5),
+        shimmerSpread: 0.24,
+      );
+    }
+    return _SkeletonColorPalette(
+      baseColor: Color.alphaBlend(
+        Colors.white.withValues(alpha: 0.17),
+        backgroundColor,
+      ),
+      highlightColor: Color.alphaBlend(
+        Colors.white.withValues(alpha: 0.28),
+        backgroundColor,
+      ),
+      shimmerSpread: 0.18,
+    );
+  }
+
+  static _SkeletonColorPalette _resolveHeroBackgroundColorPalette(
+    BuildContext context,
+    Color backgroundColor,
+  ) {
+    if (Theme.of(context).brightness != Brightness.dark) {
+      return const _SkeletonColorPalette(
+        baseColor: Color(0xFFDADADA),
+        highlightColor: Color(0xFFF0F0F0),
+        shimmerSpread: 0.28,
+      );
+    }
+    return _SkeletonColorPalette(
+      baseColor: Color.alphaBlend(
+        Colors.white.withValues(alpha: 0.08),
+        backgroundColor,
+      ),
+      highlightColor: Color.alphaBlend(
+        Colors.white.withValues(alpha: 0.14),
+        backgroundColor,
+      ),
+      shimmerSpread: 0.24,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = WindowControls.isDesktop;
     final heroHeight = _calculateHeroHeight(size, usePoster: !isDesktop);
-    final colors = context.appColors;
+    final loadingBackgroundColor = resolveLoadingBackgroundColor(context);
+    final colorPalette = _resolveColorPalette(context, loadingBackgroundColor);
+    final heroBackgroundColorPalette = _resolveHeroBackgroundColorPalette(
+      context,
+      loadingBackgroundColor,
+    );
 
-    return SkeletonShimmer(
-      child: CustomScrollView(
-        slivers: [
-          if (!isDesktop)
-            SliverAppBar(
-              backgroundColor: colors.cardBackground,
-              elevation: 0,
-              pinned: true,
-              toolbarHeight: 44,
-              automaticallyImplyLeading: false,
-              flexibleSpace: const SafeArea(
-                bottom: false,
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: _DetailTopBarSkeleton(),
+    return _SkeletonColorScope(
+      palette: colorPalette,
+      child: SkeletonShimmer(
+        child: CustomScrollView(
+          slivers: [
+            if (!isDesktop)
+              SliverAppBar(
+                backgroundColor: loadingBackgroundColor,
+                elevation: 0,
+                pinned: true,
+                toolbarHeight: 44,
+                automaticallyImplyLeading: false,
+                flexibleSpace: const SafeArea(
+                  bottom: false,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: _DetailTopBarSkeleton(),
+                  ),
                 ),
               ),
+            SliverToBoxAdapter(
+              child: _DetailHeroSkeleton(
+                variant: variant,
+                height: heroHeight,
+                backgroundColor: loadingBackgroundColor,
+                backgroundPalette: heroBackgroundColorPalette,
+              ),
             ),
-          SliverToBoxAdapter(
-            child: _DetailHeroSkeleton(
-              variant: variant,
-              height: heroHeight,
-              backgroundColor: colors.cardBackground,
+            if (variant == DetailSkeletonVariant.tvShow)
+              const SliverToBoxAdapter(child: _DetailEpisodeSelectorSkeleton()),
+            if (variant == DetailSkeletonVariant.tvShow)
+              const SliverToBoxAdapter(child: _DetailEpisodesSkeleton()),
+            if (!isDesktop)
+              const SliverToBoxAdapter(child: _DetailOverviewSkeleton()),
+            SliverToBoxAdapter(
+              child: _DetailPeopleSectionSkeleton(
+                titleWidth: variant == DetailSkeletonVariant.movie ? 60 : 72,
+                itemSpacing: variant == DetailSkeletonVariant.movie ? 4 : 8,
+              ),
             ),
-          ),
-          if (variant == DetailSkeletonVariant.tvShow)
-            const SliverToBoxAdapter(child: _DetailEpisodeSelectorSkeleton()),
-          if (variant == DetailSkeletonVariant.tvShow)
-            const SliverToBoxAdapter(child: _DetailEpisodesSkeleton()),
-          if (!isDesktop)
-            const SliverToBoxAdapter(child: _DetailOverviewSkeleton()),
-          SliverToBoxAdapter(
-            child: _DetailPeopleSectionSkeleton(
-              titleWidth: variant == DetailSkeletonVariant.movie ? 60 : 72,
-              itemSpacing: variant == DetailSkeletonVariant.movie ? 4 : 8,
+            SliverToBoxAdapter(
+              child: _DetailInfoSectionSkeleton(
+                dividerColor: context.appColors.divider,
+              ),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: _DetailInfoSectionSkeleton(dividerColor: colors.divider),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 32)),
-        ],
+            const SliverToBoxAdapter(child: SizedBox(height: 32)),
+          ],
+        ),
       ),
     );
   }
@@ -829,11 +931,13 @@ class _DetailHeroSkeleton extends StatelessWidget {
   final DetailSkeletonVariant variant;
   final double height;
   final Color backgroundColor;
+  final _SkeletonColorPalette backgroundPalette;
 
   const _DetailHeroSkeleton({
     required this.variant,
     required this.height,
     required this.backgroundColor,
+    required this.backgroundPalette,
   });
 
   @override
@@ -842,10 +946,13 @@ class _DetailHeroSkeleton extends StatelessWidget {
 
     return Stack(
       children: [
-        SkeletonBox(
-          width: double.infinity,
-          height: height,
-          borderRadius: BorderRadius.zero,
+        _SkeletonColorScope(
+          palette: backgroundPalette,
+          child: SkeletonBox(
+            width: double.infinity,
+            height: height,
+            borderRadius: BorderRadius.zero,
+          ),
         ),
         Positioned(
           left: 0,
@@ -860,12 +967,12 @@ class _DetailHeroSkeleton extends StatelessWidget {
                   end: Alignment.bottomCenter,
                   colors: [
                     backgroundColor.withValues(alpha: 0),
-                    backgroundColor.withValues(alpha: 0.2),
-                    backgroundColor.withValues(alpha: 0.5),
-                    backgroundColor.withValues(alpha: 0.8),
-                    backgroundColor,
+                    backgroundColor.withValues(alpha: 0.08),
+                    backgroundColor.withValues(alpha: 0.24),
+                    backgroundColor.withValues(alpha: 0.48),
+                    backgroundColor.withValues(alpha: 0.72),
                   ],
-                  stops: const [0, 0.25, 0.5, 0.75, 1],
+                  stops: const [0, 0.3, 0.56, 0.82, 1],
                 ),
               ),
             ),
