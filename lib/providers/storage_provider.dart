@@ -215,6 +215,18 @@ class GlobalScanState {
   }
 }
 
+class GlobalScanStartResult {
+  final bool started;
+  final bool partial;
+  final String message;
+
+  const GlobalScanStartResult({
+    required this.started,
+    required this.message,
+    this.partial = false,
+  });
+}
+
 class ScanState {
   final Map<int, ScanProgress> progresses;
   final Set<int> scanning;
@@ -245,14 +257,50 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
   @override
   GlobalScanState build() => const GlobalScanState();
 
-  Future<void> startScanAll({bool forceScrape = false}) async {
+  Future<GlobalScanStartResult> startScanAll({bool forceScrape = false}) async {
     final service = ref.read(storageServiceProvider);
-    if (service == null) return;
+    if (service == null) {
+      return const GlobalScanStartResult(started: false, message: '服务不可用');
+    }
     final storages = ref.read(storagesProvider).value ?? [];
     final enabledStorages = storages.where((s) => s.enabled).toList();
-    if (enabledStorages.isEmpty) return;
+    if (enabledStorages.isEmpty) {
+      return const GlobalScanStartResult(
+        started: false,
+        message: '没有可扫描的启用存储源',
+      );
+    }
 
     _cancelled = false;
+    _progresses.clear();
+    final startedStorageIds = <int>[];
+    final failedStorageNames = <String>[];
+    String? firstError;
+
+    for (final storage in enabledStorages) {
+      final response = await service.startScan(
+        storage.id,
+        forceScrape: forceScrape,
+      );
+      if (response.isSuccess) {
+        if (response.data != null) {
+          _progresses[storage.id] = response.data!;
+        }
+        startedStorageIds.add(storage.id);
+        continue;
+      }
+      failedStorageNames.add(storage.name);
+      firstError ??= response.error;
+    }
+
+    if (startedStorageIds.isEmpty) {
+      state = const GlobalScanState();
+      return GlobalScanStartResult(
+        started: false,
+        message: firstError ?? '扫描启动失败',
+      );
+    }
+
     state = state.copyWith(
       isScanning: true,
       isDiscovering: true,
@@ -262,13 +310,23 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
       updatedFiles: 0,
       dismissed: false,
     );
-    _progresses.clear();
 
-    for (final storage in enabledStorages) {
-      await service.startScan(storage.id, forceScrape: forceScrape);
+    _pollProgress(startedStorageIds);
+
+    if (failedStorageNames.isNotEmpty) {
+      return GlobalScanStartResult(
+        started: true,
+        partial: true,
+        message:
+            '已启动 ${startedStorageIds.length} 个存储源，${failedStorageNames.length} 个启动失败',
+      );
     }
 
-    _pollProgress(enabledStorages.map((s) => s.id).toList());
+    final message =
+        startedStorageIds.length == 1
+            ? '已开始扫描'
+            : '已开始扫描 ${startedStorageIds.length} 个存储源';
+    return GlobalScanStartResult(started: true, message: message);
   }
 
   void _pollProgress(List<int> storageIds) async {

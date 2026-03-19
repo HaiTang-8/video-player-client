@@ -66,33 +66,58 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
     });
   }
 
-  void _startGlobalScan({bool forceScrape = false}) {
-    ref
+  Future<void> _startGlobalScan({bool forceScrape = false}) async {
+    final result = await ref
         .read(globalScanStateProvider.notifier)
         .startScanAll(forceScrape: forceScrape);
+    if (!mounted) return;
+    DialogUtils.showToast(
+      context: context,
+      message: result.message,
+      isError: !result.started,
+    );
+  }
+
+  Future<void> _startGlobalScanFromMenu(
+    BuildContext menuContext, {
+    required bool forceScrape,
+  }) async {
+    await shadcn.closeOverlay(menuContext);
+    if (!mounted) return;
+    await _startGlobalScan(forceScrape: forceScrape);
   }
 
   void _showScanMenu(BuildContext context) {
     shadcn.showDropdown(
       context: context,
-      builder: (dropdownContext) => shadcn.DropdownMenu(
-        children: [
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.doc_text_search, size: 18),
-            child: const Text('扫描新文件'),
-            onPressed: (_) {
-              _startGlobalScan(forceScrape: false);
-            },
+      builder:
+          (dropdownContext) => shadcn.DropdownMenu(
+            children: [
+              shadcn.MenuButton(
+                leading: const Icon(CupertinoIcons.doc_text_search, size: 18),
+                child: const Text('扫描新文件'),
+                onPressed: (menuContext) async {
+                  await _startGlobalScanFromMenu(
+                    menuContext,
+                    forceScrape: false,
+                  );
+                },
+              ),
+              shadcn.MenuButton(
+                leading: const Icon(
+                  CupertinoIcons.arrow_2_circlepath,
+                  size: 18,
+                ),
+                child: const Text('强制刮削全部'),
+                onPressed: (menuContext) async {
+                  await _startGlobalScanFromMenu(
+                    menuContext,
+                    forceScrape: true,
+                  );
+                },
+              ),
+            ],
           ),
-          shadcn.MenuButton(
-            leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
-            child: const Text('强制刮削全部'),
-            onPressed: (_) {
-              _startGlobalScan(forceScrape: true);
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -160,12 +185,15 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                               ),
                             )
                             : Builder(
-                              builder: (menuContext) => IconButton(
-                                key: _refreshButtonKey,
-                                tooltip: '扫描存储源',
-                                onPressed: () => _showScanMenu(menuContext),
-                                icon: const Icon(shadcn.LucideIcons.refreshCw),
-                              ),
+                              builder:
+                                  (menuContext) => IconButton(
+                                    key: _refreshButtonKey,
+                                    tooltip: '扫描存储源',
+                                    onPressed: () => _showScanMenu(menuContext),
+                                    icon: const Icon(
+                                      shadcn.LucideIcons.refreshCw,
+                                    ),
+                                  ),
                             ),
                   ),
                   IconButton(
@@ -209,12 +237,15 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
                               ),
                             )
                             : Builder(
-                              builder: (menuContext) => IconButton(
-                                key: _refreshButtonKey,
-                                tooltip: '扫描存储源',
-                                onPressed: () => _showScanMenu(menuContext),
-                                icon: const Icon(shadcn.LucideIcons.refreshCw),
-                              ),
+                              builder:
+                                  (menuContext) => IconButton(
+                                    key: _refreshButtonKey,
+                                    tooltip: '扫描存储源',
+                                    onPressed: () => _showScanMenu(menuContext),
+                                    icon: const Icon(
+                                      shadcn.LucideIcons.refreshCw,
+                                    ),
+                                  ),
                             ),
                   ),
                   IconButton(
