@@ -59,13 +59,16 @@ class ApiConstants {
   static const String storages = '$apiPrefix/storages';
   static const String storageExport = '$apiPrefix/storages/export';
   static const String storageImport = '$apiPrefix/storages/import';
-  static const String storageTestConnection = '$apiPrefix/storages/test-connection';
+  static const String storageTestConnection =
+      '$apiPrefix/storages/test-connection';
   static String storageDetail(int id) => '$apiPrefix/storages/$id';
   static String storageEnable(int id) => '$apiPrefix/storages/$id/enable';
   static String storageDisable(int id) => '$apiPrefix/storages/$id/disable';
   static String storageScan(int id) => '$apiPrefix/storages/$id/scan';
   static String storageScanProgress(int id) =>
       '$apiPrefix/storages/$id/scan/progress';
+  static String storageScanProgressStream(int id) =>
+      '$apiPrefix/storages/$id/scan/progress/stream';
   static String storageScanTasks(int id) =>
       '$apiPrefix/storages/$id/scan/tasks';
   static String storageBrowse(int id) => '$apiPrefix/storages/$id/browse';
@@ -73,8 +76,7 @@ class ApiConstants {
       '$apiPrefix/storages/$id/ai-tidy/preview';
   static String storageAiTidyApply(int id) =>
       '$apiPrefix/storages/$id/ai-tidy/apply';
-  static String storageBlacklist(int id) =>
-      '$apiPrefix/storages/$id/blacklist';
+  static String storageBlacklist(int id) => '$apiPrefix/storages/$id/blacklist';
   static String storageBlacklistAdd(int id) =>
       '$apiPrefix/storages/$id/blacklist/add';
   static String storageBlacklistRemove(int id) =>
@@ -91,7 +93,8 @@ class ApiConstants {
 
   // 下载直链
   static String downloadMovieUrl(int id) => '$apiPrefix/download/movie/$id/url';
-  static String downloadSourceUrl(int id) => '$apiPrefix/download/source/$id/url';
+  static String downloadSourceUrl(int id) =>
+      '$apiPrefix/download/source/$id/url';
 
   // 认证
   static const String authStatus = '$apiPrefix/auth/status';

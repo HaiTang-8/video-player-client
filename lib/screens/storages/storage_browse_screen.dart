@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -38,6 +39,9 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final browseState = ref.watch(browseProvider(widget.storageId));
+    final scanState = ref.watch(scanStateProvider);
+    final scanProgress = scanState.progresses[widget.storageId];
+    final isScanning = scanState.scanning.contains(widget.storageId);
     final storageName = widget.storage?.name ?? '目录浏览';
     final title =
         browseState.currentPath == '/'
@@ -140,6 +144,16 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
               path: browseState.currentPath,
               onCopy: () => _copyToClipboard(context, browseState.currentPath),
             ),
+            if (isScanning ||
+                (scanProgress != null && scanProgress.isCompleted))
+              _ScanProgressBar(
+                progress: scanProgress!,
+                isScanning: isScanning,
+                onCancel:
+                    () => ref
+                        .read(scanStateProvider.notifier)
+                        .cancelScan(widget.storageId),
+              ),
             Divider(
               height: 1,
               color: theme.dividerColor.withValues(alpha: 0.3),
@@ -280,23 +294,14 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
 
   Future<void> _startPathScan(String targetPath) async {
     final normalizedPath = targetPath.trim().isEmpty ? '/' : targetPath.trim();
-    final confirmed = await DialogUtils.showConfirmDialog(
+    await DialogUtils.showCustomDialog<void>(
       context: context,
-      title: '重新刮削目录',
-      content: '仅重新扫描并强制刮削该路径，不影响其他目录。\n\n路径：$normalizedPath',
-      confirmText: '开始',
-    );
-    if (confirmed != true || !mounted) return;
-
-    final (success, error) = await ref
-        .read(scanStateProvider.notifier)
-        .startScan(widget.storageId, forceScrape: true, path: normalizedPath);
-
-    if (!mounted) return;
-    DialogUtils.showToast(
-      context: context,
-      message: success ? '已开始重新刮削' : (error ?? '启动失败'),
-      isError: !success,
+      barrierDismissible: false,
+      builder:
+          (_) => _PathScanDialog(
+            storageId: widget.storageId,
+            path: normalizedPath,
+          ),
     );
   }
 
@@ -659,6 +664,476 @@ class _FileTile extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _ScanDialogPhase { confirm, scanning, done }
+
+class _PathScanDialog extends ConsumerStatefulWidget {
+  final int storageId;
+  final String path;
+
+  const _PathScanDialog({required this.storageId, required this.path});
+
+  @override
+  ConsumerState<_PathScanDialog> createState() => _PathScanDialogState();
+}
+
+class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
+  _ScanDialogPhase _phase = _ScanDialogPhase.confirm;
+  String? _error;
+  ScanProgress? _finalProgress;
+  int? _activeTaskId;
+  bool _waitingForTaskStart = false;
+
+  Future<void> _start() async {
+    setState(() {
+      _phase = _ScanDialogPhase.scanning;
+      _error = null;
+      _finalProgress = null;
+      _activeTaskId = null;
+      _waitingForTaskStart = true;
+    });
+    final result = await ref
+        .read(scanStateProvider.notifier)
+        .startPathScanWithSse(
+          widget.storageId,
+          forceScrape: true,
+          path: widget.path,
+        );
+    if (!mounted) return;
+    if (!result.success) {
+      setState(() {
+        _waitingForTaskStart = false;
+        _phase = _ScanDialogPhase.done;
+        _error = result.error ?? '启动失败';
+      });
+      return;
+    }
+
+    setState(() {
+      _waitingForTaskStart = false;
+      _activeTaskId = result.taskId;
+      if (_activeTaskId == null) {
+        _phase = _ScanDialogPhase.done;
+        _error = '未获取到扫描任务ID';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = shadcn.Theme.of(context);
+    final scanState = ref.watch(scanStateProvider);
+    final progress = scanState.progresses[widget.storageId];
+    final isScanning = scanState.scanning.contains(widget.storageId);
+
+    if (_phase == _ScanDialogPhase.scanning &&
+        !_waitingForTaskStart &&
+        _activeTaskId != null &&
+        !isScanning &&
+        progress != null &&
+        progress.taskId == _activeTaskId &&
+        !progress.isRunning) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _phase == _ScanDialogPhase.scanning) {
+          setState(() {
+            _phase = _ScanDialogPhase.done;
+            _finalProgress = progress;
+            if (progress.isFailed) _error = progress.error ?? '扫描失败';
+          });
+        }
+      });
+    }
+
+    final hasError = _error != null;
+    final titleIcon =
+        _phase == _ScanDialogPhase.done
+            ? (hasError
+                ? shadcn.LucideIcons.circleAlert
+                : shadcn.LucideIcons.circleCheckBig)
+            : (_phase == _ScanDialogPhase.confirm
+                ? shadcn.LucideIcons.folderSync
+                : shadcn.LucideIcons.loaderCircle);
+    final titleColor =
+        hasError
+            ? theme.colorScheme.destructive
+            : (_phase == _ScanDialogPhase.done
+                ? const Color(0xFF16A34A)
+                : theme.colorScheme.primary);
+
+    return shadcn.AlertDialog(
+      barrierColor: Colors.transparent,
+      surfaceOpacity: 1,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(titleIcon, color: titleColor, size: 22),
+          const SizedBox(width: 8),
+          Text(
+            _phase == _ScanDialogPhase.confirm
+                ? '重新刮削目录'
+                : _phase == _ScanDialogPhase.done
+                ? (_error != null ? '刮削失败' : '刮削完成')
+                : '正在刮削...',
+            style: theme.typography.large.copyWith(fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+      content: _buildContent(theme, progress),
+      actions: _buildActions(),
+    );
+  }
+
+  Widget _buildContent(shadcn.ThemeData theme, ScanProgress? progress) {
+    switch (_phase) {
+      case _ScanDialogPhase.confirm:
+        return SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '仅重新扫描并强制刮削该路径，不影响其他目录。',
+                style: theme.typography.small.copyWith(
+                  color: theme.colorScheme.mutedForeground,
+                ),
+              ),
+              const SizedBox(height: 14),
+              shadcn.SurfaceCard(
+                padding: const EdgeInsets.all(14),
+                borderRadius: BorderRadius.circular(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      shadcn.LucideIcons.folderSync,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '目标路径',
+                            style: theme.typography.small.copyWith(
+                              color: theme.colorScheme.mutedForeground,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          SelectableText(
+                            widget.path,
+                            style: theme.typography.small.copyWith(
+                              fontFamily: 'monospace',
+                              color: theme.colorScheme.foreground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      case _ScanDialogPhase.scanning:
+        return _buildProgressContent(theme, progress);
+      case _ScanDialogPhase.done:
+        final completedProgress = _finalProgress ?? progress;
+        return SizedBox(
+          width: 420,
+          child: shadcn.SurfaceCard(
+            padding: const EdgeInsets.all(14),
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  _error != null
+                      ? shadcn.LucideIcons.circleAlert
+                      : shadcn.LucideIcons.circleCheckBig,
+                  size: 18,
+                  color:
+                      _error != null
+                          ? theme.colorScheme.destructive
+                          : const Color(0xFF16A34A),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _error ??
+                            '已完成 ${completedProgress?.scannedFiles ?? 0} 个文件的刮削。',
+                        style: theme.typography.small.copyWith(
+                          color:
+                              _error != null
+                                  ? theme.colorScheme.destructive
+                                  : theme.colorScheme.foreground,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.path,
+                        style: theme.typography.small.copyWith(
+                          color: theme.colorScheme.mutedForeground,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+    }
+  }
+
+  Widget _buildProgressContent(shadcn.ThemeData theme, ScanProgress? progress) {
+    if (progress == null) {
+      return SizedBox(
+        width: 420,
+        child: shadcn.SurfaceCard(
+          padding: const EdgeInsets.all(14),
+          borderRadius: BorderRadius.circular(12),
+          child: Row(
+            children: [
+              const shadcn.CircularProgressIndicator(),
+              const SizedBox(width: 12),
+              Text(
+                '正在启动...',
+                style: theme.typography.small.copyWith(
+                  color: theme.colorScheme.foreground,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: 420,
+      child: shadcn.SurfaceCard(
+        padding: const EdgeInsets.all(14),
+        borderRadius: BorderRadius.circular(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(top: 2),
+                  child: shadcn.CircularProgressIndicator(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _scanStatusText(progress, true),
+                        style: theme.typography.small.copyWith(
+                          color: theme.colorScheme.foreground,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.path,
+                        style: theme.typography.small.copyWith(
+                          color: theme.colorScheme.mutedForeground,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (!progress.isDiscovering && progress.totalFiles > 0) ...[
+              const SizedBox(height: 14),
+              shadcn.LinearProgressIndicator(
+                value: progress.progress,
+                minHeight: 6,
+                borderRadius: BorderRadius.circular(999),
+                color: theme.colorScheme.primary,
+                backgroundColor: theme.colorScheme.muted,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildActions() {
+    switch (_phase) {
+      case _ScanDialogPhase.confirm:
+        return [
+          shadcn.OutlineButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          shadcn.PrimaryButton(
+            onPressed: _start,
+            leading: const Icon(shadcn.LucideIcons.refreshCw, size: 16),
+            child: const Text('开始'),
+          ),
+        ];
+      case _ScanDialogPhase.scanning:
+        return [
+          shadcn.OutlineButton(
+            onPressed: () async {
+              final result = await ref
+                  .read(scanStateProvider.notifier)
+                  .cancelScan(widget.storageId);
+              if (!mounted) return;
+              if (result.success) {
+                Navigator.pop(context);
+                return;
+              }
+              DialogUtils.showToast(
+                context: context,
+                message: result.error ?? '取消扫描失败',
+                isError: true,
+              );
+            },
+            leading: const Icon(shadcn.LucideIcons.x, size: 16),
+            child: const Text('取消扫描'),
+          ),
+        ];
+      case _ScanDialogPhase.done:
+        return [
+          shadcn.PrimaryButton(
+            onPressed: () => Navigator.pop(context),
+            leading: Icon(
+              _error != null
+                  ? shadcn.LucideIcons.circleAlert
+                  : shadcn.LucideIcons.circleCheck,
+              size: 16,
+            ),
+            child: const Text('关闭'),
+          ),
+        ];
+    }
+  }
+}
+
+class _ScanProgressBar extends StatelessWidget {
+  final ScanProgress progress;
+  final bool isScanning;
+  final VoidCallback onCancel;
+
+  const _ScanProgressBar({
+    required this.progress,
+    required this.isScanning,
+    required this.onCancel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = shadcn.Theme.of(context);
+    final isError = progress.error != null;
+    final accentColor =
+        isError
+            ? theme.colorScheme.destructive
+            : (isScanning
+                ? theme.colorScheme.primary
+                : const Color(0xFF16A34A));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: shadcn.SurfaceCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        borderRadius: BorderRadius.circular(12),
+        child: Row(
+          children: [
+            if (isScanning)
+              const SizedBox(
+                width: 16,
+                height: 16,
+                child: shadcn.CircularProgressIndicator(),
+              ),
+            if (!isScanning)
+              Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: Icon(
+                  isError
+                      ? shadcn.LucideIcons.circleAlert
+                      : shadcn.LucideIcons.circleCheckBig,
+                  size: 16,
+                  color: accentColor,
+                ),
+              ),
+            if (isScanning) const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _scanStatusText(progress, isScanning),
+                    style: theme.typography.small.copyWith(
+                      color:
+                          isError
+                              ? theme.colorScheme.destructive
+                              : theme.colorScheme.foreground,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (isScanning &&
+                      !progress.isDiscovering &&
+                      progress.totalFiles > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: shadcn.LinearProgressIndicator(
+                        value: progress.progress,
+                        minHeight: 4,
+                        borderRadius: BorderRadius.circular(999),
+                        color: accentColor,
+                        backgroundColor: theme.colorScheme.muted,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (isScanning)
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
+                child: shadcn.GhostButton(
+                  onPressed: onCancel,
+                  size: shadcn.ButtonSize.small,
+                  leading: const Icon(shadcn.LucideIcons.x, size: 14),
+                  child: const Text('取消'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _scanStatusText(ScanProgress progress, bool isScanning) {
+  if (!isScanning) {
+    return progress.error != null
+        ? '刮削失败: ${progress.error}'
+        : '刮削完成 (${progress.scannedFiles} 个文件)';
+  }
+  if (progress.isDiscovering) {
+    return progress.discoveredFiles > 0
+        ? '正在扫描... 已发现 ${progress.discoveredFiles} 个文件'
+        : '正在扫描目录...';
+  }
+  return '正在刮削 ${progress.scannedFiles}/${progress.totalFiles}';
 }
 
 class _PathBar extends StatelessWidget {

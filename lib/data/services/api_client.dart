@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'log_service.dart';
 
@@ -8,7 +10,8 @@ class AuthInterceptor extends Interceptor {
   final bool Function(RequestOptions options)? shouldRefreshOn401;
 
   bool _isRefreshing = false;
-  final List<({RequestOptions options, ErrorInterceptorHandler handler})> _pendingRequests = [];
+  final List<({RequestOptions options, ErrorInterceptorHandler handler})>
+  _pendingRequests = [];
 
   AuthInterceptor({
     required this.tokenGetter,
@@ -75,7 +78,9 @@ class AuthInterceptor extends Interceptor {
     }
 
     final path = err.requestOptions.path;
-    if (path.contains('/auth/refresh') || path.contains('/auth/login') || path.contains('/auth/setup')) {
+    if (path.contains('/auth/refresh') ||
+        path.contains('/auth/login') ||
+        path.contains('/auth/setup')) {
       handler.next(err);
       return;
     }
@@ -85,7 +90,10 @@ class AuthInterceptor extends Interceptor {
       return;
     }
 
-    final existingAuth = _getHeaderValue(err.requestOptions.headers, 'Authorization');
+    final existingAuth = _getHeaderValue(
+      err.requestOptions.headers,
+      'Authorization',
+    );
     if (existingAuth != null) {
       final v = existingAuth.toString().trimLeft().toLowerCase();
       if (!v.startsWith('bearer ')) {
@@ -130,7 +138,12 @@ class AuthInterceptor extends Interceptor {
       _pendingRequests.clear();
       handler.next(err);
       for (final req in pending) {
-        req.handler.next(DioException(requestOptions: req.options, error: 'Token refresh failed'));
+        req.handler.next(
+          DioException(
+            requestOptions: req.options,
+            error: 'Token refresh failed',
+          ),
+        );
       }
     }
   }
@@ -193,6 +206,38 @@ class ApiClient {
     } on DioException catch (e) {
       return _handleError(e);
     }
+  }
+
+  /// 打开服务端事件流
+  Stream<String> openEventStream(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    Duration? receiveTimeout,
+    CancelToken? cancelToken,
+  }) async* {
+    final response = await _dio.get<ResponseBody>(
+      path,
+      queryParameters: queryParameters,
+      cancelToken: cancelToken,
+      options: Options(
+        responseType: ResponseType.stream,
+        receiveTimeout: receiveTimeout,
+        headers: {'Accept': 'text/event-stream', 'Cache-Control': 'no-cache'},
+      ),
+    );
+
+    final body = response.data;
+    if (body == null) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        error: '响应流为空',
+      );
+    }
+
+    yield* body.stream
+        .map<List<int>>((chunk) => chunk)
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
   }
 
   /// POST 请求
@@ -359,7 +404,10 @@ class ApiClient {
     }
 
     // Avoid pretty/ANSI console output. Keep messages single-line & stable.
-    LogService.instance.error('ApiClient', 'API Error: $errorMessage (${e.type}) [${e.requestOptions.method} ${e.requestOptions.path}]');
+    LogService.instance.error(
+      'ApiClient',
+      'API Error: $errorMessage (${e.type}) [${e.requestOptions.method} ${e.requestOptions.path}]',
+    );
 
     onError?.call(errorMessage);
 

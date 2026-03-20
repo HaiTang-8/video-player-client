@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/models/models.dart';
 import '../data/services/api_client.dart';
@@ -396,8 +399,28 @@ class GlobalScanNotifier extends Notifier<GlobalScanState> {
 }
 
 class ScanStateNotifier extends Notifier<ScanState> {
+  final Set<int> _polling = {};
+  final Map<int, StreamSubscription<ScanProgress>> _liveSubscriptions = {};
+  final Map<int, CancelToken> _liveCancelTokens = {};
+  final Map<int, int> _autoDismissTaskIds = {};
+  static const _successDismissDelay = Duration(seconds: 3);
+
   @override
-  ScanState build() => ScanState();
+  ScanState build() {
+    ref.onDispose(() {
+      for (final subscription in _liveSubscriptions.values) {
+        subscription.cancel();
+      }
+      for (final cancelToken in _liveCancelTokens.values) {
+        if (!cancelToken.isCancelled) {
+          cancelToken.cancel('disposed');
+        }
+      }
+      _liveSubscriptions.clear();
+      _liveCancelTokens.clear();
+    });
+    return ScanState();
+  }
 
   Future<(bool success, String? error)> startScan(
     int storageId, {
@@ -414,13 +437,78 @@ class ScanStateNotifier extends Notifier<ScanState> {
     );
 
     if (response.isSuccess && response.data != null) {
-      state = state.copyWith(
-        progresses: {...state.progresses, storageId: response.data!},
-        scanning: {...state.scanning, storageId},
-      );
+      _cancelLiveProgressSubscription(storageId);
+      _autoDismissTaskIds.remove(storageId);
+      _updateScanState(storageId, response.data!, {
+        ...state.scanning,
+        storageId,
+      });
+      _pollProgress(storageId);
       return (true, null);
     }
     return (false, response.error ?? '启动扫描失败');
+  }
+
+  Future<({bool success, String? error, int? taskId})> startPathScanWithSse(
+    int storageId, {
+    required String path,
+    bool forceScrape = false,
+  }) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      return (success: false, error: '服务不可用', taskId: null);
+    }
+
+    final response = await service.startScan(
+      storageId,
+      forceScrape: forceScrape,
+      path: path,
+    );
+
+    if (response.isSuccess && response.data != null) {
+      _cancelLiveProgressSubscription(storageId);
+      _autoDismissTaskIds.remove(storageId);
+      _updateScanState(storageId, response.data!, {
+        ...state.scanning,
+        storageId,
+      });
+
+      final taskId = response.data!.taskId;
+      if (taskId > 0) {
+        _streamPathScanProgress(storageId, taskId);
+      } else {
+        _pollProgress(storageId);
+      }
+      return (success: true, error: null, taskId: taskId > 0 ? taskId : null);
+    }
+    return (success: false, error: response.error ?? '启动扫描失败', taskId: null);
+  }
+
+  void _pollProgress(int storageId) async {
+    if (_polling.contains(storageId)) return;
+    _polling.add(storageId);
+
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      _polling.remove(storageId);
+      return;
+    }
+
+    while (state.scanning.contains(storageId)) {
+      final response = await service.getScanProgress(storageId);
+      if (response.isSuccess && response.data != null) {
+        final progress = response.data!;
+        final newScanning = Set<int>.from(state.scanning);
+        if (!progress.isRunning) {
+          newScanning.remove(storageId);
+        }
+        _updateScanState(storageId, progress, newScanning);
+      }
+      if (!state.scanning.contains(storageId)) break;
+      await Future.delayed(const Duration(seconds: 1));
+    }
+
+    _polling.remove(storageId);
   }
 
   Future<void> refreshProgress(int storageId) async {
@@ -437,15 +525,153 @@ class ScanStateNotifier extends Notifier<ScanState> {
         newScanning.remove(storageId);
       }
 
-      state = state.copyWith(
-        progresses: {...state.progresses, storageId: progress},
-        scanning: newScanning,
-      );
+      _updateScanState(storageId, progress, newScanning);
     }
   }
 
   bool isScanning(int storageId) {
     return state.scanning.contains(storageId);
+  }
+
+  Future<({bool success, String? error})> cancelScan(int storageId) async {
+    final progress = state.progresses[storageId];
+    if (progress == null) {
+      return (success: false, error: '未找到扫描任务');
+    }
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      return (success: false, error: '服务不可用');
+    }
+    final response = await service.cancelScan(progress.taskId);
+    if (!response.isSuccess) {
+      final error = response.error ?? '取消扫描失败';
+      LogService.instance.warn(
+        'PathScanSse',
+        'Cancel scan failed for storage $storageId task ${progress.taskId}: $error',
+      );
+      return (success: false, error: error);
+    }
+    _removeProgress(storageId);
+    return (success: true, error: null);
+  }
+
+  void _streamPathScanProgress(int storageId, int taskId) {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      _pollProgress(storageId);
+      return;
+    }
+
+    _cancelLiveProgressSubscription(storageId);
+    final cancelToken = CancelToken();
+    _liveCancelTokens[storageId] = cancelToken;
+
+    final subscription = service
+        .streamScanProgress(storageId, taskId: taskId, cancelToken: cancelToken)
+        .listen(
+          (progress) {
+            final newScanning = Set<int>.from(state.scanning);
+            if (!progress.isRunning) {
+              newScanning.remove(storageId);
+            }
+            _updateScanState(storageId, progress, newScanning);
+            if (!newScanning.contains(storageId)) {
+              _cancelLiveProgressSubscription(storageId, cancelRequest: false);
+            }
+          },
+          onError: (error, stackTrace) {
+            LogService.instance.warn(
+              'PathScanSse',
+              'SSE failed for storage $storageId task $taskId: $error',
+            );
+            final shouldFallback =
+                state.scanning.contains(storageId) &&
+                state.progresses[storageId]?.taskId == taskId;
+            _cancelLiveProgressSubscription(storageId);
+            if (shouldFallback) {
+              _pollProgress(storageId);
+            }
+          },
+          onDone: () {
+            if (_liveCancelTokens[storageId] != cancelToken) return;
+            _cancelLiveProgressSubscription(storageId, cancelRequest: false);
+            if (state.scanning.contains(storageId)) {
+              _pollProgress(storageId);
+            }
+          },
+        );
+
+    _liveSubscriptions[storageId] = subscription;
+  }
+
+  void _updateScanState(
+    int storageId,
+    ScanProgress progress,
+    Set<int> scanning,
+  ) {
+    state = state.copyWith(
+      progresses: {...state.progresses, storageId: progress},
+      scanning: scanning,
+    );
+
+    if (scanning.contains(storageId)) {
+      _autoDismissTaskIds.remove(storageId);
+      return;
+    }
+
+    if (_shouldAutoDismiss(progress)) {
+      _scheduleAutoDismiss(progress);
+    } else {
+      _autoDismissTaskIds.remove(storageId);
+    }
+  }
+
+  bool _shouldAutoDismiss(ScanProgress progress) {
+    return progress.isCompleted && progress.error == null;
+  }
+
+  void _scheduleAutoDismiss(ScanProgress progress) {
+    final storageId = progress.storageId;
+    final taskId = progress.taskId;
+
+    if (_autoDismissTaskIds[storageId] == taskId) return;
+    _autoDismissTaskIds[storageId] = taskId;
+
+    Future.delayed(_successDismissDelay, () {
+      if (_autoDismissTaskIds[storageId] != taskId) return;
+
+      final latest = state.progresses[storageId];
+      if (latest == null ||
+          latest.taskId != taskId ||
+          state.scanning.contains(storageId) ||
+          !_shouldAutoDismiss(latest)) {
+        return;
+      }
+
+      _removeProgress(storageId);
+    });
+  }
+
+  void _removeProgress(int storageId) {
+    _cancelLiveProgressSubscription(storageId);
+    _autoDismissTaskIds.remove(storageId);
+    final newProgresses = Map<int, ScanProgress>.from(state.progresses)
+      ..remove(storageId);
+    final newScanning = Set<int>.from(state.scanning)..remove(storageId);
+    state = state.copyWith(progresses: newProgresses, scanning: newScanning);
+  }
+
+  void _cancelLiveProgressSubscription(
+    int storageId, {
+    bool cancelRequest = true,
+  }) {
+    final subscription = _liveSubscriptions.remove(storageId);
+    subscription?.cancel();
+
+    final cancelToken = _liveCancelTokens.remove(storageId);
+    if (cancelRequest && cancelToken != null && !cancelToken.isCancelled) {
+      cancelToken.cancel('cancelled');
+    }
   }
 }
 

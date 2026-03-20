@@ -1,3 +1,7 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+
 import '../models/models.dart';
 import '../../core/constants/api_constants.dart';
 import 'api_client.dart';
@@ -109,6 +113,37 @@ class StorageService {
       ApiConstants.storageScanProgress(storageId),
       fromJson: (json) => ScanProgress.fromJson(json as Map<String, dynamic>),
     );
+  }
+
+  Stream<ScanProgress> streamScanProgress(
+    int storageId, {
+    required int taskId,
+    CancelToken? cancelToken,
+  }) async* {
+    final dataLines = <String>[];
+
+    await for (final line in _client.openEventStream(
+      ApiConstants.storageScanProgressStream(storageId),
+      queryParameters: {'task_id': taskId},
+      receiveTimeout: const Duration(minutes: 10),
+      cancelToken: cancelToken,
+    )) {
+      if (line.isEmpty) {
+        if (dataLines.isEmpty) continue;
+        final payload = dataLines.join('\n');
+        dataLines.clear();
+        final decoded = jsonDecode(payload);
+        if (decoded is Map<String, dynamic>) {
+          yield ScanProgress.fromJson(decoded);
+        }
+        continue;
+      }
+
+      if (line.startsWith(':')) continue;
+      if (line.startsWith('data:')) {
+        dataLines.add(line.substring(5).trimLeft());
+      }
+    }
   }
 
   /// 获取扫描历史
