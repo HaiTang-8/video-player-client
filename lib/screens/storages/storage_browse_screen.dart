@@ -77,6 +77,11 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                       },
                     ),
                     IconButton(
+                      tooltip: '重新刮削当前目录',
+                      icon: const Icon(CupertinoIcons.arrow_clockwise_circle),
+                      onPressed: () => _startPathScan(browseState.currentPath),
+                    ),
+                    IconButton(
                       tooltip: '黑名单管理',
                       icon: const Icon(CupertinoIcons.nosign),
                       onPressed: () => _showBlacklistManager(),
@@ -108,6 +113,14 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                           browseState.currentPath,
                         );
                       },
+                    ),
+                    IconButton(
+                      tooltip: '重新刮削当前目录',
+                      icon: const Icon(
+                        CupertinoIcons.arrow_clockwise_circle,
+                        size: 20,
+                      ),
+                      onPressed: () => _startPathScan(browseState.currentPath),
                     ),
                     IconButton(
                       tooltip: '黑名单管理',
@@ -263,6 +276,28 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     if (applied == true) {
       await browseStorage(ref, widget.storageId, currentPath);
     }
+  }
+
+  Future<void> _startPathScan(String targetPath) async {
+    final normalizedPath = targetPath.trim().isEmpty ? '/' : targetPath.trim();
+    final confirmed = await DialogUtils.showConfirmDialog(
+      context: context,
+      title: '重新刮削目录',
+      content: '仅重新扫描并强制刮削该路径，不影响其他目录。\n\n路径：$normalizedPath',
+      confirmText: '开始',
+    );
+    if (confirmed != true || !mounted) return;
+
+    final (success, error) = await ref
+        .read(scanStateProvider.notifier)
+        .startScan(widget.storageId, forceScrape: true, path: normalizedPath);
+
+    if (!mounted) return;
+    DialogUtils.showToast(
+      context: context,
+      message: success ? '已开始重新刮削' : (error ?? '启动失败'),
+      isError: !success,
+    );
   }
 
   Future<void> _showFileInfo(BuildContext context, FileInfo file) async {
@@ -424,6 +459,21 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     _copyToClipboard(context, file.path);
                   },
                 ),
+                if (file.isDir)
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.arrow_clockwise_circle),
+                    title: const Text('重新刮削此目录'),
+                    subtitle: Text(
+                      '仅重新扫描并强制刮削 ${file.path}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _startPathScan(file.path);
+                    },
+                  ),
                 if (file.isDir)
                   ListTile(
                     leading: Icon(

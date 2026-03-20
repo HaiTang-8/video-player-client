@@ -44,7 +44,10 @@ class StorageService {
   }
 
   /// 禁用存储源
-  Future<ApiResponse<void>> disableStorage(int id, {bool hideMedia = false}) async {
+  Future<ApiResponse<void>> disableStorage(
+    int id, {
+    bool hideMedia = false,
+  }) async {
     return _client.post(
       ApiConstants.storageDisable(id),
       data: {'hide_media': hideMedia},
@@ -80,10 +83,22 @@ class StorageService {
   Future<ApiResponse<ScanProgress>> startScan(
     int storageId, {
     bool forceScrape = false,
+    String? path,
   }) async {
+    final payload = <String, dynamic>{};
+    if (forceScrape) {
+      payload['force_scrape'] = true;
+    }
+    final normalizedPath = path?.trim();
+    if (normalizedPath != null &&
+        normalizedPath.isNotEmpty &&
+        normalizedPath != '/') {
+      payload['path'] = normalizedPath;
+    }
+
     return _client.post<ScanProgress>(
       ApiConstants.storageScan(storageId),
-      data: forceScrape ? {'force_scrape': true} : null,
+      data: payload.isEmpty ? null : payload,
       fromJson: (json) => ScanProgress.fromJson(json as Map<String, dynamic>),
     );
   }
@@ -190,10 +205,7 @@ class StorageService {
     int pageSize = 10,
     String? keyword,
   }) async {
-    final queryParams = <String, dynamic>{
-      'page': page,
-      'page_size': pageSize,
-    };
+    final queryParams = <String, dynamic>{'page': page, 'page_size': pageSize};
     if (keyword != null && keyword.isNotEmpty) {
       queryParams['keyword'] = keyword;
     }
@@ -203,11 +215,14 @@ class StorageService {
       fromJson: (json) {
         final data = json as Map<String, dynamic>;
         final blacklist = data['blacklist'] as List? ?? [];
-        return blacklist.map((e) {
-          if (e is String) return e;
-          if (e is Map<String, dynamic>) return e['path'] as String? ?? '';
-          return e.toString();
-        }).where((e) => e.isNotEmpty).toList();
+        return blacklist
+            .map((e) {
+              if (e is String) return e;
+              if (e is Map<String, dynamic>) return e['path'] as String? ?? '';
+              return e.toString();
+            })
+            .where((e) => e.isNotEmpty)
+            .toList();
       },
     );
   }
@@ -221,7 +236,10 @@ class StorageService {
   }
 
   /// 从黑名单移除
-  Future<ApiResponse<void>> removeFromBlacklist(int storageId, String path) async {
+  Future<ApiResponse<void>> removeFromBlacklist(
+    int storageId,
+    String path,
+  ) async {
     return _client.post(
       ApiConstants.storageBlacklistRemove(storageId),
       data: {'path': path},
@@ -229,7 +247,10 @@ class StorageService {
   }
 
   /// 设置黑名单（批量操作）
-  Future<ApiResponse<void>> setBlacklist(int storageId, List<String> blacklist) async {
+  Future<ApiResponse<void>> setBlacklist(
+    int storageId,
+    List<String> blacklist,
+  ) async {
     return _client.put(
       ApiConstants.storageBlacklist(storageId),
       data: {'blacklist': blacklist},
@@ -260,8 +281,8 @@ class StorageService {
         'data': data,
         if (password != null && password.isNotEmpty) 'password': password,
       },
-      fromJson: (json) =>
-          StorageImportResult.fromJson(json as Map<String, dynamic>),
+      fromJson:
+          (json) => StorageImportResult.fromJson(json as Map<String, dynamic>),
     );
   }
 

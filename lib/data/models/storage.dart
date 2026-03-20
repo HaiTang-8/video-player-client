@@ -45,25 +45,27 @@ class Storage {
       enabled: json['enabled'] as bool? ?? true,
       hideWhenDisabled: json['hide_when_disabled'] as bool? ?? false,
       settings: parsedSettings,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'] as String)
-          : null,
-      updatedAt: json['updated_at'] != null
-          ? DateTime.tryParse(json['updated_at'] as String)
-          : null,
+      createdAt:
+          json['created_at'] != null
+              ? DateTime.tryParse(json['created_at'] as String)
+              : null,
+      updatedAt:
+          json['updated_at'] != null
+              ? DateTime.tryParse(json['updated_at'] as String)
+              : null,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'type': type,
-        'enabled': enabled,
-        'hide_when_disabled': hideWhenDisabled,
-        'settings': settings,
-        'created_at': createdAt?.toIso8601String(),
-        'updated_at': updatedAt?.toIso8601String(),
-      };
+    'id': id,
+    'name': name,
+    'type': type,
+    'enabled': enabled,
+    'hide_when_disabled': hideWhenDisabled,
+    'settings': settings,
+    'created_at': createdAt?.toIso8601String(),
+    'updated_at': updatedAt?.toIso8601String(),
+  };
 
   /// 获取类型显示名称
   String get typeDisplayName {
@@ -84,6 +86,7 @@ class Storage {
 class ScanProgress {
   final int taskId;
   final int storageId;
+  final String path;
   final String status;
   final String phase;
   final int discoveredFiles;
@@ -97,6 +100,7 @@ class ScanProgress {
   ScanProgress({
     required this.taskId,
     required this.storageId,
+    this.path = '/',
     required this.status,
     this.phase = '',
     this.discoveredFiles = 0,
@@ -112,19 +116,24 @@ class ScanProgress {
     return ScanProgress(
       taskId: json['task_id'] as int? ?? 0,
       storageId: json['storage_id'] as int? ?? 0,
+      path: json['path'] as String? ?? '/',
       status: json['status'] as String? ?? '',
       phase: json['phase'] as String? ?? '',
       discoveredFiles: json['discovered_files'] as int? ?? 0,
       totalFiles: json['total_files'] as int? ?? 0,
       scannedFiles: json['scanned_files'] as int? ?? 0,
       progress: (json['progress'] as num?)?.toDouble() ?? 0.0,
-      startedAt: json['started_at'] != null
-          ? DateTime.tryParse(json['started_at'] as String)
-          : null,
-      finishedAt: json['finished_at'] != null
-          ? DateTime.tryParse(json['finished_at'] as String)
-          : null,
-      error: json['error'] as String?,
+      startedAt:
+          json['started_at'] != null
+              ? DateTime.tryParse(json['started_at'] as String)
+              : null,
+      finishedAt:
+          (json['finished_at'] ?? json['completed_at']) != null
+              ? DateTime.tryParse(
+                (json['finished_at'] ?? json['completed_at']) as String,
+              )
+              : null,
+      error: json['error'] as String? ?? json['error_msg'] as String?,
     );
   }
 
@@ -184,9 +193,10 @@ class FileInfo {
       path: json['path'] as String? ?? '',
       isDir: json['is_dir'] as bool? ?? false,
       size: json['size'] as int?,
-      modTime: json['mod_time'] != null
-          ? DateTime.tryParse(json['mod_time'] as String)
-          : null,
+      modTime:
+          json['mod_time'] != null
+              ? DateTime.tryParse(json['mod_time'] as String)
+              : null,
     );
   }
 
@@ -224,7 +234,8 @@ class StorageImportResult {
     return StorageImportResult(
       successCount: json['success_count'] as int? ?? 0,
       skippedCount: json['skipped_count'] as int? ?? 0,
-      skippedNames: (json['skipped_names'] as List<dynamic>?)
+      skippedNames:
+          (json['skipped_names'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           [],

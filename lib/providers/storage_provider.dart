@@ -158,15 +158,14 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
   }
 
   Future<(bool success, StorageImportResult? result, String? error)>
-      importStorages({
-    required String data,
-    String? password,
-  }) async {
+  importStorages({required String data, String? password}) async {
     final service = ref.read(storageServiceProvider);
     if (service == null) return (false, null, '服务不可用');
 
-    final response =
-        await service.importStorages(data: data, password: password);
+    final response = await service.importStorages(
+      data: data,
+      password: password,
+    );
     if (response.isSuccess && response.data != null) {
       await loadStorages();
       return (true, response.data, null);
@@ -400,13 +399,18 @@ class ScanStateNotifier extends Notifier<ScanState> {
   @override
   ScanState build() => ScanState();
 
-  Future<bool> startScan(int storageId, {bool forceScrape = false}) async {
+  Future<(bool success, String? error)> startScan(
+    int storageId, {
+    bool forceScrape = false,
+    String? path,
+  }) async {
     final service = ref.read(storageServiceProvider);
-    if (service == null) return false;
+    if (service == null) return (false, '服务不可用');
 
     final response = await service.startScan(
       storageId,
       forceScrape: forceScrape,
+      path: path,
     );
 
     if (response.isSuccess && response.data != null) {
@@ -414,9 +418,9 @@ class ScanStateNotifier extends Notifier<ScanState> {
         progresses: {...state.progresses, storageId: response.data!},
         scanning: {...state.scanning, storageId},
       );
-      return true;
+      return (true, null);
     }
-    return false;
+    return (false, response.error ?? '启动扫描失败');
   }
 
   Future<void> refreshProgress(int storageId) async {
@@ -496,7 +500,10 @@ void _safeInvalidate(WidgetRef ref, provider) {
   try {
     ref.invalidate(provider);
   } catch (e) {
-    LogService.instance.warn('StorageProvider', 'Failed to invalidate provider: $e');
+    LogService.instance.warn(
+      'StorageProvider',
+      'Failed to invalidate provider: $e',
+    );
   }
 }
 
