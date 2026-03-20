@@ -21,13 +21,27 @@ class LibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
+  void _loadInitialData() {
+    ref.read(categoriesProvider.notifier).load();
+    ref.read(watchHistoryProvider.notifier).load();
+  }
+
+  void _reloadWatchHistory() {
+    final watchHistoryState = ref.read(watchHistoryProvider);
+    final notifier = ref.read(watchHistoryProvider.notifier);
+    if (watchHistoryState.items.isEmpty) {
+      notifier.load();
+      return;
+    }
+    notifier.refresh();
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(categoriesProvider.notifier).load();
-      ref.read(watchHistoryProvider.notifier).load();
+      _loadInitialData();
     });
   }
 
@@ -37,10 +51,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       if (previous != next && next != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          ref.read(categoriesProvider.notifier).load();
-          ref.read(watchHistoryProvider.notifier).load();
+          _loadInitialData();
         });
       }
+    });
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      final becameAuthenticated =
+          previous?.status != AuthStatus.authenticated &&
+          next.status == AuthStatus.authenticated;
+      final authDisabled = previous?.authEnabled == true && !next.authEnabled;
+      if (!becameAuthenticated && !authDisabled) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _reloadWatchHistory();
+      });
     });
 
     final categoriesState = ref.watch(categoriesProvider);
@@ -49,34 +73,35 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     return Scaffold(
       backgroundColor: colors.cardBackground,
-      appBar: isDesktop
-          ? DesktopTitleBar(
-              title: const Text('媒体库'),
-              centerTitle: true,
-              actions: [
-                IconButton(
-                  icon: const Icon(LucideIcons.search),
-                  onPressed: () => context.push('/search'),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.settings),
-                  onPressed: () => context.push('/settings'),
-                ),
-              ],
-            )
-          : AppBar(
-              title: const Text('媒体库'),
-              actions: [
-                IconButton(
-                  icon: const Icon(LucideIcons.search),
-                  onPressed: () => context.push('/search'),
-                ),
-                IconButton(
-                  icon: const Icon(LucideIcons.settings),
-                  onPressed: () => context.push('/settings'),
-                ),
-              ],
-            ),
+      appBar:
+          isDesktop
+              ? DesktopTitleBar(
+                title: const Text('媒体库'),
+                centerTitle: true,
+                actions: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.search),
+                    onPressed: () => context.push('/search'),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.settings),
+                    onPressed: () => context.push('/settings'),
+                  ),
+                ],
+              )
+              : AppBar(
+                title: const Text('媒体库'),
+                actions: [
+                  IconButton(
+                    icon: const Icon(LucideIcons.search),
+                    onPressed: () => context.push('/search'),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.settings),
+                    onPressed: () => context.push('/settings'),
+                  ),
+                ],
+              ),
       body: DesktopSmoothScroll(
         child: RefreshIndicator(
           onRefresh: () async {
@@ -105,17 +130,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     // 过滤掉空分类和 recent 分类（最近观看由 WatchHistoryRow 单独处理）
-    final nonEmptyCategories = state.categories
-        .where((c) => c.count > 0 && c.id != 'recent')
-        .toList();
+    final nonEmptyCategories =
+        state.categories.where((c) => c.count > 0 && c.id != 'recent').toList();
 
     final watchHistoryState = ref.watch(watchHistoryProvider);
-    final hasWatchHistory = watchHistoryState.items.isNotEmpty;
+    final showWatchHistoryRow =
+        watchHistoryState.isLoading ||
+        watchHistoryState.error != null ||
+        watchHistoryState.items.isNotEmpty;
 
     final downloadState = ref.watch(downloadManagerProvider);
     final hasLocalMedia = downloadState.completedTasks.isNotEmpty;
 
-    if (nonEmptyCategories.isEmpty && !hasWatchHistory && !hasLocalMedia) {
+    if (nonEmptyCategories.isEmpty && !showWatchHistoryRow && !hasLocalMedia) {
       return const EmptyWidget(
         message: '暂无媒体内容\n请先添加存储源并扫描',
         icon: Icons.movie_outlined,
@@ -125,7 +152,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     // 计算特殊行数量：最近观看 + 本地影片
     int specialRowCount = 0;
-    if (hasWatchHistory) specialRowCount++;
+    if (showWatchHistoryRow) specialRowCount++;
     if (hasLocalMedia) specialRowCount++;
 
     return ListView.builder(
@@ -134,11 +161,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       itemCount: nonEmptyCategories.length + specialRowCount,
       itemBuilder: (context, index) {
         // 第一项显示最近观看
-        if (hasWatchHistory && index == 0) {
+        if (showWatchHistoryRow && index == 0) {
           return const WatchHistoryRow();
         }
         // 第二项（或第一项如果没有观看历史）显示本地影片
-        final localMediaIndex = hasWatchHistory ? 1 : 0;
+        final localMediaIndex = showWatchHistoryRow ? 1 : 0;
         if (hasLocalMedia && index == localMediaIndex) {
           return const LocalMediaRow();
         }

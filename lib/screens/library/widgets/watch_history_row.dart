@@ -29,8 +29,8 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     // 客户端「最近观看」不需要合并模式：按记录逐条展示
     final groups = state.groupedItems(mergeEpisodes: false);
 
-    // 无数据时不显示
-    if (!state.isLoading && groups.isEmpty) {
+    // 无数据且无错误时不显示
+    if (!state.isLoading && state.error == null && groups.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -136,13 +136,17 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth - _horizontalPadding * 2;
-        final maxItemCount = ((availableWidth + _itemSpacing) /
-                (_desktopMinItemWidth + _itemSpacing))
-            .floor();
-        final bool shouldShrink = groups.length > maxItemCount && maxItemCount > 0;
-        final itemWidth = shouldShrink
-            ? (availableWidth - (maxItemCount - 1) * _itemSpacing) / maxItemCount
-            : _desktopMinItemWidth;
+        final maxItemCount =
+            ((availableWidth + _itemSpacing) /
+                    (_desktopMinItemWidth + _itemSpacing))
+                .floor();
+        final bool shouldShrink =
+            groups.length > maxItemCount && maxItemCount > 0;
+        final itemWidth =
+            shouldShrink
+                ? (availableWidth - (maxItemCount - 1) * _itemSpacing) /
+                    maxItemCount
+                : _desktopMinItemWidth;
         final imageHeight = itemWidth * 9 / 16;
         final textScaler = MediaQuery.textScalerOf(context);
         final textAreaHeight = textScaler.scale(40) + 2 + textScaler.scale(16);
@@ -154,7 +158,9 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
             height: listHeight,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: _horizontalPadding),
+              padding: const EdgeInsets.symmetric(
+                horizontal: _horizontalPadding,
+              ),
               itemCount: groups.length,
               separatorBuilder: (_, _) => const SizedBox(width: _itemSpacing),
               itemBuilder: (context, index) {
@@ -233,7 +239,9 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   String? get _imagePath {
     final mediaInfo = _primaryItem.mediaInfo;
     final episodeInfo = mediaInfo?.episodeInfo;
-    if (_isEpisode && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
+    if (_isEpisode &&
+        episodeInfo?.stillPath != null &&
+        episodeInfo!.stillPath!.isNotEmpty) {
       return episodeInfo.stillPath;
     }
     return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
@@ -252,7 +260,8 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
         parts.add('第${episodeInfo.seasonNumber}季');
       }
       parts.add('第${episodeInfo.episodeNumber}集');
-      if (episodeInfo.episodeName != null && episodeInfo.episodeName!.isNotEmpty) {
+      if (episodeInfo.episodeName != null &&
+          episodeInfo.episodeName!.isNotEmpty) {
         parts.add(episodeInfo.episodeName!);
       }
       return parts.join(' ');
@@ -346,7 +355,10 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                                     color: Colors.black45,
                                     child: FractionallySizedBox(
                                       alignment: Alignment.centerLeft,
-                                      widthFactor: _primaryItem.progress.clamp(0.0, 1.0),
+                                      widthFactor: _primaryItem.progress.clamp(
+                                        0.0,
+                                        1.0,
+                                      ),
                                       child: Container(
                                         color: const Color(0xFF3D5BF6),
                                       ),
@@ -421,7 +433,11 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
     return Container(
       color: theme.colorScheme.surfaceContainerHighest,
       child: Center(
-        child: Icon(Icons.movie_outlined, size: 40, color: theme.colorScheme.outline),
+        child: Icon(
+          Icons.movie_outlined,
+          size: 40,
+          color: theme.colorScheme.outline,
+        ),
       ),
     );
   }

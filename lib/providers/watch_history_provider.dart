@@ -30,7 +30,10 @@ class WatchHistoryState {
   }
 }
 
-final watchHistoryProvider = NotifierProvider<WatchHistoryNotifier, WatchHistoryState>(WatchHistoryNotifier.new);
+final watchHistoryProvider =
+    NotifierProvider<WatchHistoryNotifier, WatchHistoryState>(
+      WatchHistoryNotifier.new,
+    );
 
 class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
   Timer? _debounceTimer;
@@ -69,19 +72,17 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
     if (ref.read(serverUrlProvider) != serverUrl) return;
 
     if (response.isSuccess && response.data != null) {
-      state = state.copyWith(
-        items: response.data!,
-        isLoading: false,
-      );
+      state = state.copyWith(items: response.data!, isLoading: false);
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: response.error,
-      );
+      state = state.copyWith(isLoading: false, error: response.error);
     }
   }
 
   Future<void> refresh({int limit = 20}) async {
+    if (state.items.isEmpty) {
+      await load(limit: limit);
+      return;
+    }
     if (!_isAuthenticated) return;
     final serverUrl = ref.read(serverUrlProvider);
     final service = ref.read(mediaServiceProvider);
@@ -93,7 +94,9 @@ class WatchHistoryNotifier extends Notifier<WatchHistoryState> {
     if (ref.read(serverUrlProvider) != serverUrl) return;
 
     if (response.isSuccess && response.data != null) {
-      state = state.copyWith(items: response.data!);
+      state = state.copyWith(items: response.data!, error: null);
+    } else {
+      state = state.copyWith(error: response.error);
     }
   }
 
@@ -155,9 +158,6 @@ extension WatchHistoryStateGrouping on WatchHistoryState {
   /// 按剧集媒体合并后的列表（用于 UI 展示）
   List<WatchHistoryGroup> groupedItems({bool mergeEpisodes = true}) {
     // 这里集中处理合并逻辑，避免各页面重复实现
-    return WatchHistoryGroup.groupItems(
-      items,
-      mergeEpisodes: mergeEpisodes,
-    );
+    return WatchHistoryGroup.groupItems(items, mergeEpisodes: mergeEpisodes);
   }
 }
