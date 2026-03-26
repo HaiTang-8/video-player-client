@@ -83,6 +83,27 @@ class Storage {
 }
 
 /// 扫描进度模型
+class TaskLogEntry {
+  final String time;
+  final String level;
+  final String message;
+
+  const TaskLogEntry({
+    required this.time,
+    required this.level,
+    required this.message,
+  });
+
+  factory TaskLogEntry.fromJson(Map<String, dynamic> json) {
+    return TaskLogEntry(
+      time: json['time'] as String? ?? '',
+      level: json['level'] as String? ?? 'info',
+      message: json['message'] as String? ?? '',
+    );
+  }
+}
+
+/// 扫描进度模型
 class ScanProgress {
   final int taskId;
   final int storageId;
@@ -96,6 +117,7 @@ class ScanProgress {
   final DateTime? startedAt;
   final DateTime? finishedAt;
   final String? error;
+  final List<TaskLogEntry> logs;
 
   ScanProgress({
     required this.taskId,
@@ -110,9 +132,39 @@ class ScanProgress {
     this.startedAt,
     this.finishedAt,
     this.error,
+    this.logs = const [],
   });
 
   factory ScanProgress.fromJson(Map<String, dynamic> json) {
+    // 解析任务日志：当前后端已将 logs 预解析为 JSON 数组返回（List），
+    // 下方 String 分支仅用于兼容旧版后端直接返回 JSON 字符串的情况。
+    final rawLogs = json['logs'];
+    List<TaskLogEntry> parsedLogs = const [];
+    if (rawLogs is List) {
+      parsedLogs = rawLogs
+          .whereType<Map>()
+          .map(
+            (entry) => TaskLogEntry.fromJson(Map<String, dynamic>.from(entry)),
+          )
+          .toList(growable: false);
+    } else if (rawLogs is String && rawLogs.isNotEmpty) {
+      // 兼容旧版后端：logs 字段可能为未预解析的 JSON 字符串
+      try {
+        final decoded = jsonDecode(rawLogs);
+        if (decoded is List) {
+          parsedLogs = decoded
+              .whereType<Map>()
+              .map(
+                (entry) =>
+                    TaskLogEntry.fromJson(Map<String, dynamic>.from(entry)),
+              )
+              .toList(growable: false);
+        }
+      } catch (_) {
+        parsedLogs = const [];
+      }
+    }
+
     return ScanProgress(
       taskId: json['task_id'] as int? ?? 0,
       storageId: json['storage_id'] as int? ?? 0,
@@ -134,6 +186,7 @@ class ScanProgress {
               )
               : null,
       error: json['error'] as String? ?? json['error_msg'] as String?,
+      logs: parsedLogs,
     );
   }
 

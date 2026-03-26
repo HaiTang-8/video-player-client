@@ -733,7 +733,12 @@ void _safeInvalidate(WidgetRef ref, provider) {
   }
 }
 
-Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
+Future<void> _loadBrowseStorage(
+  WidgetRef ref,
+  int storageId,
+  String path, {
+  required bool forceRefresh,
+}) async {
   final service = ref.read(storageServiceProvider);
   if (service == null) return;
 
@@ -747,7 +752,10 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
   );
   _safeInvalidate(ref, browseProvider(storageId));
 
-  final response = await service.browseStorage(storageId, path: path);
+  final response =
+      forceRefresh
+          ? await service.refreshBrowseStorage(storageId, path: path)
+          : await service.browseStorage(storageId, path: path);
 
   // 如果在等待期间用户发起了新的浏览请求，忽略旧响应，避免覆盖最新状态（尤其是 blacklist）。
   if (_browseRequestSeq[storageId] != requestSeq) return;
@@ -770,6 +778,18 @@ Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
     );
   }
   _safeInvalidate(ref, browseProvider(storageId));
+}
+
+Future<void> browseStorage(WidgetRef ref, int storageId, String path) async {
+  await _loadBrowseStorage(ref, storageId, path, forceRefresh: false);
+}
+
+Future<void> refreshBrowseStorage(
+  WidgetRef ref,
+  int storageId,
+  String path,
+) async {
+  await _loadBrowseStorage(ref, storageId, path, forceRefresh: true);
 }
 
 Future<void> enterDirectory(

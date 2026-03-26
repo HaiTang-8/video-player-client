@@ -72,8 +72,8 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     IconButton(
                       tooltip: '刷新',
                       icon: const Icon(CupertinoIcons.refresh),
-                      onPressed: () {
-                        browseStorage(
+                      onPressed: () async {
+                        await refreshBrowseStorage(
                           ref,
                           widget.storageId,
                           browseState.currentPath,
@@ -110,8 +110,8 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     IconButton(
                       tooltip: '刷新',
                       icon: const Icon(CupertinoIcons.refresh, size: 20),
-                      onPressed: () {
-                        browseStorage(
+                      onPressed: () async {
+                        await refreshBrowseStorage(
                           ref,
                           widget.storageId,
                           browseState.currentPath,
@@ -181,12 +181,15 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     }
 
     final items = [...state.files];
-    items.sort((a, b) {
-      if (a.isDir != b.isDir) {
-        return a.isDir ? -1 : 1;
-      }
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-    });
+    final storageType = widget.storage?.type.toLowerCase();
+    if (storageType != 'openlist') {
+      items.sort((a, b) {
+        if (a.isDir != b.isDir) {
+          return a.isDir ? -1 : 1;
+        }
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
+    }
 
     if (items.isEmpty) {
       return const EmptyWidget(message: '该目录为空', icon: CupertinoIcons.folder);
@@ -684,6 +687,34 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
   ScanProgress? _finalProgress;
   int? _activeTaskId;
   bool _waitingForTaskStart = false;
+  final ScrollController _logScrollController = ScrollController();
+  int _lastLogCount = 0;
+
+  @override
+  void dispose() {
+    _logScrollController.dispose();
+    super.dispose();
+  }
+
+  /// 当日志条目数量发生变化时，自动滚动到底部。
+  /// 通过 ref.listen 在 build 外触发，避免在 build 中产生副作用。
+  void _onScanStateChanged(ScanState? _, ScanState next) {
+    final progress =
+        _phase == _ScanDialogPhase.done
+            ? (_finalProgress ?? next.progresses[widget.storageId])
+            : next.progresses[widget.storageId];
+    final count = progress?.logs.length ?? 0;
+    if (count == 0 || count == _lastLogCount) return;
+    _lastLogCount = count;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_logScrollController.hasClients) return;
+      _logScrollController.animateTo(
+        _logScrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   Future<void> _start() async {
     setState(() {
@@ -723,9 +754,17 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = shadcn.Theme.of(context);
+
+    // 用 ref.listen 监听状态变化，将副作用（自动滚动日志）移出 build 纯渲染逻辑
+    ref.listen(scanStateProvider, _onScanStateChanged);
+
     final scanState = ref.watch(scanStateProvider);
     final progress = scanState.progresses[widget.storageId];
     final isScanning = scanState.scanning.contains(widget.storageId);
+    final displayProgress =
+        _phase == _ScanDialogPhase.done
+            ? (_finalProgress ?? progress)
+            : progress;
 
     if (_phase == _ScanDialogPhase.scanning &&
         !_waitingForTaskStart &&
@@ -779,7 +818,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
           ),
         ],
       ),
-      content: _buildContent(theme, progress),
+      content: _buildContent(theme, displayProgress),
       actions: _buildActions(),
     );
   }
@@ -788,7 +827,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
     switch (_phase) {
       case _ScanDialogPhase.confirm:
         return SizedBox(
-          width: 420,
+          width: 540,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -842,54 +881,65 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
       case _ScanDialogPhase.scanning:
         return _buildProgressContent(theme, progress);
       case _ScanDialogPhase.done:
-        final completedProgress = _finalProgress ?? progress;
+        final completedProgress = progress;
         return SizedBox(
-          width: 420,
-          child: shadcn.SurfaceCard(
-            padding: const EdgeInsets.all(14),
-            borderRadius: BorderRadius.circular(12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  _error != null
-                      ? shadcn.LucideIcons.circleAlert
-                      : shadcn.LucideIcons.circleCheckBig,
-                  size: 18,
-                  color:
+          width: 540,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              shadcn.SurfaceCard(
+                padding: const EdgeInsets.all(14),
+                borderRadius: BorderRadius.circular(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
                       _error != null
-                          ? theme.colorScheme.destructive
-                          : const Color(0xFF16A34A),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _error ??
-                            '已完成 ${completedProgress?.scannedFiles ?? 0} 个文件的刮削。',
-                        style: theme.typography.small.copyWith(
-                          color:
-                              _error != null
-                                  ? theme.colorScheme.destructive
-                                  : theme.colorScheme.foreground,
-                          fontWeight: FontWeight.w500,
-                        ),
+                          ? shadcn.LucideIcons.circleAlert
+                          : shadcn.LucideIcons.circleCheckBig,
+                      size: 18,
+                      color:
+                          _error != null
+                              ? theme.colorScheme.destructive
+                              : const Color(0xFF16A34A),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _error ?? _scanCompletionText(completedProgress),
+                            style: theme.typography.small.copyWith(
+                              color:
+                                  _error != null
+                                      ? theme.colorScheme.destructive
+                                      : theme.colorScheme.foreground,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.path,
+                            style: theme.typography.small.copyWith(
+                              color: theme.colorScheme.mutedForeground,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.path,
-                        style: theme.typography.small.copyWith(
-                          color: theme.colorScheme.mutedForeground,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              _buildLogsPanel(
+                theme,
+                completedProgress?.logs ?? const [],
+                emptyText: '本次任务没有返回详细日志。',
+              ),
+            ],
           ),
         );
     }
@@ -898,81 +948,237 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
   Widget _buildProgressContent(shadcn.ThemeData theme, ScanProgress? progress) {
     if (progress == null) {
       return SizedBox(
-        width: 420,
-        child: shadcn.SurfaceCard(
-          padding: const EdgeInsets.all(14),
-          borderRadius: BorderRadius.circular(12),
-          child: Row(
-            children: [
-              const shadcn.CircularProgressIndicator(),
-              const SizedBox(width: 12),
-              Text(
-                '正在启动...',
-                style: theme.typography.small.copyWith(
-                  color: theme.colorScheme.foreground,
-                ),
+        width: 540,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            shadcn.SurfaceCard(
+              padding: const EdgeInsets.all(14),
+              borderRadius: BorderRadius.circular(12),
+              child: Row(
+                children: [
+                  const shadcn.CircularProgressIndicator(),
+                  const SizedBox(width: 12),
+                  Text(
+                    '正在启动...',
+                    style: theme.typography.small.copyWith(
+                      color: theme.colorScheme.foreground,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            _buildLogsPanel(theme, const [], emptyText: '任务创建后，这里会持续显示详细过程。'),
+          ],
         ),
       );
     }
 
     return SizedBox(
-      width: 420,
-      child: shadcn.SurfaceCard(
-        padding: const EdgeInsets.all(14),
-        borderRadius: BorderRadius.circular(12),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+      width: 540,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          shadcn.SurfaceCard(
+            padding: const EdgeInsets.all(14),
+            borderRadius: BorderRadius.circular(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 2),
-                  child: shadcn.CircularProgressIndicator(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 2),
+                      child: shadcn.CircularProgressIndicator(),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _scanStatusText(progress, true),
+                            style: theme.typography.small.copyWith(
+                              color: theme.colorScheme.foreground,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            widget.path,
+                            style: theme.typography.small.copyWith(
+                              color: theme.colorScheme.mutedForeground,
+                              fontFamily: 'monospace',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _scanStatusText(progress, true),
-                        style: theme.typography.small.copyWith(
-                          color: theme.colorScheme.foreground,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        widget.path,
-                        style: theme.typography.small.copyWith(
-                          color: theme.colorScheme.mutedForeground,
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ],
+                if (!progress.isDiscovering && progress.totalFiles > 0) ...[
+                  const SizedBox(height: 14),
+                  shadcn.LinearProgressIndicator(
+                    value: progress.progress,
+                    minHeight: 6,
+                    borderRadius: BorderRadius.circular(999),
+                    color: theme.colorScheme.primary,
+                    backgroundColor: theme.colorScheme.muted,
                   ),
-                ),
+                ],
               ],
             ),
-            if (!progress.isDiscovering && progress.totalFiles > 0) ...[
-              const SizedBox(height: 14),
-              shadcn.LinearProgressIndicator(
-                value: progress.progress,
-                minHeight: 6,
-                borderRadius: BorderRadius.circular(999),
-                color: theme.colorScheme.primary,
-                backgroundColor: theme.colorScheme.muted,
-              ),
-            ],
-          ],
-        ),
+          ),
+          const SizedBox(height: 12),
+          _buildLogsPanel(theme, progress.logs, emptyText: '任务已启动，详细过程会显示在这里。'),
+        ],
       ),
     );
+  }
+
+  Widget _buildLogsPanel(
+    shadcn.ThemeData theme,
+    List<TaskLogEntry> logs, {
+    required String emptyText,
+  }) {
+    return shadcn.SurfaceCard(
+      padding: const EdgeInsets.all(14),
+      borderRadius: BorderRadius.circular(12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                shadcn.LucideIcons.fileText,
+                size: 16,
+                color: theme.colorScheme.mutedForeground,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '任务日志',
+                style: theme.typography.small.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.foreground,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${logs.length} 条',
+                style: theme.typography.small.copyWith(
+                  color: theme.colorScheme.mutedForeground,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (logs.isEmpty)
+            Text(
+              emptyText,
+              style: theme.typography.small.copyWith(
+                color: theme.colorScheme.mutedForeground,
+              ),
+            )
+          else
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: ListView.separated(
+                controller: _logScrollController,
+                shrinkWrap: true,
+                itemCount: logs.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final entry = logs[index];
+                  final accent = _logAccentColor(theme, entry.level);
+                  return Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: accent.withValues(alpha: 0.18)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(_logIcon(entry.level), size: 14, color: accent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${entry.time} · ${_logLevelLabel(entry.level)}',
+                                style: theme.typography.small.copyWith(
+                                  color: theme.colorScheme.mutedForeground,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                entry.message,
+                                style: theme.typography.small.copyWith(
+                                  color: theme.colorScheme.foreground,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _logAccentColor(shadcn.ThemeData theme, String level) {
+    switch (level.toLowerCase()) {
+      case 'error':
+        return theme.colorScheme.destructive;
+      case 'warn':
+        return const Color(0xFFD97706);
+      default:
+        return theme.colorScheme.primary;
+    }
+  }
+
+  IconData _logIcon(String level) {
+    switch (level.toLowerCase()) {
+      case 'error':
+        return shadcn.LucideIcons.circleAlert;
+      case 'warn':
+        return shadcn.LucideIcons.circleAlert;
+      default:
+        return shadcn.LucideIcons.info;
+    }
+  }
+
+  String _logLevelLabel(String level) {
+    switch (level.toLowerCase()) {
+      case 'error':
+        return '错误';
+      case 'warn':
+        return '提醒';
+      default:
+        return '进度';
+    }
+  }
+
+  String _scanCompletionText(ScanProgress? progress) {
+    if (progress == null) return '本次刮削已结束。';
+    if (progress.status == 'completed_with_errors') {
+      return '已完成处理，但有部分条目需要留意下方日志。';
+    }
+    return '已完成 ${progress.scannedFiles} 个文件的处理。';
   }
 
   List<Widget> _buildActions() {
@@ -1124,16 +1330,20 @@ class _ScanProgressBar extends StatelessWidget {
 
 String _scanStatusText(ScanProgress progress, bool isScanning) {
   if (!isScanning) {
-    return progress.error != null
-        ? '刮削失败: ${progress.error}'
-        : '刮削完成 (${progress.scannedFiles} 个文件)';
+    if (progress.error != null) {
+      return '处理未完成，请查看下方日志了解原因';
+    }
+    if (progress.status == 'completed_with_errors') {
+      return '已完成处理，但有部分条目需要留意';
+    }
+    return '目录处理完成';
   }
   if (progress.isDiscovering) {
     return progress.discoveredFiles > 0
-        ? '正在扫描... 已发现 ${progress.discoveredFiles} 个文件'
-        : '正在扫描目录...';
+        ? '正在检查目录，已发现 ${progress.discoveredFiles} 个文件'
+        : '正在检查目录...';
   }
-  return '正在刮削 ${progress.scannedFiles}/${progress.totalFiles}';
+  return '正在更新媒体资料 ${progress.scannedFiles}/${progress.totalFiles}';
 }
 
 class _PathBar extends StatelessWidget {

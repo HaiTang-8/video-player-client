@@ -184,6 +184,22 @@ class StorageService {
     );
   }
 
+  /// 强制刷新目录缓存并重新获取目录
+  Future<ApiResponse<List<FileInfo>>> refreshBrowseStorage(
+    int storageId, {
+    String path = '/',
+  }) async {
+    return _client.post<List<FileInfo>>(
+      ApiConstants.storageBrowseRefresh(storageId),
+      queryParameters: {'path': path},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => FileInfo.fromJson(e as Map<String, dynamic>))
+                  .toList(),
+    );
+  }
+
   /// AI 整理预览：只生成建议方案，不会修改文件
   Future<ApiResponse<AiTidyPlan>> aiTidyPreview(
     int storageId, {
