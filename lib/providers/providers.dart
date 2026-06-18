@@ -11,4 +11,5 @@ export 'watch_history_view_provider.dart';
 export 'database_backup_provider.dart';
 export 'download_provider.dart';
 export 'smooth_scroll_provider.dart';
+export 'library_settings_provider.dart';
 export 'window_border_provider.dart';

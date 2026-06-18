@@ -21,7 +21,8 @@ class AppConstants {
   static const String localeKey = 'locale';
   static const String seekDurationKey = 'playback_seek_duration';
   static const String playbackSpeedKey = 'playback_speed';
-  static const String watchHistoryMergeEnabledKey = 'watch_history_merge_enabled';
+  static const String watchHistoryMergeEnabledKey =
+      'watch_history_merge_enabled';
 
   // aria2 配置
   static const String aria2EnabledKey = 'aria2_enabled';
@@ -30,7 +31,8 @@ class AppConstants {
 
   // 多线程下载配置
   static const String downloadThreadCountKey = 'download_thread_count';
-  static const String downloadMultiThreadEnabledKey = 'download_multi_thread_enabled';
+  static const String downloadMultiThreadEnabledKey =
+      'download_multi_thread_enabled';
   static const String downloadEngineKey = 'download_engine';
 
   // 认证 token（按 serverId 隔离）
@@ -39,6 +41,7 @@ class AppConstants {
 
   // 桌面端平滑滚动
   static const String smoothScrollEnabledKey = 'smooth_scroll_enabled';
+  static const String libraryDesktopRowCountKey = 'library_desktop_row_count';
 
   // 分页
   static const int defaultPageSize = 20;

@@ -30,18 +30,21 @@ class SettingsScreen extends ConsumerWidget {
     final currentServer = serverState.currentServer;
     final aria2Config = ref.watch(aria2ConfigProvider);
     final isDesktop = WindowControls.isDesktop;
-    final smoothScrollEnabled = isDesktop ? ref.watch(smoothScrollEnabledProvider) : false;
+    final smoothScrollEnabled =
+        isDesktop ? ref.watch(smoothScrollEnabledProvider) : false;
+    final librarySettings = ref.watch(librarySettingsProvider);
 
     return Scaffold(
-      appBar: isDesktop
-          ? DesktopAppBar(
-              title: const Text('设置'),
-              onBack: () => context.pop(),
-            )
-          : MobileAppBar(
-              title: const Text('设置'),
-              onBack: () => context.pop(),
-            ),
+      appBar:
+          isDesktop
+              ? DesktopAppBar(
+                title: const Text('设置'),
+                onBack: () => context.pop(),
+              )
+              : MobileAppBar(
+                title: const Text('设置'),
+                onBack: () => context.pop(),
+              ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
@@ -50,7 +53,9 @@ class SettingsScreen extends ConsumerWidget {
             isDark,
             children: [
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.globe,
                 iconColor: Colors.blue,
                 title: '服务器管理',
@@ -65,7 +70,9 @@ class SettingsScreen extends ConsumerWidget {
             isDark,
             children: [
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.paintbrush,
                 iconColor: Colors.purple,
                 title: '主题',
@@ -75,12 +82,33 @@ class SettingsScreen extends ConsumerWidget {
               if (isDesktop) ...[
                 _buildDivider(isDark),
                 _buildSwitchTile(
-                  theme, isDark,
+                  theme,
+                  isDark,
                   icon: CupertinoIcons.rectangle_on_rectangle_angled,
                   iconColor: Colors.indigo,
                   title: '平滑滚动',
                   value: smoothScrollEnabled,
-                  onChanged: (_) => ref.read(smoothScrollEnabledProvider.notifier).toggle(),
+                  onChanged:
+                      (_) =>
+                          ref
+                              .read(smoothScrollEnabledProvider.notifier)
+                              .toggle(),
+                ),
+                _buildDivider(isDark),
+                _buildListTile(
+                  context,
+                  theme,
+                  isDark,
+                  icon: CupertinoIcons.square_grid_2x2,
+                  iconColor: Colors.teal,
+                  title: '媒体库展示行数',
+                  subtitle: '${librarySettings.desktopRowCount} 行',
+                  onTap:
+                      () => _showLibraryRowCountDialog(
+                        context,
+                        ref,
+                        librarySettings.desktopRowCount,
+                      ),
                 ),
               ],
             ],
@@ -91,11 +119,16 @@ class SettingsScreen extends ConsumerWidget {
             isDark,
             children: [
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.arrow_down_circle,
                 iconColor: Colors.green,
                 title: '下载设置',
-                subtitle: Aria2Manager.instance.isRunning ? '内置 aria2' : (aria2Config.enabled ? '外部 aria2' : '多线程下载'),
+                subtitle:
+                    Aria2Manager.instance.isRunning
+                        ? '内置 aria2'
+                        : (aria2Config.enabled ? '外部 aria2' : '多线程下载'),
                 onTap: () => context.push('/aria2-settings'),
               ),
             ],
@@ -106,7 +139,9 @@ class SettingsScreen extends ConsumerWidget {
             isDark,
             children: [
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.archivebox,
                 iconColor: Colors.orange,
                 title: '数据库备份',
@@ -114,7 +149,9 @@ class SettingsScreen extends ConsumerWidget {
               ),
               _buildDivider(isDark),
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.folder,
                 iconColor: Colors.cyan,
                 title: '存储空间',
@@ -122,7 +159,9 @@ class SettingsScreen extends ConsumerWidget {
               ),
               _buildDivider(isDark),
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.doc_text_search,
                 iconColor: Colors.indigo,
                 title: '应用日志',
@@ -136,7 +175,9 @@ class SettingsScreen extends ConsumerWidget {
             isDark,
             children: [
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.info,
                 iconColor: Colors.grey,
                 title: '版本',
@@ -147,21 +188,26 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 showChevron: false,
               ),
-              if (Platform.isWindows || Platform.isAndroid || Platform.isMacOS) ...[
+              if (Platform.isWindows ||
+                  Platform.isAndroid ||
+                  Platform.isMacOS) ...[
                 _buildDivider(isDark),
                 _UpdateCheckTile(isDark: isDark),
               ],
               _buildDivider(isDark),
               _buildListTile(
-                context, theme, isDark,
+                context,
+                theme,
+                isDark,
                 icon: CupertinoIcons.doc_text,
                 iconColor: Colors.teal,
                 title: '开源许可',
-                onTap: () => showLicensePage(
-                  context: context,
-                  applicationName: AppConstants.appName,
-                  applicationVersion: versionAsync.value ?? '',
-                ),
+                onTap:
+                    () => showLicensePage(
+                      context: context,
+                      applicationName: AppConstants.appName,
+                      applicationVersion: versionAsync.value ?? '',
+                    ),
               ),
             ],
           ),
@@ -294,10 +340,7 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          CupertinoSwitch(
-            value: value,
-            onChanged: onChanged,
-          ),
+          CupertinoSwitch(value: value, onChanged: onChanged),
         ],
       ),
     );
@@ -346,6 +389,41 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (selected != null) {
       ref.read(themeModeProvider.notifier).setThemeMode(selected);
+    }
+  }
+
+  void _showLibraryRowCountDialog(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) async {
+    final selected = await DialogUtils.showSelectionDialog<int>(
+      context: context,
+      title: '媒体库展示行数',
+      options: [
+        SelectionOption(
+          value: 1,
+          label: '1 行',
+          icon: shadcn.LucideIcons.rows2,
+          description: '分类首页更紧凑',
+        ),
+        SelectionOption(
+          value: 2,
+          label: '2 行',
+          icon: shadcn.LucideIcons.grid2x2,
+          description: '展示更多内容',
+        ),
+        SelectionOption(
+          value: 3,
+          label: '3 行',
+          icon: shadcn.LucideIcons.grid3x3,
+          description: '最大化首页预览',
+        ),
+      ],
+      currentValue: current,
+    );
+    if (selected != null) {
+      ref.read(librarySettingsProvider.notifier).setDesktopRowCount(selected);
     }
   }
 }
@@ -418,12 +496,17 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
                   color: Colors.blue.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: isLoading
-                    ? const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(CupertinoIcons.arrow_clockwise, size: 18, color: Colors.blue),
+                child:
+                    isLoading
+                        ? const Padding(
+                          padding: EdgeInsets.all(6),
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(
+                          CupertinoIcons.arrow_clockwise,
+                          size: 18,
+                          color: Colors.blue,
+                        ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -437,9 +520,10 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
               Text(
                 subtitle,
                 style: theme.textTheme.bodyMedium?.copyWith(
-                  color: updateState.status == UpdateStatus.available
-                      ? Colors.blue
-                      : theme.colorScheme.onSurfaceVariant,
+                  color:
+                      updateState.status == UpdateStatus.available
+                          ? Colors.blue
+                          : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               if (updateState.status == UpdateStatus.available) ...[
@@ -471,25 +555,27 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
 
   void _showUpdateDialog(ReleaseInfo info) async {
     // 更新内容不做截断，确保 Windows/Android 弹窗可以完整展示
-    final content = info.releaseNotes != null && info.releaseNotes!.isNotEmpty
-        ? info.releaseNotes!
-        : '有新版本可用';
+    final content =
+        info.releaseNotes != null && info.releaseNotes!.isNotEmpty
+            ? info.releaseNotes!
+            : '有新版本可用';
     // 仅在 Windows/Android 使用可滚动内容区域，避免过长文本撑爆弹窗
     final bool useScrollableContent = Platform.isWindows || Platform.isAndroid;
     // 限制弹窗内容最大高度，并启用内部滚动，保证长文本可读且布局稳定
-    final Widget? contentWidget = useScrollableContent
-        ? ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.65,
-            ),
-            child: Scrollbar(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(right: 8),
-                child: Text(content),
+    final Widget? contentWidget =
+        useScrollableContent
+            ? ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.65,
               ),
-            ),
-          )
-        : null;
+              child: Scrollbar(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text(content),
+                ),
+              ),
+            )
+            : null;
 
     final confirmed = await DialogUtils.showConfirmDialog(
       context: context,

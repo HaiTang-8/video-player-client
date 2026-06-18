@@ -46,7 +46,7 @@ class MediaPosterRow extends ConsumerWidget {
     this.onItemTap,
     this.itemKeyPrefix = 'poster',
     this.useDesktopGrid = false,
-    this.desktopRowCount = 2,
+    this.desktopRowCount = 1,
     this.itemBuilder,
     this.itemCount,
   });
@@ -78,7 +78,11 @@ class MediaPosterRow extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 20, color: iconColor ?? theme.colorScheme.primary),
+              Icon(
+                icon,
+                size: 20,
+                color: iconColor ?? theme.colorScheme.primary,
+              ),
               const SizedBox(width: 8),
             ],
             Text(
@@ -131,7 +135,10 @@ class MediaPosterRow extends ConsumerWidget {
         return SizedBox(
           height: listHeight,
           child: Center(
-            child: Text('暂无内容', style: TextStyle(color: theme.colorScheme.outline)),
+            child: Text(
+              '暂无内容',
+              style: TextStyle(color: theme.colorScheme.outline),
+            ),
           ),
         );
       }
@@ -170,7 +177,11 @@ class MediaPosterRow extends ConsumerWidget {
     );
   }
 
-  Widget _buildDesktopGrid(BuildContext context, ThemeData theme, int actualItemCount) {
+  Widget _buildDesktopGrid(
+    BuildContext context,
+    ThemeData theme,
+    int actualItemCount,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth - horizontalPadding * 2;
@@ -192,7 +203,10 @@ class MediaPosterRow extends ConsumerWidget {
           return SizedBox(
             height: 180,
             child: Center(
-              child: Text('暂无内容', style: TextStyle(color: theme.colorScheme.outline)),
+              child: Text(
+                '暂无内容',
+                style: TextStyle(color: theme.colorScheme.outline),
+              ),
             ),
           );
         }
@@ -203,8 +217,10 @@ class MediaPosterRow extends ConsumerWidget {
             .clamp(1, 100);
         final itemWidth =
             (availableWidth - (itemsPerRow - 1) * itemSpacing) / itemsPerRow;
-        final displayCount =
-            (itemsPerRow * desktopRowCount).clamp(0, actualItemCount);
+        final displayCount = (itemsPerRow * desktopRowCount).clamp(
+          0,
+          actualItemCount,
+        );
         final actualItemHeight = itemWidth / 0.48;
 
         return Padding(
@@ -225,7 +241,9 @@ class MediaPosterRow extends ConsumerWidget {
                 width: itemWidth,
                 height: actualItemHeight,
                 child: LibraryPosterCard(
-                  key: ValueKey('${itemKeyPrefix}_${item.type.name}_${item.id}'),
+                  key: ValueKey(
+                    '${itemKeyPrefix}_${item.type.name}_${item.id}',
+                  ),
                   item: item,
                   width: itemWidth,
                   onTap: onItemTap != null ? () => onItemTap!(item) : null,
