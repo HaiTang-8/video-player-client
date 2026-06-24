@@ -76,6 +76,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void>? _activeSeekOperation;
   int _seekRequestVersion = 0;
   final List<StreamSubscription> _subscriptions = [];
+  late final Future<void> _playerNetworkConfigured;
 
   @override
   void initState() {
@@ -87,11 +88,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         receiveTimeout: const Duration(seconds: 10),
       ),
     );
-    _player = Player();
+    _player = Player(
+      configuration: const PlayerConfiguration(
+        bufferSize: 256 * 1024 * 1024,
+      ),
+    );
     _controller = VideoController(_player);
     _routeInitialPosition = widget.initialPosition;
     _initEpisodeIndex();
-    _configurePlayerNetwork();
+    _playerNetworkConfigured = _configurePlayerNetwork();
     _setupPlayerListeners();
     _prepareInitialPlayback();
     // 移动端默认进入全屏模式
@@ -100,16 +105,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  void _configurePlayerNetwork() {
+  Future<void> _configurePlayerNetwork() async {
     final platform = _player.platform;
     if (platform is NativePlayer) {
       // 配置 HTTP 流自动重连（暂停后恢复播放时需要）
-      platform.setProperty(
+      await platform.setProperty(
         'stream-lavf-o',
         'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5',
       );
       // 增加网络超时时间
-      platform.setProperty('network-timeout', '30');
+      await platform.setProperty('network-timeout', '30');
+      await platform.setProperty('cache', 'yes');
+      await platform.setProperty('demuxer-max-back-bytes', '64MiB');
+      await platform.setProperty('cache-secs', '30');
+      await platform.setProperty('cache-pause', 'yes');
+      await platform.setProperty('cache-pause-wait', '3');
     }
   }
 
@@ -191,6 +201,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _prepareInitialPlayback() async {
     if (_initialLoadStarted) return;
     _initialLoadStarted = true;
+    try {
+      await _playerNetworkConfigured;
+    } catch (e) {
+      LogService.instance.warn(
+        'PlayerScreen',
+        'Failed to configure player network: $e',
+      );
+    }
+    if (!mounted || _isDisposing) return;
 
     // 非剧集场景直接走原加载逻辑
     if (widget.type != 'episode') {
