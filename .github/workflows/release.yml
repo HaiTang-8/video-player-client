@@ -24,7 +24,7 @@ jobs:
           flutter doctor -v
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - run: flutter build windows --release --build-name=${{ steps.version.outputs.VERSION }}
       - name: Install Inno Setup
         run: choco install innosetup -y
@@ -59,7 +59,7 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - run: flutter build macos --release --build-name=${{ steps.version.outputs.VERSION }}
       - name: Create DMG
         run: |
@@ -135,7 +135,7 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
 
       - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-name=${{ steps.version.outputs.VERSION }}
 
@@ -162,7 +162,7 @@ jobs:
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - run: flutter pub get --enforce-lockfile
+      - run: flutter pub get
       - run: flutter build ios --release --no-codesign --build-name=${{ steps.version.outputs.VERSION }}
       - name: Create IPA
         run: |
