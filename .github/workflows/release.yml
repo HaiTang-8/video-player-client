@@ -98,7 +98,14 @@ jobs:
 
       - name: Setup Android SDK components
         run: |
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"
+          for attempt in 1 2 3; do
+            if yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"; then
+              exit 0
+            fi
+            rm -rf "$ANDROID_HOME/ndk/27.0.12077973"
+            sleep 10
+          done
+          exit 1
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
