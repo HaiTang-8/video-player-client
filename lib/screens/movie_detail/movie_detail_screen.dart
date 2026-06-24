@@ -51,6 +51,18 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
       DetailBackgroundPaletteMode.fullImage;
 
+  WatchProgressKey get _watchProgressKey => (
+    mediaType: 'movie',
+    mediaId: widget.movieId,
+    episodeId: null,
+    seasonId: null,
+  );
+
+  WatchHistoryItem? get _currentWatchHistory {
+    final local = ref.watch(watchProgressProvider)[_watchProgressKey];
+    return local ?? _watchHistory;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -67,8 +79,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
     if (!mounted) return;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
+      ref
+          .read(watchProgressProvider.notifier)
+          .upsert(_watchProgressKey, resp.data!);
       setState(() => _watchHistory = resp.data);
     } else {
+      ref.read(watchProgressProvider.notifier).remove(_watchProgressKey);
       setState(() => _watchHistory = null);
     }
   }
@@ -862,7 +878,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
       mode: _mobileBackgroundPaletteMode,
     );
-    final history = _watchHistory;
+    final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {
       final pos = history.position;
@@ -1195,7 +1211,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
       mode: _mobileBackgroundPaletteMode,
     );
-    final history = _watchHistory;
+    final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {
       final pos = history.position;

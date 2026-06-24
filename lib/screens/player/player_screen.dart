@@ -506,6 +506,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           position: position.inSeconds,
           duration: duration.inSeconds,
         );
+        _publishWatchProgress(position, duration);
       } else if (widget.type == 'episode' && widget.tvShowId != null) {
         final episodeId = _currentEpisode?.id ?? widget.id;
         await service.updateWatchProgress(
@@ -515,10 +516,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           position: position.inSeconds,
           duration: duration.inSeconds,
         );
+        _publishWatchProgress(position, duration, episodeId: episodeId);
       }
       _lastSavedPosition = position;
     } catch (e) {
       LogService.instance.warn('PlayerScreen', 'Failed to save progress: $e');
+    }
+  }
+
+  void _publishWatchProgress(
+    Duration position,
+    Duration duration, {
+    int? episodeId,
+  }) {
+    if (duration.inSeconds <= 0) return;
+    if (widget.type == 'movie') {
+      ref
+          .read(watchProgressProvider.notifier)
+          .upsertFromPlayback(
+            mediaType: 'movie',
+            mediaId: widget.id,
+            position: position.inSeconds,
+            duration: duration.inSeconds,
+          );
+      return;
+    }
+    if (widget.type == 'episode' && widget.tvShowId != null) {
+      ref
+          .read(watchProgressProvider.notifier)
+          .upsertFromPlayback(
+            mediaType: 'tv',
+            mediaId: widget.tvShowId!,
+            episodeId: episodeId ?? _currentEpisode?.id ?? widget.id,
+            seasonId: widget.seasonId,
+            position: position.inSeconds,
+            duration: duration.inSeconds,
+          );
     }
   }
 
@@ -581,6 +614,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       final service = _mediaService;
       if (service == null) return;
+      _publishWatchProgress(position, duration);
 
       // dispose 阶段不 await：用 ignore() 明确表示“故意不等待”的 Future。
       if (widget.type == 'movie') {

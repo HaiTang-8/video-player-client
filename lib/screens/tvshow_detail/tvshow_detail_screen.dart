@@ -57,6 +57,64 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
       DetailBackgroundPaletteMode.fullImage;
 
+  WatchProgressKey? get _seasonWatchProgressKey {
+    final seasonId = _selectedSeasonId;
+    if (seasonId == null) return null;
+    return (
+      mediaType: 'tv',
+      mediaId: widget.tvShowId,
+      episodeId: null,
+      seasonId: seasonId,
+    );
+  }
+
+  WatchHistoryItem? get _currentWatchHistory {
+    final key = _seasonWatchProgressKey;
+    if (key == null) return _watchHistory;
+    final local = ref.watch(watchProgressProvider)[key];
+    return local ?? _watchHistory;
+  }
+
+  int? _episodeNumberForHistory(WatchHistoryItem history) {
+    final info = history.mediaInfo?.episodeInfo;
+    if (info != null) return info.episodeNumber;
+    return _episodeForHistory(history)?.episodeNumber;
+  }
+
+  Episode? _episodeForHistory(WatchHistoryItem history) {
+    final episodeId = history.episodeId;
+    final seasonId = _selectedSeasonId;
+    if (episodeId == null || seasonId == null) return null;
+
+    final tvShow =
+        ref.read(tvShowDetailProvider(widget.tvShowId)).asData?.value;
+    final seasons = tvShow?.seasons;
+    if (seasons != null && _selectedSeasonIndex < seasons.length) {
+      final episodes = seasons[_selectedSeasonIndex].episodes;
+      if (episodes != null) {
+        for (final episode in episodes) {
+          if (episode.id == episodeId) return episode;
+        }
+      }
+    }
+
+    final episodes =
+        ref
+            .read(
+              seasonEpisodesProvider((
+                tvShowId: widget.tvShowId,
+                seasonId: seasonId,
+              )),
+            )
+            .asData
+            ?.value;
+    if (episodes == null) return null;
+    for (final episode in episodes) {
+      if (episode.id == episodeId) return episode;
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,12 +129,19 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       tmdbId: _tmdbId,
     );
     if (!mounted) return;
+    final key = _seasonWatchProgressKey;
     if (resp.isSuccess && resp.data != null && !resp.data!.completed) {
+      if (key != null) {
+        ref.read(watchProgressProvider.notifier).upsert(key, resp.data!);
+      }
       setState(() {
         _watchHistory = resp.data;
         _hasAutoScrolled = false;
       });
     } else {
+      if (key != null) {
+        ref.read(watchProgressProvider.notifier).remove(key);
+      }
       setState(() {
         _watchHistory = null;
         _hasAutoScrolled = false;
@@ -130,7 +195,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       return;
     }
 
-    final history = _watchHistory;
+    final history = _currentWatchHistory;
     if (history == null || history.episodeId == null) {
       return;
     }
@@ -1239,14 +1304,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
       mode: _mobileBackgroundPaletteMode,
     );
-    final history = _watchHistory;
+    final history = _currentWatchHistory;
     String buttonText = '播放';
-    if (history != null && history.mediaInfo?.episodeInfo != null) {
-      final ep = history.mediaInfo!.episodeInfo!;
+    if (history != null) {
+      final episodeNumber = _episodeNumberForHistory(history);
       final pos = history.position;
       final m = (pos ~/ 60).toString().padLeft(2, '0');
       final s = (pos % 60).toString().padLeft(2, '0');
-      buttonText = '第${ep.episodeNumber}集 $m:$s';
+      buttonText =
+          episodeNumber != null ? '第$episodeNumber集 $m:$s' : '续播 $m:$s';
     }
     return SizedBox(
       width: double.infinity,
@@ -1621,14 +1687,15 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       imageUrl: _mobileBackgroundImageUrl,
       mode: _mobileBackgroundPaletteMode,
     );
-    final history = _watchHistory;
+    final history = _currentWatchHistory;
     String buttonText = '播放';
-    if (history != null && history.mediaInfo?.episodeInfo != null) {
-      final ep = history.mediaInfo!.episodeInfo!;
+    if (history != null) {
+      final episodeNumber = _episodeNumberForHistory(history);
       final pos = history.position;
       final m = (pos ~/ 60).toString().padLeft(2, '0');
       final s = (pos % 60).toString().padLeft(2, '0');
-      buttonText = '第${ep.episodeNumber}集 $m:$s';
+      buttonText =
+          episodeNumber != null ? '第$episodeNumber集 $m:$s' : '续播 $m:$s';
     }
     return Material(
       color: buttonBackground,
@@ -1662,14 +1729,26 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   }
 
   Future<void> _playFromHistory(BuildContext context) async {
-    final history = _watchHistory;
-    if (history != null &&
-        history.episodeId != null &&
-        history.mediaInfo?.episodeInfo != null) {
-      final ep = history.mediaInfo!.episodeInfo!;
+    final history = _currentWatchHistory;
+    if (history != null && history.episodeId != null) {
+      final info = history.mediaInfo?.episodeInfo;
+      final episode = _episodeForHistory(history);
+      final seasonId = info?.seasonId ?? _selectedSeasonId;
+      if (seasonId == null) return;
+      final tvShowName =
+          ref.read(tvShowDetailProvider(widget.tvShowId)).asData?.value?.name;
+      final title =
+          episode != null
+              ? tvShowName != null
+                  ? '$tvShowName - ${episode.displayTitle}'
+                  : episode.displayTitle
+              : null;
       await context.push(
-        '/player/episode/${widget.tvShowId}/${ep.seasonId}/${history.episodeId}',
-        extra: {'position': history.position},
+        '/player/episode/${widget.tvShowId}/$seasonId/${history.episodeId}',
+        extra: {
+          'position': history.position,
+          if (title != null) 'title': title,
+        },
       );
       if (!mounted) return;
       if (_selectedSeasonId != null) {
