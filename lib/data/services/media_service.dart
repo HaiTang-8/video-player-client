@@ -15,13 +15,12 @@ class MediaService {
   }) async {
     return _client.get<List<MediaItem>>(
       ApiConstants.libraryPosters,
-      queryParameters: {
-        'page': page,
-        'page_size': pageSize,
-      },
-      fromJson: (json) => (json as List)
-          .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      queryParameters: {'page': page, 'page_size': pageSize},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -34,13 +33,12 @@ class MediaService {
   }) async {
     return _client.get<List<Movie>>(
       ApiConstants.movies,
-      queryParameters: {
-        'page': page,
-        'page_size': pageSize,
-      },
-      fromJson: (json) => (json as List)
-          .map((e) => Movie.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      queryParameters: {'page': page, 'page_size': pageSize},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => Movie.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -57,9 +55,11 @@ class MediaService {
     return _client.get<List<Movie>>(
       ApiConstants.movieSearch,
       queryParameters: {'q': query},
-      fromJson: (json) => (json as List)
-          .map((e) => Movie.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => Movie.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -115,13 +115,12 @@ class MediaService {
   }) async {
     return _client.get<List<TvShow>>(
       ApiConstants.tvShows,
-      queryParameters: {
-        'page': page,
-        'page_size': pageSize,
-      },
-      fromJson: (json) => (json as List)
-          .map((e) => TvShow.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      queryParameters: {'page': page, 'page_size': pageSize},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => TvShow.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -143,25 +142,29 @@ class MediaService {
         // 解析 seasons，将嵌套的 season 对象和 episodes 提取出来
         List<Season>? seasons;
         if (seasonsData != null) {
-          seasons = seasonsData.map((item) {
-            final seasonItem = item as Map<String, dynamic>;
-            final seasonData = seasonItem['season'] as Map<String, dynamic>;
-            final episodesData = seasonItem['episodes'] as List<dynamic>?;
+          seasons =
+              seasonsData.map((item) {
+                final seasonItem = item as Map<String, dynamic>;
+                final seasonData = seasonItem['season'] as Map<String, dynamic>;
+                final episodesData = seasonItem['episodes'] as List<dynamic>?;
 
-            // 将 episodes 注入到 season 数据中
-            final seasonWithEpisodes = Map<String, dynamic>.from(seasonData);
-            if (episodesData != null) {
-              seasonWithEpisodes['episodes'] = episodesData;
-            }
+                // 将 episodes 注入到 season 数据中
+                final seasonWithEpisodes = Map<String, dynamic>.from(
+                  seasonData,
+                );
+                if (episodesData != null) {
+                  seasonWithEpisodes['episodes'] = episodesData;
+                }
 
-            return Season.fromJson(seasonWithEpisodes);
-          }).toList();
+                return Season.fromJson(seasonWithEpisodes);
+              }).toList();
         }
 
         // 创建 TvShow 并注入 seasons 和 storage_name
         final tvShowWithSeasons = Map<String, dynamic>.from(tvShowData);
         if (seasons != null) {
-          tvShowWithSeasons['seasons'] = seasons.map((s) => s.toJson()).toList();
+          tvShowWithSeasons['seasons'] =
+              seasons.map((s) => s.toJson()).toList();
         }
         if (storageName != null) {
           tvShowWithSeasons['storage_name'] = storageName;
@@ -177,9 +180,11 @@ class MediaService {
     return _client.get<List<TvShow>>(
       ApiConstants.tvShowSearch,
       queryParameters: {'q': query},
-      fromJson: (json) => (json as List)
-          .map((e) => TvShow.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => TvShow.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -194,10 +199,7 @@ class MediaService {
     int page = 1,
     int pageSize = 20,
   }) async {
-    final params = <String, dynamic>{
-      'page': page,
-      'page_size': pageSize,
-    };
+    final params = <String, dynamic>{'page': page, 'page_size': pageSize};
     if (query != null && query.isNotEmpty) params['q'] = query;
     if (category != null && category.isNotEmpty && category != '全部') {
       params['category'] = category;
@@ -216,9 +218,11 @@ class MediaService {
     return _client.get<List<MediaItem>>(
       ApiConstants.librarySearch,
       queryParameters: params,
-      fromJson: (json) => (json as List)
-          .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -226,9 +230,11 @@ class MediaService {
   Future<ApiResponse<List<Season>>> getTvShowSeasons(int tvShowId) async {
     return _client.get<List<Season>>(
       ApiConstants.tvShowSeasons(tvShowId),
-      fromJson: (json) => (json as List)
-          .map((e) => Season.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => Season.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -239,9 +245,11 @@ class MediaService {
   ) async {
     return _client.get<List<Episode>>(
       ApiConstants.tvShowEpisodes(tvShowId, seasonId),
-      fromJson: (json) => (json as List)
-          .map((e) => Episode.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => Episode.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -264,9 +272,11 @@ class MediaService {
   ) async {
     return _client.get<List<SourceGroup>>(
       ApiConstants.seasonSourceGroups(tvShowId, seasonId),
-      fromJson: (json) => (json as List)
-          .map((e) => SourceGroup.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => SourceGroup.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -342,9 +352,11 @@ class MediaService {
   Future<ApiResponse<List<CategoryStats>>> getCategories() async {
     return _client.get<List<CategoryStats>>(
       ApiConstants.libraryCategories,
-      fromJson: (json) => (json as List)
-          .map((e) => CategoryStats.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => CategoryStats.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -361,9 +373,11 @@ class MediaService {
         'page': page,
         'page_size': pageSize,
       },
-      fromJson: (json) => (json as List)
-          .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => MediaItem.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 
@@ -376,9 +390,13 @@ class MediaService {
     return _client.get<List<WatchHistoryItem>>(
       ApiConstants.historyRecent,
       queryParameters: {'limit': limit},
-      fromJson: (json) => (json as List)
-          .map((e) => WatchHistoryItem.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map(
+                    (e) => WatchHistoryItem.fromJson(e as Map<String, dynamic>),
+                  )
+                  .toList(),
     );
   }
 
@@ -425,11 +443,9 @@ class MediaService {
   }) async {
     return _client.get<WatchHistoryItem>(
       ApiConstants.historyGet(mediaType, mediaId),
-      queryParameters: {
-        if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId,
-      },
-      fromJson: (json) =>
-          WatchHistoryItem.fromJson(json as Map<String, dynamic>),
+      queryParameters: {if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId},
+      fromJson:
+          (json) => WatchHistoryItem.fromJson(json as Map<String, dynamic>),
     );
   }
 
@@ -440,8 +456,8 @@ class MediaService {
   }) async {
     return _client.get<WatchHistoryItem>(
       ApiConstants.historyEpisodeProgress(tvShowId, episodeId),
-      fromJson: (json) =>
-          WatchHistoryItem.fromJson(json as Map<String, dynamic>),
+      fromJson:
+          (json) => WatchHistoryItem.fromJson(json as Map<String, dynamic>),
     );
   }
 
@@ -453,11 +469,28 @@ class MediaService {
   }) async {
     return _client.get<WatchHistoryItem>(
       ApiConstants.historySeasonProgress(tvShowId, seasonId),
-      queryParameters: {
-        if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId,
-      },
-      fromJson: (json) =>
-          WatchHistoryItem.fromJson(json as Map<String, dynamic>),
+      queryParameters: {if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId},
+      fromJson:
+          (json) => WatchHistoryItem.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 获取指定季所有剧集的观看进度
+  Future<ApiResponse<List<WatchHistoryItem>>> getSeasonEpisodeProgresses({
+    required int tvShowId,
+    required int seasonId,
+    int? tmdbId,
+  }) async {
+    return _client.get<List<WatchHistoryItem>>(
+      ApiConstants.historySeasonEpisodeProgresses(tvShowId, seasonId),
+      queryParameters: {if (tmdbId != null && tmdbId > 0) 'tmdb_id': tmdbId},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map(
+                    (e) => WatchHistoryItem.fromJson(e as Map<String, dynamic>),
+                  )
+                  .toList(),
     );
   }
 
@@ -470,13 +503,12 @@ class MediaService {
   }) async {
     return _client.get<List<SubtitleInfo>>(
       ApiConstants.subtitles,
-      queryParameters: {
-        'storage_id': storageId,
-        'file_path': filePath,
-      },
-      fromJson: (json) => (json as List)
-          .map((e) => SubtitleInfo.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      queryParameters: {'storage_id': storageId, 'file_path': filePath},
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => SubtitleInfo.fromJson(e as Map<String, dynamic>))
+                  .toList(),
     );
   }
 }

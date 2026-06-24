@@ -41,7 +41,9 @@ class PostersState {
   }
 }
 
-final postersProvider = NotifierProvider<PostersNotifier, PostersState>(PostersNotifier.new);
+final postersProvider = NotifierProvider<PostersNotifier, PostersState>(
+  PostersNotifier.new,
+);
 
 class PostersNotifier extends Notifier<PostersState> {
   @override
@@ -64,10 +66,7 @@ class PostersNotifier extends Notifier<PostersState> {
         hasMore: response.data!.length >= 20,
       );
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: response.error,
-      );
+      state = state.copyWith(isLoading: false, error: response.error);
     }
   }
 
@@ -89,10 +88,7 @@ class PostersNotifier extends Notifier<PostersState> {
         hasMore: response.data!.length >= 20,
       );
     } else {
-      state = state.copyWith(
-        isLoading: false,
-        error: response.error,
-      );
+      state = state.copyWith(isLoading: false, error: response.error);
     }
   }
 
@@ -109,40 +105,81 @@ final movieDetailProvider = FutureProvider.family<Movie?, int>((ref, id) async {
   return response.data;
 });
 
-final tvShowDetailProvider = FutureProvider.family<TvShow?, int>((ref, id) async {
+final tvShowDetailProvider = FutureProvider.family<TvShow?, int>((
+  ref,
+  id,
+) async {
   final service = ref.watch(mediaServiceProvider);
   if (service == null) return null;
   final response = await service.getTvShowDetail(id);
   return response.data;
 });
 
-final seasonEpisodesProvider = FutureProvider.family<List<Episode>?, ({int tvShowId, int seasonId})>((ref, params) async {
+final seasonEpisodesProvider =
+    FutureProvider.family<List<Episode>?, ({int tvShowId, int seasonId})>((
+      ref,
+      params,
+    ) async {
+      final service = ref.watch(mediaServiceProvider);
+      if (service == null) return null;
+      final response = await service.getSeasonEpisodes(
+        params.tvShowId,
+        params.seasonId,
+      );
+      return response.data;
+    });
+
+final seasonEpisodeProgressesProvider = FutureProvider.family<
+  List<WatchHistoryItem>?,
+  ({int tvShowId, int seasonId, int? tmdbId})
+>((ref, params) async {
   final service = ref.watch(mediaServiceProvider);
   if (service == null) return null;
-  final response = await service.getSeasonEpisodes(params.tvShowId, params.seasonId);
+  final response = await service.getSeasonEpisodeProgresses(
+    tvShowId: params.tvShowId,
+    seasonId: params.seasonId,
+    tmdbId: params.tmdbId,
+  );
   return response.data;
 });
 
-final movieStreamProvider = FutureProvider.family<StreamInfo?, int>((ref, id) async {
+final movieStreamProvider = FutureProvider.family<StreamInfo?, int>((
+  ref,
+  id,
+) async {
   final service = ref.watch(mediaServiceProvider);
   if (service == null) return null;
   final response = await service.getMovieStream(id);
   return response.data;
 });
 
-final episodeStreamProvider = FutureProvider.family<StreamInfo?, ({int tvShowId, int seasonId, int episodeId})>((ref, params) async {
+final episodeStreamProvider = FutureProvider.family<
+  StreamInfo?,
+  ({int tvShowId, int seasonId, int episodeId})
+>((ref, params) async {
   final service = ref.watch(mediaServiceProvider);
   if (service == null) return null;
-  final response = await service.getEpisodeStream(params.tvShowId, params.seasonId, params.episodeId);
+  final response = await service.getEpisodeStream(
+    params.tvShowId,
+    params.seasonId,
+    params.episodeId,
+  );
   return response.data;
 });
 
-final seasonSourceGroupsProvider = FutureProvider.family<List<SourceGroup>?, ({int tvShowId, int seasonId})>((ref, params) async {
-  final service = ref.watch(mediaServiceProvider);
-  if (service == null) return null;
-  final response = await service.getSeasonSourceGroups(params.tvShowId, params.seasonId);
-  return response.data;
-});
+final seasonSourceGroupsProvider =
+    FutureProvider.family<List<SourceGroup>?, ({int tvShowId, int seasonId})>((
+      ref,
+      params,
+    ) async {
+      final service = ref.watch(mediaServiceProvider);
+      if (service == null) return null;
+      final response = await service.getSeasonSourceGroups(
+        params.tvShowId,
+        params.seasonId,
+      );
+      return response.data;
+    });
 
 class SearchState {
   final List<MediaItem> items;
@@ -203,32 +240,40 @@ class SearchState {
     );
   }
 
-  List<Movie> get movies => items
-      .where((item) => item.type == MediaType.movie)
-      .map((item) => Movie(
-            id: item.id,
-            title: item.title,
-            posterPath: item.posterPath,
-            backdropPath: item.backdropPath,
-            rating: item.rating,
-            year: item.year,
-          ))
-      .toList();
+  List<Movie> get movies =>
+      items
+          .where((item) => item.type == MediaType.movie)
+          .map(
+            (item) => Movie(
+              id: item.id,
+              title: item.title,
+              posterPath: item.posterPath,
+              backdropPath: item.backdropPath,
+              rating: item.rating,
+              year: item.year,
+            ),
+          )
+          .toList();
 
-  List<TvShow> get tvShows => items
-      .where((item) => item.type == MediaType.tvshow)
-      .map((item) => TvShow(
-            id: item.id,
-            name: item.title,
-            posterPath: item.posterPath,
-            backdropPath: item.backdropPath,
-            rating: item.rating,
-            year: item.year,
-          ))
-      .toList();
+  List<TvShow> get tvShows =>
+      items
+          .where((item) => item.type == MediaType.tvshow)
+          .map(
+            (item) => TvShow(
+              id: item.id,
+              name: item.title,
+              posterPath: item.posterPath,
+              backdropPath: item.backdropPath,
+              rating: item.rating,
+              year: item.year,
+            ),
+          )
+          .toList();
 }
 
-final searchProvider = NotifierProvider<SearchNotifier, SearchState>(SearchNotifier.new);
+final searchProvider = NotifierProvider<SearchNotifier, SearchState>(
+  SearchNotifier.new,
+);
 
 class SearchNotifier extends Notifier<SearchState> {
   @override
@@ -238,7 +283,13 @@ class SearchNotifier extends Notifier<SearchState> {
     final service = ref.read(mediaServiceProvider);
     if (service == null) return;
 
-    state = state.copyWith(isLoading: true, query: query, error: null, currentPage: 1, hasMore: true);
+    state = state.copyWith(
+      isLoading: true,
+      query: query,
+      error: null,
+      currentPage: 1,
+      hasMore: true,
+    );
 
     final response = await service.search(
       query: query,
@@ -260,7 +311,12 @@ class SearchNotifier extends Notifier<SearchState> {
 
   Future<void> loadMore() async {
     final service = ref.read(mediaServiceProvider);
-    if (service == null || state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    if (service == null ||
+        state.isLoading ||
+        state.isLoadingMore ||
+        !state.hasMore) {
+      return;
+    }
 
     state = state.copyWith(isLoadingMore: true);
     final nextPage = state.currentPage + 1;

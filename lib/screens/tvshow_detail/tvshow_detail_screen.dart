@@ -540,6 +540,28 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               _selectedSeasonIndex < tvShow.seasons!.length
                           ? tvShow.seasons![_selectedSeasonIndex]
                           : null;
+                  final episodeProgresses =
+                      selectedSeason == null
+                          ? const <int, WatchHistoryItem>{}
+                          : ref
+                              .watch(
+                                seasonEpisodeProgressesProvider((
+                                  tvShowId: widget.tvShowId,
+                                  seasonId: selectedSeason.id,
+                                  tmdbId: _tmdbId,
+                                )),
+                              )
+                              .maybeWhen(
+                                data:
+                                    (items) => {
+                                      for (final item
+                                          in items ??
+                                              const <WatchHistoryItem>[])
+                                        if (item.episodeId != null)
+                                          item.episodeId!: item,
+                                    },
+                                orElse: () => const <int, WatchHistoryItem>{},
+                              );
 
                   final seasonBackdrop =
                       tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
@@ -621,6 +643,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               serverBaseUrl: serverBaseUrl,
                               fallbackImageUrl: episodeFallbackImage,
                               scrollController: _episodesScrollController,
+                              episodeProgresses: episodeProgresses,
                               tmdbId: _tmdbId,
                               onEpisodesLoaded: (episodes) {
                                 _autoScrollToWatchedEpisode(
@@ -638,6 +661,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               tvShowName: tvShow.name,
                               fallbackImageUrl: episodeFallbackImage,
                               scrollController: _episodesScrollController,
+                              episodeProgresses: episodeProgresses,
                               tmdbId: _tmdbId,
                               onEpisodesLoaded: (episodes) {
                                 _autoScrollToWatchedEpisode(
@@ -720,6 +744,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   serverBaseUrl: serverBaseUrl,
                                   fallbackImageUrl: episodeFallbackImage,
                                   scrollController: _episodesScrollController,
+                                  episodeProgresses: episodeProgresses,
                                   tmdbId: _tmdbId,
                                   onEpisodesLoaded: (episodes) {
                                     _autoScrollToWatchedEpisode(
@@ -737,6 +762,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   tvShowName: tvShow.name,
                                   fallbackImageUrl: episodeFallbackImage,
                                   scrollController: _episodesScrollController,
+                                  episodeProgresses: episodeProgresses,
                                   tmdbId: _tmdbId,
                                   onEpisodesLoaded: (episodes) {
                                     _autoScrollToWatchedEpisode(
@@ -1647,6 +1673,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       );
       if (!mounted) return;
       if (_selectedSeasonId != null) {
+        ref.invalidate(
+          seasonEpisodeProgressesProvider((
+            tvShowId: widget.tvShowId,
+            seasonId: _selectedSeasonId!,
+            tmdbId: _tmdbId,
+          )),
+        );
         await _loadSeasonWatchHistory(_selectedSeasonId!);
       }
       ref.read(watchHistoryProvider.notifier).refresh();
@@ -1686,6 +1719,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       extra: {'title': title, 'episodes': episodes},
     );
     if (!mounted) return;
+    ref.invalidate(
+      seasonEpisodeProgressesProvider((
+        tvShowId: widget.tvShowId,
+        seasonId: seasonId,
+        tmdbId: _tmdbId,
+      )),
+    );
     await _loadSeasonWatchHistory(seasonId);
     ref.read(watchHistoryProvider.notifier).refresh();
   }
@@ -2381,6 +2421,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
   final String? fallbackImageUrl;
   final ScrollController scrollController;
   final void Function(List<Episode> episodes)? onEpisodesLoaded;
+  final Map<int, WatchHistoryItem> episodeProgresses;
   final int? tmdbId;
 
   static const double _minItemWidth = 160.0;
@@ -2396,6 +2437,7 @@ class _EpisodesCarouselDirect extends StatefulWidget {
     this.fallbackImageUrl,
     required this.scrollController,
     this.onEpisodesLoaded,
+    this.episodeProgresses = const {},
     this.tmdbId,
   });
 
@@ -2512,6 +2554,7 @@ class _EpisodesCarouselDirectState extends State<_EpisodesCarouselDirect> {
               fallbackImageUrl: widget.fallbackImageUrl,
               episodes: widget.episodes,
               width: itemWidth,
+              watchHistory: widget.episodeProgresses[episode.id],
               tmdbId: widget.tmdbId,
             );
           },
@@ -2529,6 +2572,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
   final String? fallbackImageUrl;
   final ScrollController scrollController;
   final void Function(List<Episode> episodes)? onEpisodesLoaded;
+  final Map<int, WatchHistoryItem> episodeProgresses;
   final int? tmdbId;
 
   static const double _minItemWidth = 160.0;
@@ -2542,6 +2586,7 @@ class _EpisodesCarousel extends ConsumerStatefulWidget {
     this.fallbackImageUrl,
     required this.scrollController,
     this.onEpisodesLoaded,
+    this.episodeProgresses = const {},
     this.tmdbId,
   });
 
@@ -2703,6 +2748,7 @@ class _EpisodesCarouselState extends ConsumerState<_EpisodesCarousel> {
               fallbackImageUrl: widget.fallbackImageUrl,
               episodes: episodes,
               width: itemWidth,
+              watchHistory: widget.episodeProgresses[episode.id],
               tmdbId: widget.tmdbId,
             );
           },
@@ -2722,6 +2768,7 @@ class _EpisodeCard extends ConsumerWidget {
   final String? fallbackImageUrl;
   final List<Episode>? episodes;
   final double width;
+  final WatchHistoryItem? watchHistory;
   final int? tmdbId;
 
   const _EpisodeCard({
@@ -2733,6 +2780,7 @@ class _EpisodeCard extends ConsumerWidget {
     this.fallbackImageUrl,
     this.episodes,
     this.width = 160,
+    this.watchHistory,
     this.tmdbId,
   });
 
@@ -2741,6 +2789,7 @@ class _EpisodeCard extends ConsumerWidget {
     final colors = context.appColors;
     final accessToken = ref.watch(authProvider).tokens?.accessToken;
     final thumbnailHeight = width * 90 / 160; // 保持 16:9 比例
+    final watchProgress = _watchProgress;
     return GestureDetector(
       onTap: episode.hasFile ? () => _playEpisode(context, ref) : null,
       child: SizedBox(
@@ -2755,6 +2804,27 @@ class _EpisodeCard extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(8),
                   child: _buildThumbnail(context, thumbnailHeight, accessToken),
                 ),
+
+                if (watchProgress != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(8),
+                      ),
+                      child: Container(
+                        height: 4,
+                        color: Colors.black45,
+                        child: FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: watchProgress,
+                          child: Container(color: const Color(0xFF3D5BF6)),
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // 时长标签
                 if (episode.runtime != null)
@@ -2842,6 +2912,17 @@ class _EpisodeCard extends ConsumerWidget {
     );
   }
 
+  double? get _watchProgress {
+    final history = watchHistory;
+    if (history == null ||
+        history.completed ||
+        history.episodeId != episode.id ||
+        history.progress <= 0) {
+      return null;
+    }
+    return history.progress.clamp(0.0, 1.0);
+  }
+
   Future<void> _playEpisode(BuildContext context, WidgetRef ref) async {
     final service = ref.read(mediaServiceProvider);
     int? position;
@@ -2869,6 +2950,13 @@ class _EpisodeCard extends ConsumerWidget {
     await context.push(
       '/player/episode/$tvShowId/$seasonId/${episode.id}',
       extra: {'position': position, 'title': title, 'episodes': episodes},
+    );
+    ref.invalidate(
+      seasonEpisodeProgressesProvider((
+        tvShowId: tvShowId,
+        seasonId: seasonId,
+        tmdbId: tmdbId,
+      )),
     );
     ref.read(watchHistoryProvider.notifier).refresh();
   }
