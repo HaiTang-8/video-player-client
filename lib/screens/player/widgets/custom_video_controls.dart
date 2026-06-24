@@ -16,6 +16,7 @@ import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
 import 'player_top_bar.dart';
+import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
 
 class CustomVideoControls extends StatefulWidget {
@@ -70,6 +71,8 @@ class CustomVideoControls extends StatefulWidget {
 
 class _CustomVideoControlsState extends State<CustomVideoControls>
     with WidgetsBindingObserver {
+  static const double _maxVolume = 2.0;
+
   // iOS 横屏下 SafeArea/viewPadding 可能是“左右对称”的（例如 Dynamic Island 机型），
   // 仅凭 inset 无法判断刘海到底在左还是在右。为了满足“刘海在右侧才给播放列表右侧留安全距离”
   // 的需求，这里通过原生接口读取真实的 UIInterfaceOrientation。
@@ -135,6 +138,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   bool _showMediaInfo = false;
   Map<String, String> _mediaInfo = {};
   Timer? _mediaInfoTimer;
+  Timer? _volumeOverlayTimer;
 
   // 三指点击触发媒体信息
   int _pointerCount = 0;
@@ -208,7 +212,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
     _subscriptions.add(
       widget.player.stream.volume.listen((v) {
-        if (mounted) setState(() => _volume = v / 100);
+        if (mounted) setState(() => _volume = (v / 100).clamp(0.0, _maxVolume));
       }),
     );
     _subscriptions.add(
@@ -251,7 +255,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           _speedText = bytes > 0 ? _formatSpeed(bytes) : null;
         });
       } catch (e) {
-        LogService.instance.warn('VideoControls', 'Failed to get cache-speed: $e');
+        LogService.instance.warn(
+          'VideoControls',
+          'Failed to get cache-speed: $e',
+        );
       }
     });
   }
@@ -281,6 +288,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
+    _volumeOverlayTimer?.cancel();
     _speedHintTimer?.cancel();
     _speedTimer?.cancel();
     // 确保长按倍速状态被重置
@@ -443,25 +451,25 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       });
     } else {
       final delta = -details.delta.dy / 200;
-      setState(() {
-        if (_panDirection == 'vertical_left') {
+      if (_panDirection == 'vertical_left') {
+        setState(() {
           _brightness = (_brightness + delta).clamp(0.0, 1.0);
           _showBrightnessOverlay = true;
           _brightnessChanged = true;
-          try {
-            ScreenBrightness().setApplicationScreenBrightness(_brightness);
-          } catch (e) {
-            LogService.instance.warn(
-              'VideoControls',
-              'Failed to set brightness: $e',
-            );
-          }
-        } else {
-          _volume = (_volume + delta).clamp(0.0, 1.0);
-          _showVolumeOverlay = true;
-          widget.player.setVolume(_volume * 100);
+        });
+        try {
+          ScreenBrightness().setApplicationScreenBrightness(_brightness);
+        } catch (e) {
+          LogService.instance.warn(
+            'VideoControls',
+            'Failed to set brightness: $e',
+          );
         }
-      });
+      } else {
+        _volumeOverlayTimer?.cancel();
+        _setVolume(_volume + delta);
+        setState(() => _showVolumeOverlay = true);
+      }
     }
   }
 
@@ -611,19 +619,35 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   void _adjustVolume(double delta) {
-    final newVol = (_volume + delta).clamp(0.0, 1.0);
-    widget.player.setVolume(newVol * 100);
+    _setVolume(_volume + delta);
+    _showVolumeOverlayTemporarily();
     _showControlsTemporarily();
   }
 
   void _toggleMute() {
     if (_volume > 0) {
       _volumeBeforeMute = _volume;
-      widget.player.setVolume(0);
+      _setVolume(0);
     } else {
-      widget.player.setVolume(_volumeBeforeMute * 100);
+      final restoreVolume = _volumeBeforeMute <= 0 ? 1.0 : _volumeBeforeMute;
+      _setVolume(restoreVolume);
     }
+    _showVolumeOverlayTemporarily();
     _showControlsTemporarily();
+  }
+
+  void _setVolume(double value) {
+    final volume = value.clamp(0.0, _maxVolume);
+    setState(() => _volume = volume);
+    widget.player.setVolume(volume * 100);
+  }
+
+  void _showVolumeOverlayTemporarily() {
+    _volumeOverlayTimer?.cancel();
+    setState(() => _showVolumeOverlay = true);
+    _volumeOverlayTimer = Timer(const Duration(seconds: 1), () {
+      if (mounted) setState(() => _showVolumeOverlay = false);
+    });
   }
 
   void _startLongPressSpeed() {
@@ -911,11 +935,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 ),
               ),
             ),
-            // 亮度指示器
             if (_showBrightnessOverlay) _buildBrightnessOverlay(),
-            // 音量指示器
             if (_showVolumeOverlay) _buildVolumeOverlay(),
-            // 进度指示器
             if (_showSeekOverlay) _buildSeekOverlay(),
             // 媒体信息面板
             if (_showMediaInfo) _buildMediaInfoPanel(),
@@ -933,55 +954,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             if (_visible && !WindowControls.isDesktop) _buildLockButton(),
             // 缓冲指示器
             if (_buffering)
-              RippleLoadingIndicator(
-                speedText: _speedText,
-                hintText: '缓冲中',
-              ),
-            // 长按倍速提示
+              RippleLoadingIndicator(speedText: _speedText, hintText: '缓冲中'),
             if (_isLongPressSpeed)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      '倍速中 2x',
-                      style: TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                ),
+              PlayerOverlayNotice(
+                text: '倍速中 2x',
+                position: PlayerOverlayNoticePosition.top,
+                safePadding: MediaQuery.of(context).padding,
               ),
-            // 菜单切换倍速提示
             if (_showSpeedHint && !_isLongPressSpeed)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '${_hintSpeed}x',
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
-                    ),
-                  ),
-                ),
+              PlayerOverlayNotice(
+                text: '${_hintSpeed}x',
+                position: PlayerOverlayNoticePosition.top,
+                safePadding: MediaQuery.of(context).padding,
               ),
           ],
         ),
@@ -990,64 +974,23 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   Widget _buildBrightnessOverlay() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _brightness > 0.5 ? LucideIcons.sun : LucideIcons.moon,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 100,
-              child: LinearProgressIndicator(
-                value: _brightness,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation(Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PlayerOverlayNotice(
+      icon: _brightness > 0.5 ? LucideIcons.sun : LucideIcons.moon,
+      text: '${(_brightness * 100).round()}%',
+      progress: _brightness,
     );
   }
 
   Widget _buildVolumeOverlay() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              _volume > 0.5
-                  ? LucideIcons.volume2
-                  : (_volume > 0 ? LucideIcons.volume1 : LucideIcons.volumeX),
-              color: Colors.white,
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 100,
-              child: LinearProgressIndicator(
-                value: _volume,
-                backgroundColor: Colors.white24,
-                valueColor: const AlwaysStoppedAnimation(Colors.white),
-              ),
-            ),
-          ],
-        ),
-      ),
+    final boosted = _volume > 1.0;
+    return PlayerOverlayNotice(
+      icon:
+          _volume > 0.5
+              ? LucideIcons.volume2
+              : (_volume > 0 ? LucideIcons.volume1 : LucideIcons.volumeX),
+      text: '${(_volume * 100).round()}%',
+      progress: _volume / _maxVolume,
+      color: boosted ? Colors.redAccent : Colors.white,
     );
   }
 
@@ -1065,32 +1008,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Widget _buildSeekOverlay() {
     final delta = _seekPosition - _seekStartPosition;
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _formatSeekDelta(delta),
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '${_formatDuration(_seekPosition)} / ${_formatDuration(_duration)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
-            ),
-          ],
-        ),
-      ),
+    return PlayerOverlayNotice(
+      text: _formatSeekDelta(delta),
+      secondaryText:
+          '${_formatDuration(_seekPosition)} / ${_formatDuration(_duration)}',
     );
   }
 
@@ -1244,7 +1165,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       children: [
         GestureDetector(
           onTap: () {
-            widget.player.setVolume(_volume == 0 ? 100 : 0);
+            _toggleMute();
           },
           child: Padding(
             padding: const EdgeInsets.only(right: 8),
@@ -1265,8 +1186,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             ),
             child: Slider(
               value: _volume,
-              onChanged: (v) => widget.player.setVolume(v * 100),
-              activeColor: Colors.white,
+              max: _maxVolume,
+              onChanged: (v) {
+                _setVolume(v);
+                _showVolumeOverlayTemporarily();
+              },
+              activeColor: _volume > 1.0 ? Colors.redAccent : Colors.white,
               inactiveColor: Colors.white38,
             ),
           ),
