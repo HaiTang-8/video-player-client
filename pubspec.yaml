@@ -89,6 +89,9 @@ dependencies:
   auto_updater: ^0.1.7
   palette_generator: ^0.3.3+7
 
+dependency_overrides:
+  screen_brightness_ios: 2.1.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
