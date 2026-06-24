@@ -755,6 +755,7 @@ Future<void> _loadBrowseStorage(
   _browseRequestSeq[storageId] = requestSeq;
 
   final currentState = _browseCache[storageId] ?? BrowseState();
+  final previousPath = currentState.currentPath;
   _updateBrowseState(
     storageId,
     currentState.copyWith(isLoading: true, error: null, currentPath: path),
@@ -783,7 +784,11 @@ Future<void> _loadBrowseStorage(
   } else {
     _updateBrowseState(
       storageId,
-      latestState.copyWith(isLoading: false, error: response.error),
+      latestState.copyWith(
+        currentPath: previousPath,
+        isLoading: false,
+        error: response.error,
+      ),
     );
   }
   _safeInvalidate(ref, browseProvider(storageId));
