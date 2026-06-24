@@ -235,32 +235,7 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
   // 是否需要显示“多集”叠卡与角标
   bool get _showMultiBadge => widget.group.isMultiEpisode;
 
-  // 获取显示图片路径：剧集用剧照，电影用背景图
-  String? get _imagePath {
-    final mediaInfo = _primaryItem.mediaInfo;
-    final episodeInfo = mediaInfo?.episodeInfo;
-    if (_isEpisode &&
-        episodeInfo?.stillPath != null &&
-        episodeInfo!.stillPath!.isNotEmpty) {
-      return episodeInfo.stillPath;
-    }
-    return _seasonBackdropFromMediaInfo(mediaInfo, episodeInfo) ??
-        mediaInfo?.seasonBackdropPath ??
-        mediaInfo?.seasonPosterPath ??
-        mediaInfo?.backdropPath ??
-        mediaInfo?.posterPath;
-  }
-
-  String? _seasonBackdropFromMediaInfo(
-    WatchHistoryMediaInfo? mediaInfo,
-    WatchHistoryEpisodeInfo? episodeInfo,
-  ) {
-    final backdrops = mediaInfo?.backdrops;
-    if (backdrops == null || backdrops.isEmpty) return null;
-    final seasonNumber = episodeInfo?.seasonNumber ?? 1;
-    final index = seasonNumber > 0 ? seasonNumber - 1 : 0;
-    return backdrops[index % backdrops.length];
-  }
+  String? get _imagePath => _primaryItem.imagePath;
 
   // 获取显示标题
   String get _displayTitle {

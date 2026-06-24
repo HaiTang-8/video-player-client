@@ -410,14 +410,7 @@ class _WatchHistoryGridItem extends ConsumerWidget {
   }
 
   /// 获取主展示记录的图片路径
-  String? _imagePath(WatchHistoryItem item) {
-    final mediaInfo = item.mediaInfo;
-    final episodeInfo = mediaInfo?.episodeInfo;
-    if (item.mediaType == 'tv' && episodeInfo?.stillPath != null && episodeInfo!.stillPath!.isNotEmpty) {
-      return episodeInfo.stillPath;
-    }
-    return mediaInfo?.backdropPath ?? mediaInfo?.posterPath;
-  }
+  String? _imagePath(WatchHistoryItem item) => item.imagePath;
 
   Widget _buildImage(BuildContext context, String? serverBaseUrl, String? accessToken, WatchHistoryItem item) {
     final imagePath = _imagePath(item);

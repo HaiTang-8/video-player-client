@@ -149,6 +149,21 @@ class WatchHistoryItem {
   /// 计算播放进度（0.0 - 1.0）
   double get progress => duration > 0 ? (position / duration).clamp(0.0, 1.0) : 0.0;
 
+  String? get imagePath {
+    final mediaInfo = this.mediaInfo;
+    final episodeInfo = mediaInfo?.episodeInfo;
+    if (mediaType == 'tv' &&
+        episodeInfo?.stillPath != null &&
+        episodeInfo!.stillPath!.isNotEmpty) {
+      return episodeInfo.stillPath;
+    }
+    return _seasonBackdropFromMediaInfo(mediaInfo, episodeInfo) ??
+        mediaInfo?.seasonBackdropPath ??
+        mediaInfo?.seasonPosterPath ??
+        mediaInfo?.backdropPath ??
+        mediaInfo?.posterPath;
+  }
+
   /// 构建播放标题（用于播放器显示）
   String buildTitle() {
     final mediaInfo = this.mediaInfo;
@@ -201,6 +216,17 @@ class WatchHistoryItem {
         'completed': completed,
         'watched_at': watchedAt.toIso8601String(),
       };
+}
+
+String? _seasonBackdropFromMediaInfo(
+  WatchHistoryMediaInfo? mediaInfo,
+  WatchHistoryEpisodeInfo? episodeInfo,
+) {
+  final backdrops = mediaInfo?.backdrops;
+  if (backdrops == null || backdrops.isEmpty) return null;
+  final seasonNumber = episodeInfo?.seasonNumber ?? 1;
+  final index = seasonNumber > 0 ? seasonNumber - 1 : 0;
+  return backdrops[index % backdrops.length];
 }
 
 /// 观看历史合并分组（按剧集媒体合并）
