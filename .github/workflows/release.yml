@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -18,6 +18,12 @@ jobs:
         id: version
         shell: bash
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - name: Diagnose Windows toolchain
+        shell: pwsh
+        run: |
+          flutter doctor -v
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
+          & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
       - run: flutter pub get
       - run: flutter build windows --release --build-name=${{ steps.version.outputs.VERSION }}
       - name: Install Inno Setup
