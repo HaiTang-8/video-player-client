@@ -8,9 +8,19 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     as shadcn
-    show showDropdown, DropdownMenu, MenuButton, MenuDivider, MenuItem, Theme;
+    show
+        AlertDialog,
+        DropdownMenu,
+        MenuButton,
+        MenuDivider,
+        MenuItem,
+        PrimaryButton,
+        Theme,
+        ThemeData,
+        showDropdown;
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     show LucideIcons, BootstrapIcons;
+import '../../../core/widgets/dialog_utils.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
@@ -18,6 +28,13 @@ import '../../../data/services/log_service.dart';
 import 'player_top_bar.dart';
 import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
+
+class _PlayerHelpEntry {
+  final String action;
+  final List<String> triggers;
+
+  const _PlayerHelpEntry(this.action, this.triggers);
+}
 
 class CustomVideoControls extends StatefulWidget {
   final Player player;
@@ -555,8 +572,212 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     } else if (key == LogicalKeyboardKey.keyD) {
       _toggleDoubleSpeedLock();
       return KeyEventResult.handled;
+    } else if (key == LogicalKeyboardKey.keyH ||
+        key == LogicalKeyboardKey.question ||
+        key == LogicalKeyboardKey.slash &&
+            HardwareKeyboard.instance.isShiftPressed) {
+      _showShortcutHelp();
+      return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
+  }
+
+  List<_PlayerHelpEntry> _desktopHelpEntries() {
+    return const [
+      _PlayerHelpEntry('播放 / 暂停', ['Space']),
+      _PlayerHelpEntry('后退 5 秒', ['←']),
+      _PlayerHelpEntry('前进 5 秒', ['→']),
+      _PlayerHelpEntry('临时 2 倍速', ['长按 →']),
+      _PlayerHelpEntry('音量增加', ['↑']),
+      _PlayerHelpEntry('音量降低', ['↓']),
+      _PlayerHelpEntry('静音 / 取消静音', ['M']),
+      _PlayerHelpEntry('全屏 / 退出全屏', ['F']),
+      _PlayerHelpEntry('退出全屏', ['Esc']),
+      _PlayerHelpEntry('下一集', ['N']),
+      _PlayerHelpEntry('上一集', ['P']),
+      _PlayerHelpEntry('媒体信息', ['Tab']),
+      _PlayerHelpEntry('2 倍速锁定', ['D']),
+      _PlayerHelpEntry('打开此说明', ['H', '?']),
+    ];
+  }
+
+  List<_PlayerHelpEntry> _mobileHelpEntries() {
+    return const [
+      _PlayerHelpEntry('显示 / 隐藏控制栏', ['点击屏幕']),
+      _PlayerHelpEntry('拖动播放进度', ['横向滑动']),
+      _PlayerHelpEntry('调节亮度', ['左侧上下滑动']),
+      _PlayerHelpEntry('调节音量', ['右侧上下滑动']),
+      _PlayerHelpEntry('临时 2 倍速', ['长按屏幕']),
+      _PlayerHelpEntry('媒体信息', ['三指点击']),
+      _PlayerHelpEntry('锁定 / 解锁控制栏', ['锁定按钮']),
+      _PlayerHelpEntry('选择播放集数', ['播放列表按钮']),
+    ];
+  }
+
+  Future<void> _showShortcutHelp() {
+    _hideTimer?.cancel();
+    setState(() => _visible = true);
+
+    final isDesktop = WindowControls.isDesktop;
+    final entries = isDesktop ? _desktopHelpEntries() : _mobileHelpEntries();
+    return DialogUtils.showCustomDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        final theme = shadcn.Theme.of(dialogContext);
+        final mq = MediaQuery.of(dialogContext);
+        final compact = mq.size.width < 600;
+        final dialogWidth = compact ? mq.size.width * 0.9 : 720.0;
+        final maxHeight = mq.size.height * (compact ? 0.72 : 0.68);
+
+        return SizedBox(
+          width: dialogWidth,
+          child: shadcn.AlertDialog(
+            barrierColor: Colors.transparent,
+            surfaceOpacity: 1,
+            title: Row(
+              children: [
+                Icon(
+                  isDesktop ? LucideIcons.keyboard : LucideIcons.circleHelp,
+                  size: 20,
+                  color: theme.colorScheme.foreground,
+                ),
+                const SizedBox(width: 8),
+                Text(isDesktop ? '快捷键说明' : '手势说明'),
+              ],
+            ),
+            content: SizedBox(
+              width: double.infinity,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  child: _buildHelpEntries(entries, theme, compact),
+                ),
+              ),
+            ),
+            actions: [
+              shadcn.PrimaryButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('知道了'),
+              ),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (mounted) _startHideTimer();
+    });
+  }
+
+  Widget _buildHelpEntries(
+    List<_PlayerHelpEntry> entries,
+    shadcn.ThemeData theme,
+    bool compact,
+  ) {
+    if (compact) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < entries.length; i++) ...[
+            _buildHelpEntry(entries[i], theme, true),
+            if (i < entries.length - 1)
+              Divider(height: 1, color: theme.colorScheme.border),
+          ],
+        ],
+      );
+    }
+
+    final splitIndex = (entries.length / 2).ceil();
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: _buildHelpEntryColumn(entries.sublist(0, splitIndex), theme),
+        ),
+        const SizedBox(width: 24),
+        Expanded(
+          child: _buildHelpEntryColumn(entries.sublist(splitIndex), theme),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHelpEntryColumn(
+    List<_PlayerHelpEntry> entries,
+    shadcn.ThemeData theme,
+  ) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < entries.length; i++) ...[
+          _buildHelpEntry(entries[i], theme, false),
+          if (i < entries.length - 1)
+            Divider(height: 1, color: theme.colorScheme.border),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildHelpEntry(
+    _PlayerHelpEntry entry,
+    shadcn.ThemeData theme,
+    bool compact,
+  ) {
+    final action = Text(
+      entry.action,
+      style: theme.typography.small.copyWith(
+        color: theme.colorScheme.foreground,
+        fontWeight: FontWeight.w500,
+      ),
+    );
+    final triggers = Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      alignment: compact ? WrapAlignment.start : WrapAlignment.end,
+      children: [
+        for (final trigger in entry.triggers) _buildHelpTrigger(trigger, theme),
+      ],
+    );
+
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [action, const SizedBox(height: 8), triggers],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 9),
+      child: Row(
+        children: [
+          Expanded(child: action),
+          const SizedBox(width: 16),
+          Flexible(child: triggers),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHelpTrigger(String text, shadcn.ThemeData theme) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: 28),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.muted,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: theme.colorScheme.border),
+      ),
+      child: Text(
+        text,
+        style: theme.typography.small.copyWith(
+          color: theme.colorScheme.foreground,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
   }
 
   void _showControlsTemporarily() {
@@ -1134,6 +1355,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   children: [
                     _buildAudioTrackButton(),
                     _buildSubtitleButton(),
+                    _buildIconButton(LucideIcons.circleHelp, _showShortcutHelp),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
                       _buildIconButton(
                         LucideIcons.list,
