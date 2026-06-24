@@ -6,6 +6,7 @@ import '../data/models/models.dart';
 import '../data/services/api_client.dart';
 import '../data/services/log_service.dart';
 import '../data/services/storage_service.dart';
+import 'auth_provider.dart';
 import 'server_provider.dart';
 
 final storageServiceProvider = Provider<StorageService?>((ref) {
@@ -132,19 +133,27 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
       return (false, '服务不可用');
     }
 
-    // 创建临时的 ApiClient（不带 onError 回调），避免触发全局错误通知
     final tempClient = ApiClient(baseUrl: serverUrl);
-    final tempService = StorageService(tempClient);
-
-    final response = await tempService.testConnection(
-      type: type,
-      settings: settings,
+    tempClient.addInterceptor(
+      AuthInterceptor(
+        tokenGetter: () => ref.read(authProvider).tokens?.accessToken,
+        onTokenExpired: () => ref.read(authProvider.notifier).refreshToken(),
+      ),
     );
+    try {
+      final tempService = StorageService(tempClient);
+      final response = await tempService.testConnection(
+        type: type,
+        settings: settings,
+      );
 
-    if (response.isSuccess) {
-      return (true, null);
+      if (response.isSuccess) {
+        return (true, null);
+      }
+      return (false, response.error ?? '连接失败');
+    } finally {
+      tempClient.close();
     }
-    return (false, response.error ?? '连接失败');
   }
 
   Future<(bool success, String? data, String? error)> exportStorages({
