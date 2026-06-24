@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 /// 分类统计数据
 class CategoryStats {
   final String id;
@@ -30,6 +32,9 @@ class WatchHistoryMediaInfo {
   final String title;
   final String? posterPath;
   final String? backdropPath;
+  final List<String>? backdrops;
+  final String? seasonBackdropPath;
+  final String? seasonPosterPath;
   final int? year;
   final WatchHistoryEpisodeInfo? episodeInfo;
 
@@ -37,6 +42,9 @@ class WatchHistoryMediaInfo {
     required this.title,
     this.posterPath,
     this.backdropPath,
+    this.backdrops,
+    this.seasonBackdropPath,
+    this.seasonPosterPath,
     this.year,
     this.episodeInfo,
   });
@@ -46,6 +54,9 @@ class WatchHistoryMediaInfo {
       title: json['title'] as String? ?? '',
       posterPath: json['poster_path'] as String?,
       backdropPath: json['backdrop_path'] as String?,
+      backdrops: _parseStringList(json['backdrops']),
+      seasonBackdropPath: json['season_backdrop_path'] as String?,
+      seasonPosterPath: json['season_poster_path'] as String?,
       year: (json['year'] as num?)?.toInt(),
       episodeInfo: json['episode_info'] != null
           ? WatchHistoryEpisodeInfo.fromJson(
@@ -53,6 +64,31 @@ class WatchHistoryMediaInfo {
           : null,
     );
   }
+}
+
+List<String>? _parseStringList(dynamic value) {
+  if (value == null) return null;
+  if (value is List) {
+    final items =
+        value.whereType<String>().where((item) => item.isNotEmpty).toList();
+    return items.isEmpty ? null : items;
+  }
+  if (value is String && value.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is List) {
+        final items =
+            decoded
+                .whereType<String>()
+                .where((item) => item.isNotEmpty)
+                .toList();
+        return items.isEmpty ? null : items;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+  return null;
 }
 
 /// 观看历史剧集详细信息
