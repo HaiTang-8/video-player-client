@@ -1355,7 +1355,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   children: [
                     _buildAudioTrackButton(),
                     _buildSubtitleButton(),
-                    _buildIconButton(LucideIcons.circleHelp, _showShortcutHelp),
                     if (widget.episodes != null && widget.episodes!.isNotEmpty)
                       _buildIconButton(
                         LucideIcons.list,
