@@ -57,6 +57,7 @@ class CustomVideoControls extends StatefulWidget {
   final String? sourcePath;
   final Future<void> Function(SubtitleInfo sub)? onSelectExternalSubtitle;
   final Future<void> Function(Duration position)? onSeekRequested;
+  final int seekDuration;
 
   const CustomVideoControls({
     super.key,
@@ -80,6 +81,7 @@ class CustomVideoControls extends StatefulWidget {
     this.sourcePath,
     this.onSelectExternalSubtitle,
     this.onSeekRequested,
+    this.seekDuration = 5,
   });
 
   @override
@@ -122,6 +124,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   int _seekRequestVersion = 0;
+  int _manualSeekPendingVersion = 0;
+  bool _manualSeekPending = false;
+  Duration? _manualSeekTarget;
+  Timer? _manualSeekPendingTimer;
   bool _playing = true; // 初始为 true，视频加载后自动播放
   bool _buffering = true; // 初始为 true，显示加载指示器
   double _volume = 1.0;
@@ -203,7 +209,18 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _setupListeners() {
     _subscriptions.add(
       widget.player.stream.position.listen((p) {
-        if (mounted && !_dragging) setState(() => _position = p);
+        if (!mounted) return;
+        final seekReached = _isManualSeekTargetReached(p);
+        if (!_dragging || seekReached) {
+          setState(() {
+            if (!_dragging) {
+              _position = p;
+            }
+            if (seekReached) {
+              _clearManualSeekPending();
+            }
+          });
+        }
       }),
     );
     _subscriptions.add(
@@ -308,6 +325,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _volumeOverlayTimer?.cancel();
     _speedHintTimer?.cancel();
     _speedTimer?.cancel();
+    _manualSeekPendingTimer?.cancel();
     // 确保长按倍速状态被重置
     if (_isLongPressSpeed) {
       widget.player.setRate(_originalSpeed);
@@ -528,7 +546,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           _endLongPressSpeed();
         } else {
           _longPressTimer?.cancel();
-          _seekRelative(5);
+          _seekRelative(widget.seekDuration);
         }
       }
       return KeyEventResult.handled;
@@ -541,7 +559,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       _showControlsTemporarily();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowLeft) {
-      _seekRelative(-5);
+      _seekRelative(-widget.seekDuration);
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowUp) {
       _adjustVolume(0.1);
@@ -583,10 +601,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   List<_PlayerHelpEntry> _desktopHelpEntries() {
-    return const [
+    final seekDuration = widget.seekDuration;
+    return [
       _PlayerHelpEntry('播放 / 暂停', ['Space']),
-      _PlayerHelpEntry('后退 5 秒', ['←']),
-      _PlayerHelpEntry('前进 5 秒', ['→']),
+      _PlayerHelpEntry('后退 $seekDuration 秒', ['←']),
+      _PlayerHelpEntry('前进 $seekDuration 秒', ['→']),
       _PlayerHelpEntry('临时 2 倍速', ['长按 →']),
       _PlayerHelpEntry('音量增加', ['↑']),
       _PlayerHelpEntry('音量降低', ['↓']),
@@ -785,6 +804,27 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _startHideTimer();
   }
 
+  bool _isManualSeekTargetReached(Duration position) {
+    final target = _manualSeekTarget;
+    if (!_manualSeekPending || target == null) return false;
+    return (position.inMilliseconds - target.inMilliseconds).abs() <= 1000;
+  }
+
+  void _clearManualSeekPending() {
+    _manualSeekPendingTimer?.cancel();
+    _manualSeekPendingTimer = null;
+    _manualSeekPending = false;
+    _manualSeekTarget = null;
+  }
+
+  void _startManualSeekPendingTimeout(int version) {
+    _manualSeekPendingTimer?.cancel();
+    _manualSeekPendingTimer = Timer(const Duration(seconds: 10), () {
+      if (!mounted || version != _manualSeekPendingVersion) return;
+      setState(_clearManualSeekPending);
+    });
+  }
+
   void _seekRelative(int seconds) {
     final newPos = _position + Duration(seconds: seconds);
     final clamped = Duration(
@@ -801,10 +841,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     bool restartHideTimer = false,
   }) async {
     final seekRequestVersion = ++_seekRequestVersion;
+    final manualSeekPendingVersion = ++_manualSeekPendingVersion;
     setState(() {
       _position = target;
       _dragging = true;
+      _manualSeekPending = true;
+      _manualSeekTarget = target;
     });
+    _startManualSeekPendingTimeout(manualSeekPendingVersion);
 
     try {
       final onSeekRequested = widget.onSeekRequested;
@@ -1090,6 +1134,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   @override
   Widget build(BuildContext context) {
+    final showLoading = _buffering || _manualSeekPending;
     return Focus(
       focusNode: _focusNode,
       autofocus: WindowControls.isDesktop,
@@ -1174,8 +1219,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             // 锁定按钮（仅移动端）
             if (_visible && !WindowControls.isDesktop) _buildLockButton(),
             // 缓冲指示器
-            if (_buffering)
-              RippleLoadingIndicator(speedText: _speedText, hintText: '缓冲中'),
+            if (showLoading)
+              RippleLoadingIndicator(
+                speedText: _speedText,
+                hintText: _manualSeekPending ? '跳转中' : '缓冲中',
+              ),
             if (_isLongPressSpeed)
               PlayerOverlayNotice(
                 text: '倍速中 2x',

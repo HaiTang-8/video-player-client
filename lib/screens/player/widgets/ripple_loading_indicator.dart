@@ -1,17 +1,17 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 class RippleLoadingIndicator extends StatefulWidget {
   final String? speedText;
   final String? hintText;
-  final double size;
+  final double width;
+  final double height;
 
   const RippleLoadingIndicator({
     super.key,
     this.speedText,
     this.hintText,
-    this.size = 80,
+    this.width = 96,
+    this.height = 5,
   });
 
   @override
@@ -21,8 +21,6 @@ class RippleLoadingIndicator extends StatefulWidget {
 class _RippleLoadingIndicatorState extends State<RippleLoadingIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-
-  static const _rippleCount = 3;
 
   @override
   void initState() {
@@ -41,51 +39,65 @@ class _RippleLoadingIndicatorState extends State<RippleLoadingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final maxWidth = (screenWidth - 48).clamp(180.0, 320.0);
+    final hintText = widget.hintText;
+    final speedText = widget.speedText;
+
     return Center(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.black38,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-          SizedBox(
-            width: widget.size,
-            height: widget.size,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: _RipplePainter(
-                    progress: _controller.value,
-                    rippleCount: _rippleCount,
-                  ),
-                );
-              },
-            ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.44),
+            borderRadius: BorderRadius.circular(999),
           ),
-          if (widget.speedText != null) ...[
-            const SizedBox(height: 12),
-            Text(
-              widget.speedText!,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: widget.width,
+                  height: widget.height,
+                  child: AnimatedBuilder(
+                    animation: _controller,
+                    builder: (context, _) {
+                      return CustomPaint(
+                        painter: _PulseBarPainter(progress: _controller.value),
+                      );
+                    },
+                  ),
+                ),
+                if (hintText != null) ...[
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Text(
+                      hintText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+                if (speedText != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    speedText,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                ],
+              ],
             ),
-          ],
-          if (widget.hintText != null) ...[
-            SizedBox(height: widget.speedText != null ? 4 : 12),
-            Text(
-              widget.hintText!,
-              style: const TextStyle(color: Colors.white54, fontSize: 14),
-            ),
-          ],
-        ],
           ),
         ),
       ),
@@ -93,32 +105,39 @@ class _RippleLoadingIndicatorState extends State<RippleLoadingIndicator>
   }
 }
 
-class _RipplePainter extends CustomPainter {
+class _PulseBarPainter extends CustomPainter {
   final double progress;
-  final int rippleCount;
 
-  _RipplePainter({required this.progress, required this.rippleCount});
+  _PulseBarPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = math.min(size.width, size.height) / 2;
+    final radius = Radius.circular(size.height / 2);
+    final rect = Offset.zero & size;
+    final trackPaint = Paint()..color = Colors.white.withValues(alpha: 0.18);
+    canvas.drawRRect(RRect.fromRectAndRadius(rect, radius), trackPaint);
 
-    for (var i = 0; i < rippleCount; i++) {
-      final phase = (progress + i / rippleCount) % 1.0;
-      final radius = maxRadius * phase;
-      final opacity = (1.0 - phase) * 0.6;
+    final segmentWidth = size.width * 0.38;
+    final travel = size.width + segmentWidth;
+    final left = progress * travel - segmentWidth;
+    final segmentRect = Rect.fromLTWH(left, 0, segmentWidth, size.height);
+    final highlightPaint =
+        Paint()
+          ..shader = LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0),
+              Colors.white.withValues(alpha: 0.85),
+              Colors.white.withValues(alpha: 0),
+            ],
+          ).createShader(segmentRect);
 
-      final paint = Paint()
-        ..color = Colors.white.withValues(alpha: opacity)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0;
-
-      canvas.drawCircle(center, radius, paint);
-    }
+    canvas.save();
+    canvas.clipRRect(RRect.fromRectAndRadius(rect, radius));
+    canvas.drawRect(segmentRect, highlightPaint);
+    canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_RipplePainter oldDelegate) =>
+  bool shouldRepaint(_PulseBarPainter oldDelegate) =>
       oldDelegate.progress != progress;
 }

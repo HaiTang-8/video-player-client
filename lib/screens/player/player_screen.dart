@@ -89,9 +89,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       ),
     );
     _player = Player(
-      configuration: const PlayerConfiguration(
-        bufferSize: 256 * 1024 * 1024,
-      ),
+      configuration: const PlayerConfiguration(bufferSize: 256 * 1024 * 1024),
     );
     _controller = VideoController(_player);
     _routeInitialPosition = widget.initialPosition;
@@ -466,35 +464,40 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _performUserSeek(
     Duration position,
     int seekRequestVersion,
+    Future<void> seekFuture,
   ) async {
-    _pendingSeekPosition = null;
-    _routeInitialPosition = null;
-    _hasSeekToInitialPosition = true;
-    await Future<void>.sync(() => _player.seek(position));
-    if (seekRequestVersion != _seekRequestVersion) return;
-    await _waitForPlayerPosition(position, seekRequestVersion);
-    if (seekRequestVersion != _seekRequestVersion) return;
-    await _saveProgress(force: true);
+    try {
+      await seekFuture;
+      if (seekRequestVersion != _seekRequestVersion) return;
+      await _waitForPlayerPosition(position, seekRequestVersion);
+      if (seekRequestVersion != _seekRequestVersion) return;
+      await _saveProgress(force: true);
+    } catch (e) {
+      LogService.instance.warn('PlayerScreen', 'User seek failed: $e');
+    }
   }
 
   Future<void> _handleUserSeek(Duration position) {
     final seekRequestVersion = ++_seekRequestVersion;
-    final previousOperation = _activeSeekOperation;
-    final operation = Future<void>.sync(() async {
-      if (previousOperation != null) {
-        try {
-          await previousOperation;
-        } catch (_) {}
-      }
-      if (seekRequestVersion != _seekRequestVersion) return;
-      await _performUserSeek(position, seekRequestVersion);
-    });
+    _pendingSeekPosition = null;
+    _routeInitialPosition = null;
+    _hasSeekToInitialPosition = true;
+
+    final seekFuture = Future<void>.sync(() => _player.seek(position));
+    final operation = _performUserSeek(
+      position,
+      seekRequestVersion,
+      seekFuture,
+    );
     _activeSeekOperation = operation;
-    return operation.whenComplete(() {
-      if (identical(_activeSeekOperation, operation)) {
-        _activeSeekOperation = null;
-      }
-    });
+    unawaited(
+      operation.whenComplete(() {
+        if (identical(_activeSeekOperation, operation)) {
+          _activeSeekOperation = null;
+        }
+      }),
+    );
+    return seekFuture.catchError((_) {});
   }
 
   Future<void> _awaitActiveSeekOperation() async {
@@ -1120,6 +1123,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final playbackSettings = ref.watch(playbackSettingsProvider);
 
     if (_isLoading) {
       return Scaffold(
@@ -1259,6 +1263,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             sourcePath: _currentFilePath,
             onSelectExternalSubtitle: _loadExternalSubtitleTrack,
             onSeekRequested: _handleUserSeek,
+            seekDuration: playbackSettings.seekDuration,
           ),
           if (_isExiting)
             Container(
