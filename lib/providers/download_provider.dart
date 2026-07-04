@@ -11,6 +11,7 @@ import '../data/services/api_client.dart';
 import '../data/services/aria2_service.dart';
 import '../data/services/download_service.dart';
 import '../data/services/log_service.dart';
+import '../data/services/proxy_http_client_adapter.dart';
 import 'aria2_provider.dart';
 import 'download_settings_provider.dart';
 import 'auth_provider.dart';
@@ -20,15 +21,9 @@ class DownloadManagerState {
   final List<DownloadTask> tasks;
   final bool isLoading;
 
-  const DownloadManagerState({
-    this.tasks = const [],
-    this.isLoading = false,
-  });
+  const DownloadManagerState({this.tasks = const [], this.isLoading = false});
 
-  DownloadManagerState copyWith({
-    List<DownloadTask>? tasks,
-    bool? isLoading,
-  }) {
+  DownloadManagerState copyWith({List<DownloadTask>? tasks, bool? isLoading}) {
     return DownloadManagerState(
       tasks: tasks ?? this.tasks,
       isLoading: isLoading ?? this.isLoading,
@@ -36,7 +31,14 @@ class DownloadManagerState {
   }
 
   List<DownloadTask> get downloadingTasks =>
-      tasks.where((t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending || t.status == DownloadStatus.paused).toList();
+      tasks
+          .where(
+            (t) =>
+                t.status == DownloadStatus.downloading ||
+                t.status == DownloadStatus.pending ||
+                t.status == DownloadStatus.paused,
+          )
+          .toList();
 
   List<DownloadTask> get completedTasks =>
       tasks.where((t) => t.status == DownloadStatus.completed).toList();
@@ -44,14 +46,17 @@ class DownloadManagerState {
   List<DownloadTask> get failedTasks =>
       tasks.where((t) => t.status == DownloadStatus.failed).toList();
 
-  bool isEpisodeDownloaded(int episodeId) =>
-      tasks.any((t) => t.episodeId == episodeId && t.status == DownloadStatus.completed);
+  bool isEpisodeDownloaded(int episodeId) => tasks.any(
+    (t) => t.episodeId == episodeId && t.status == DownloadStatus.completed,
+  );
 
-  bool isEpisodeDownloading(int episodeId) =>
-      tasks.any((t) => t.episodeId == episodeId &&
-          (t.status == DownloadStatus.downloading ||
-           t.status == DownloadStatus.pending ||
-           t.status == DownloadStatus.paused));
+  bool isEpisodeDownloading(int episodeId) => tasks.any(
+    (t) =>
+        t.episodeId == episodeId &&
+        (t.status == DownloadStatus.downloading ||
+            t.status == DownloadStatus.pending ||
+            t.status == DownloadStatus.paused),
+  );
 
   DownloadTask? getTaskByEpisodeId(int episodeId) {
     try {
@@ -61,14 +66,17 @@ class DownloadManagerState {
     }
   }
 
-  bool isMovieDownloaded(int movieId) =>
-      tasks.any((t) => t.movieId == movieId && t.status == DownloadStatus.completed);
+  bool isMovieDownloaded(int movieId) => tasks.any(
+    (t) => t.movieId == movieId && t.status == DownloadStatus.completed,
+  );
 
-  bool isMovieDownloading(int movieId) =>
-      tasks.any((t) => t.movieId == movieId &&
-          (t.status == DownloadStatus.downloading ||
-           t.status == DownloadStatus.pending ||
-           t.status == DownloadStatus.paused));
+  bool isMovieDownloading(int movieId) => tasks.any(
+    (t) =>
+        t.movieId == movieId &&
+        (t.status == DownloadStatus.downloading ||
+            t.status == DownloadStatus.pending ||
+            t.status == DownloadStatus.paused),
+  );
 
   DownloadTask? getTaskByMovieId(int movieId) {
     try {
@@ -80,28 +88,40 @@ class DownloadManagerState {
 }
 
 final downloadServiceProvider = Provider<DownloadService?>((ref) {
-  final serverUrl = ref.watch(serverUrlProvider);
-  if (serverUrl == null || serverUrl.isEmpty) return null;
+  final server = ref.watch(serverListProvider).currentServer;
+  if (server == null || server.url.isEmpty) return null;
 
   final downloadSettings = ref.watch(downloadSettingsProvider);
 
-  final serverUri = Uri.tryParse(serverUrl);
-  final dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(hours: 2),
-  ));
+  final serverUri = Uri.tryParse(server.url);
+  final dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(hours: 2),
+    ),
+  );
+  configureDioProxy(dio, server.proxyUrl);
+  configureDioAuthRetry(dio);
   dio.interceptors.add(
     AuthInterceptor(
       tokenGetter: () => ref.read(authProvider).tokens?.accessToken,
       onTokenExpired: () => ref.read(authProvider.notifier).refreshToken(),
-      shouldAttachToken: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
-      shouldRefreshOn401: (options) => serverUri == null ? true : HttpUtils.sameOrigin(serverUri, options.uri),
+      shouldAttachToken:
+          (options) =>
+              serverUri == null
+                  ? true
+                  : HttpUtils.sameOrigin(serverUri, options.uri),
+      shouldRefreshOn401:
+          (options) =>
+              serverUri == null
+                  ? true
+                  : HttpUtils.sameOrigin(serverUri, options.uri),
     ),
   );
 
   final service = DownloadService(
     dio,
-    serverUrl,
+    server.url,
     tokenGetter: () => ref.read(authProvider).tokens?.accessToken,
   );
   service.useMultiThread = downloadSettings.multiThreadEnabled;
@@ -109,7 +129,10 @@ final downloadServiceProvider = Provider<DownloadService?>((ref) {
   return service;
 });
 
-final downloadManagerProvider = NotifierProvider<DownloadManagerNotifier, DownloadManagerState>(DownloadManagerNotifier.new);
+final downloadManagerProvider =
+    NotifierProvider<DownloadManagerNotifier, DownloadManagerState>(
+      DownloadManagerNotifier.new,
+    );
 
 class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
   DateTime? _lastSaveTime;
@@ -153,7 +176,8 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     state = state.copyWith(tasks: tasks);
 
     final now = DateTime.now();
-    if (forceSave || _lastSaveTime == null ||
+    if (forceSave ||
+        _lastSaveTime == null ||
         now.difference(_lastSaveTime!).inMilliseconds >= _saveThrottleMs) {
       _lastSaveTime = now;
       _saveTasks();
@@ -169,7 +193,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     final service = _service;
     if (service == null) return;
     if (state.tasks.any((t) => t.episodeId == episode.id)) {
-      LogService.instance.debug('Download', 'Episode ${episode.id} already in download list');
+      LogService.instance.debug(
+        'Download',
+        'Episode ${episode.id} already in download list',
+      );
       return;
     }
 
@@ -221,7 +248,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     final service = _service;
     if (service == null) return;
     if (state.tasks.any((t) => t.movieId == movie.id)) {
-      LogService.instance.debug('Download', 'Movie ${movie.id} already in download list');
+      LogService.instance.debug(
+        'Download',
+        'Movie ${movie.id} already in download list',
+      );
       return;
     }
 
@@ -247,7 +277,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     if (service == null || aria2 == null) {
       // Cannot start right now; keep task pending so it can be retried later.
       _startingTaskIds.remove(task.id);
-      _updateTask(task.copyWith(status: DownloadStatus.pending), forceSave: true);
+      _updateTask(
+        task.copyWith(status: DownloadStatus.pending),
+        forceSave: true,
+      );
       return;
     }
 
@@ -272,7 +305,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
       final filename = file.substring(file.lastIndexOf('/') + 1);
 
       if (kDebugMode) {
-        LogService.instance.debug('Aria2', 'Adding download taskId=${task.id}, dir=$dir, filename=$filename, headerKeys=${info.headers.keys.toList()}');
+        LogService.instance.debug(
+          'Aria2',
+          'Adding download taskId=${task.id}, dir=$dir, filename=$filename, headerKeys=${info.headers.keys.toList()}',
+        );
       }
 
       final gid = await aria2.addUri(
@@ -322,12 +358,18 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
         }
 
         final status = await aria2.tellStatus(gid);
-        final downloadedBytes = int.tryParse(status['completedLength']?.toString() ?? '0') ?? 0;
-        final totalBytes = int.tryParse(status['totalLength']?.toString() ?? '0') ?? 0;
-        final downloadSpeed = double.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
+        final downloadedBytes =
+            int.tryParse(status['completedLength']?.toString() ?? '0') ?? 0;
+        final totalBytes =
+            int.tryParse(status['totalLength']?.toString() ?? '0') ?? 0;
+        final downloadSpeed =
+            double.tryParse(status['downloadSpeed']?.toString() ?? '0') ?? 0;
         final aria2Status = status['status'] as String?;
 
-        LogService.instance.debug('Aria2', 'Status: $aria2Status, Progress: $downloadedBytes/$totalBytes, Speed: ${(downloadSpeed / 1024 / 1024).toStringAsFixed(2)} MB/s');
+        LogService.instance.debug(
+          'Aria2',
+          'Status: $aria2Status, Progress: $downloadedBytes/$totalBytes, Speed: ${(downloadSpeed / 1024 / 1024).toStringAsFixed(2)} MB/s',
+        );
 
         if (aria2Status == 'complete') {
           final updatedTask = currentTask.copyWith(
@@ -341,7 +383,8 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
           _processQueue();
           break;
         } else if (aria2Status == 'error' || aria2Status == 'removed') {
-          final errorMessage = status['errorMessage'] as String? ?? 'aria2 下载失败';
+          final errorMessage =
+              status['errorMessage'] as String? ?? 'aria2 下载失败';
           final updatedTask = currentTask.copyWith(
             status: DownloadStatus.failed,
             errorMessage: errorMessage,
@@ -373,51 +416,54 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     if (service == null) {
       // Cannot start right now; keep task pending so it can be retried later.
       _startingTaskIds.remove(task.id);
-      _updateTask(task.copyWith(status: DownloadStatus.pending), forceSave: true);
+      _updateTask(
+        task.copyWith(status: DownloadStatus.pending),
+        forceSave: true,
+      );
       return;
     }
     try {
       service
           .startDownload(
-        task,
-        (updated) {
-          _startingTaskIds.remove(updated.id);
-          _updateTask(updated);
-        },
-        (completed) {
-          _startingTaskIds.remove(completed.id);
-          _updateTask(completed, forceSave: true);
-          _processQueue();
-        },
-        (failed, error) {
-          _startingTaskIds.remove(failed.id);
-          final updatedTask = failed.copyWith(
-            status: DownloadStatus.failed,
-            errorMessage: error,
-          );
-          _updateTask(updatedTask, forceSave: true);
-          _processQueue();
-        },
-      )
+            task,
+            (updated) {
+              _startingTaskIds.remove(updated.id);
+              _updateTask(updated);
+            },
+            (completed) {
+              _startingTaskIds.remove(completed.id);
+              _updateTask(completed, forceSave: true);
+              _processQueue();
+            },
+            (failed, error) {
+              _startingTaskIds.remove(failed.id);
+              final updatedTask = failed.copyWith(
+                status: DownloadStatus.failed,
+                errorMessage: error,
+              );
+              _updateTask(updatedTask, forceSave: true);
+              _processQueue();
+            },
+          )
           .catchError((e, _) {
-        _startingTaskIds.remove(task.id);
-        final current = state.tasks.firstWhere(
-          (t) => t.id == task.id,
-          orElse: () => task,
-        );
-        // If no callback updated the state, mark as failed to avoid "starting" forever.
-        if (current.status == DownloadStatus.pending ||
-            current.status == DownloadStatus.downloading) {
-          _updateTask(
-            current.copyWith(
-              status: DownloadStatus.failed,
-              errorMessage: e.toString(),
-            ),
-            forceSave: true,
-          );
-          _processQueue();
-        }
-      });
+            _startingTaskIds.remove(task.id);
+            final current = state.tasks.firstWhere(
+              (t) => t.id == task.id,
+              orElse: () => task,
+            );
+            // If no callback updated the state, mark as failed to avoid "starting" forever.
+            if (current.status == DownloadStatus.pending ||
+                current.status == DownloadStatus.downloading) {
+              _updateTask(
+                current.copyWith(
+                  status: DownloadStatus.failed,
+                  errorMessage: e.toString(),
+                ),
+                forceSave: true,
+              );
+              _processQueue();
+            }
+          });
     } catch (e) {
       _startingTaskIds.remove(task.id);
       final current = state.tasks.firstWhere(
@@ -441,16 +487,25 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
 
     // Fill available slots up to the concurrency limit.
     final tasksForPicking = state.tasks
-        .map((t) => _startingTaskIds.contains(t.id)
-            ? t.copyWith(status: DownloadStatus.downloading)
-            : t)
+        .map(
+          (t) =>
+              _startingTaskIds.contains(t.id)
+                  ? t.copyWith(status: DownloadStatus.downloading)
+                  : t,
+        )
         .toList(growable: false);
-    final toStart = pickPendingTasksToStart(tasksForPicking, maxConcurrent: _maxConcurrentDownloads);
+    final toStart = pickPendingTasksToStart(
+      tasksForPicking,
+      maxConcurrent: _maxConcurrentDownloads,
+    );
     if (toStart.isEmpty) return;
 
     for (final task in toStart) {
       if (_startingTaskIds.contains(task.id)) continue;
-      final original = state.tasks.firstWhere((t) => t.id == task.id, orElse: () => task);
+      final original = state.tasks.firstWhere(
+        (t) => t.id == task.id,
+        orElse: () => task,
+      );
       _startingTaskIds.add(task.id);
       try {
         _startDownload(original);
@@ -481,16 +536,23 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
   Future<void> pauseAllDownloads() async {
     final service = _service;
     if (service == null) return;
-    final activeTasks = state.tasks.where(
-      (t) => t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending,
-    ).toList();
+    final activeTasks =
+        state.tasks
+            .where(
+              (t) =>
+                  t.status == DownloadStatus.downloading ||
+                  t.status == DownloadStatus.pending,
+            )
+            .toList();
     if (activeTasks.isNotEmpty) {
-      final updatedTasks = state.tasks.map((t) {
-        if (t.status == DownloadStatus.downloading || t.status == DownloadStatus.pending) {
-          return t.copyWith(status: DownloadStatus.paused);
-        }
-        return t;
-      }).toList();
+      final updatedTasks =
+          state.tasks.map((t) {
+            if (t.status == DownloadStatus.downloading ||
+                t.status == DownloadStatus.pending) {
+              return t.copyWith(status: DownloadStatus.paused);
+            }
+            return t;
+          }).toList();
       state = state.copyWith(tasks: updatedTasks);
       await _saveTasks();
     }
@@ -514,7 +576,9 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     _startingTaskIds.remove(taskId);
     final task = state.tasks.firstWhere((t) => t.id == taskId);
     await service.deleteDownload(task);
-    state = state.copyWith(tasks: state.tasks.where((t) => t.id != taskId).toList());
+    state = state.copyWith(
+      tasks: state.tasks.where((t) => t.id != taskId).toList(),
+    );
     await _saveTasks();
   }
 
@@ -539,7 +603,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
       await service.deleteDownload(task);
     }
     state = state.copyWith(
-      tasks: state.tasks.where((t) => t.status != DownloadStatus.completed).toList(),
+      tasks:
+          state.tasks
+              .where((t) => t.status != DownloadStatus.completed)
+              .toList(),
     );
     await _saveTasks();
   }

@@ -88,6 +88,7 @@ dependencies:
   # Windows/macOS 自动更新
   auto_updater: ^0.1.7
   palette_generator: ^0.3.3+7
+  socks5_proxy: ^2.1.1
 
 dependency_overrides:
   screen_brightness_ios: 2.1.2

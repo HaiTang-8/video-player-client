@@ -27,7 +27,10 @@ class ServerListState {
     }
   }
 
-  ServerListState copyWith({List<ServerConfig>? servers, String? currentServerId}) {
+  ServerListState copyWith({
+    List<ServerConfig>? servers,
+    String? currentServerId,
+  }) {
     return ServerListState(
       servers: servers ?? this.servers,
       currentServerId: currentServerId ?? this.currentServerId,
@@ -35,7 +38,10 @@ class ServerListState {
   }
 }
 
-final serverListProvider = NotifierProvider<ServerListNotifier, ServerListState>(ServerListNotifier.new);
+final serverListProvider =
+    NotifierProvider<ServerListNotifier, ServerListState>(
+      ServerListNotifier.new,
+    );
 
 class ServerListNotifier extends Notifier<ServerListState> {
   @override
@@ -74,9 +80,17 @@ class ServerListNotifier extends Notifier<ServerListState> {
     await prefs.setString(AppConstants.serverListKey, json);
   }
 
-  Future<void> addServer(String name, String url) async {
+  Future<void> addServer(
+    String name,
+    String url, {
+    String proxyUrl = '',
+  }) async {
     final prefs = ref.read(sharedPreferencesProvider);
-    final server = ServerConfig.create(name: name, url: url);
+    final server = ServerConfig.create(
+      name: name,
+      url: url,
+      proxyUrl: proxyUrl,
+    );
     final newServers = [...state.servers, server];
     await _saveServers(newServers);
 
@@ -107,13 +121,19 @@ class ServerListNotifier extends Notifier<ServerListState> {
     state = state.copyWith(servers: newServers, currentServerId: newCurrentId);
   }
 
-  Future<void> updateServer(String id, {String? name, String? url}) async {
-    final newServers = state.servers.map((s) {
-      if (s.id == id) {
-        return s.copyWith(name: name, url: url);
-      }
-      return s;
-    }).toList();
+  Future<void> updateServer(
+    String id, {
+    String? name,
+    String? url,
+    String? proxyUrl,
+  }) async {
+    final newServers =
+        state.servers.map((s) {
+          if (s.id == id) {
+            return s.copyWith(name: name, url: url, proxyUrl: proxyUrl);
+          }
+          return s;
+        }).toList();
     await _saveServers(newServers);
     state = state.copyWith(servers: newServers);
   }
@@ -131,12 +151,13 @@ final serverUrlProvider = Provider<String?>((ref) {
 });
 
 final apiClientProvider = Provider<ApiClient?>((ref) {
-  final serverUrl = ref.watch(serverUrlProvider);
-  if (serverUrl == null || serverUrl.isEmpty) {
+  final server = ref.watch(serverListProvider).currentServer;
+  if (server == null || server.url.isEmpty) {
     return null;
   }
   final client = ApiClient(
-    baseUrl: serverUrl,
+    baseUrl: server.url,
+    proxyUrl: server.proxyUrl,
     onError: (msg) => ref.read(errorNotificationProvider.notifier).notify(msg),
   );
   // 当 Provider 被销毁时关闭 Dio 客户端
@@ -146,23 +167,21 @@ final apiClientProvider = Provider<ApiClient?>((ref) {
   return client;
 });
 
-enum ServerConnectionState {
-  disconnected,
-  connecting,
-  connected,
-  error,
-}
+enum ServerConnectionState { disconnected, connecting, connected, error }
 
-final serverConnectionProvider = NotifierProvider<ServerConnectionNotifier, ServerConnectionState>(ServerConnectionNotifier.new);
+final serverConnectionProvider =
+    NotifierProvider<ServerConnectionNotifier, ServerConnectionState>(
+      ServerConnectionNotifier.new,
+    );
 
 class ServerConnectionNotifier extends Notifier<ServerConnectionState> {
   @override
   ServerConnectionState build() => ServerConnectionState.disconnected;
 
-  Future<bool> testConnection(String url) async {
+  Future<bool> testConnection(String url, {String proxyUrl = ''}) async {
     state = ServerConnectionState.connecting;
+    final client = ApiClient(baseUrl: url, proxyUrl: proxyUrl);
     try {
-      final client = ApiClient(baseUrl: url);
       final storageService = StorageService(client);
       final response = await storageService.healthCheck();
 
@@ -176,13 +195,18 @@ class ServerConnectionNotifier extends Notifier<ServerConnectionState> {
     } catch (e) {
       state = ServerConnectionState.error;
       return false;
+    } finally {
+      client.close();
     }
   }
 
   Future<void> connectToSavedServer() async {
-    final serverUrl = ref.read(serverUrlProvider);
-    if (serverUrl != null && serverUrl.isNotEmpty) {
-      final success = await testConnection(serverUrl);
+    final server = ref.read(serverListProvider).currentServer;
+    if (server != null && server.url.isNotEmpty) {
+      final success = await testConnection(
+        server.url,
+        proxyUrl: server.proxyUrl,
+      );
       if (success) {
         ref.read(authProvider.notifier).checkAuthStatus();
       }

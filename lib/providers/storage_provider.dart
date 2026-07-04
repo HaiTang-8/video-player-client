@@ -128,12 +128,15 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     required String type,
     required Map<String, String> settings,
   }) async {
-    final serverUrl = ref.read(serverUrlProvider);
-    if (serverUrl == null || serverUrl.isEmpty) {
+    final server = ref.read(serverListProvider).currentServer;
+    if (server == null || server.url.isEmpty) {
       return (false, '服务不可用');
     }
 
-    final tempClient = ApiClient(baseUrl: serverUrl);
+    final tempClient = ApiClient(
+      baseUrl: server.url,
+      proxyUrl: server.proxyUrl,
+    );
     tempClient.addInterceptor(
       AuthInterceptor(
         tokenGetter: () => ref.read(authProvider).tokens?.accessToken,

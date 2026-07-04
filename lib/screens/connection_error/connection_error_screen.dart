@@ -10,7 +10,8 @@ class ConnectionErrorScreen extends ConsumerStatefulWidget {
   const ConnectionErrorScreen({super.key});
 
   @override
-  ConsumerState<ConnectionErrorScreen> createState() => _ConnectionErrorScreenState();
+  ConsumerState<ConnectionErrorScreen> createState() =>
+      _ConnectionErrorScreenState();
 }
 
 class _ConnectionErrorScreenState extends ConsumerState<ConnectionErrorScreen> {
@@ -19,9 +20,11 @@ class _ConnectionErrorScreenState extends ConsumerState<ConnectionErrorScreen> {
   Future<void> _handleRetry() async {
     setState(() => _isRetrying = true);
 
-    final serverUrl = ref.read(serverUrlProvider);
-    if (serverUrl != null && serverUrl.isNotEmpty) {
-      final success = await ref.read(serverConnectionProvider.notifier).testConnection(serverUrl);
+    final server = ref.read(serverListProvider).currentServer;
+    if (server != null && server.url.isNotEmpty) {
+      final success = await ref
+          .read(serverConnectionProvider.notifier)
+          .testConnection(server.url, proxyUrl: server.proxyUrl);
       if (success && mounted) {
         await ref.read(authProvider.notifier).checkAuthStatus();
         if (mounted) context.go('/library');
@@ -54,16 +57,14 @@ class _ConnectionErrorScreenState extends ConsumerState<ConnectionErrorScreen> {
 
     if (isDesktop) {
       return Scaffold(
-        appBar: const DesktopTitleBar(
-          title: Text('连接错误'),
-          centerTitle: true,
-        ),
+        appBar: const DesktopTitleBar(title: Text('连接错误'), centerTitle: true),
         body: content,
       );
     }
 
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7),
+      backgroundColor:
+          isDark ? const Color(0xFF000000) : const Color(0xFFF2F2F7),
       body: SafeArea(child: content),
     );
   }

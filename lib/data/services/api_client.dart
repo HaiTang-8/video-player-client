@@ -2,6 +2,20 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'log_service.dart';
+import 'proxy_http_client_adapter.dart';
+
+const _retryDioExtraKey = 'retry_dio';
+
+void configureDioAuthRetry(Dio dio) {
+  dio.interceptors.add(
+    InterceptorsWrapper(
+      onRequest: (options, handler) {
+        options.extra[_retryDioExtraKey] = dio;
+        handler.next(options);
+      },
+    ),
+  );
+}
 
 class AuthInterceptor extends Interceptor {
   final String? Function() tokenGetter;
@@ -114,7 +128,8 @@ class AuthInterceptor extends Interceptor {
     if (success) {
       try {
         _setBearerHeaderIfNeeded(err.requestOptions);
-        final dio = Dio();
+        final dio =
+            err.requestOptions.extra[_retryDioExtraKey] as Dio? ?? Dio();
         final response = await dio.fetch(err.requestOptions);
         handler.resolve(response);
       } catch (e) {
@@ -126,7 +141,7 @@ class AuthInterceptor extends Interceptor {
       for (final req in pending) {
         _setBearerHeaderIfNeeded(req.options);
         try {
-          final dio = Dio();
+          final dio = req.options.extra[_retryDioExtraKey] as Dio? ?? Dio();
           final response = await dio.fetch(req.options);
           req.handler.resolve(response);
         } catch (e) {
@@ -154,7 +169,7 @@ class ApiClient {
   final Dio _dio;
   final void Function(String)? onError;
 
-  ApiClient({required String baseUrl, this.onError})
+  ApiClient({required String baseUrl, String? proxyUrl, this.onError})
     : _dio = Dio(
         BaseOptions(
           baseUrl: baseUrl,
@@ -166,7 +181,10 @@ class ApiClient {
             'Accept': 'application/json',
           },
         ),
-      );
+      ) {
+    configureDioProxy(_dio, proxyUrl);
+    configureDioAuthRetry(_dio);
+  }
 
   /// 添加拦截器
   void addInterceptor(Interceptor interceptor) {
