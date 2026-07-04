@@ -22,6 +22,7 @@ import '../../data/models/models.dart';
 import '../../data/services/api_client.dart';
 import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
+import '../storages/storage_browse_screen.dart';
 
 typedef _TvHeroImage =
     ({
@@ -1530,7 +1531,12 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             (menuContext) => IconButton(
               tooltip: '更多',
               icon: const Icon(CupertinoIcons.ellipsis),
-              onPressed: () => _showDesktopActionsMenu(menuContext, tvShow),
+              onPressed:
+                  () => _showDesktopActionsMenu(
+                    menuContext,
+                    tvShow,
+                    selectedSeason,
+                  ),
             ),
       ),
     ];
@@ -1571,11 +1577,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-                child: const Text('重新刮削'),
+                leading: const Icon(
+                  CupertinoIcons.arrow_clockwise_circle,
+                  size: 18,
+                ),
+                child: const Text('更新刮削'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _scrapeTvShow(context, widget.tvShowId);
+                  _updateTvShowScraping(context, tvShow, selectedSeason);
                 },
               ),
               shadcn.MenuButton(
@@ -1604,7 +1613,11 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  void _showDesktopActionsMenu(BuildContext context, TvShow tvShow) {
+  void _showDesktopActionsMenu(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) {
     shadcn.showDropdown(
       context: context,
       builder: (dropdownContext) {
@@ -1645,11 +1658,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-                child: const Text('重新刮削'),
+                leading: const Icon(
+                  CupertinoIcons.arrow_clockwise_circle,
+                  size: 18,
+                ),
+                child: const Text('更新刮削'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _scrapeTvShow(context, widget.tvShowId);
+                  _updateTvShowScraping(context, tvShow, selectedSeason);
                 },
               ),
               shadcn.MenuButton(
@@ -2272,46 +2288,48 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     );
   }
 
-  Future<void> _scrapeTvShow(BuildContext context, int id) async {
-    final service = ref.read(mediaServiceProvider);
-    if (service == null) {
+  Future<void> _updateTvShowScraping(
+    BuildContext context,
+    TvShow tvShow,
+    Season? selectedSeason,
+  ) async {
+    final storageId = tvShow.storageId;
+    final path = _tvShowScrapePath(tvShow, selectedSeason);
+    if (storageId == null || path == null) {
       DialogUtils.showToast(
         context: context,
-        message: '未连接到服务器',
+        message: '缺少存储路径，无法更新刮削',
         isError: true,
       );
       return;
     }
 
-    final confirmed = await DialogUtils.showConfirmDialog(
+    final success = await DialogUtils.showCustomDialog<bool>(
       context: context,
-      title: '重新刮削',
-      content: '将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？',
-      confirmText: '开始',
+      barrierDismissible: false,
+      builder: (_) => PathScanDialog(storageId: storageId, path: path),
     );
 
-    if (confirmed != true || !context.mounted) return;
-
-    DialogUtils.showLoadingDialog(context: context, message: '正在刮削...');
-
-    final resp = await service.scrapeTvShow(id);
-
-    if (context.mounted) {
-      Navigator.pop(context);
-    }
     if (!context.mounted) return;
-
-    if (resp.isSuccess) {
-      ref.invalidate(tvShowDetailProvider(id));
-      DialogUtils.showToast(context: context, message: '刮削完成');
-      return;
+    if (success == true) {
+      ref.invalidate(tvShowDetailProvider(tvShow.id));
     }
+  }
 
-    DialogUtils.showToast(
-      context: context,
-      message: resp.error ?? '刮削失败',
-      isError: true,
-    );
+  String? _tvShowScrapePath(TvShow tvShow, Season? selectedSeason) {
+    List<SourceGroup>? sourceGroups;
+    if (selectedSeason != null) {
+      sourceGroups = ref
+          .read(
+            seasonSourceGroupsProvider((
+              tvShowId: widget.tvShowId,
+              seasonId: selectedSeason.id,
+            )),
+          )
+          .maybeWhen(data: (groups) => groups, orElse: () => null);
+    }
+    final path = _resolveSelectedSourceFolder(tvShow, sourceGroups)?.trim();
+    return path == null || path.isEmpty ? null : path;
   }
 
   Future<void> _syncTvShowSeasons(

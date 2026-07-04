@@ -83,7 +83,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                       },
                     ),
                     IconButton(
-                      tooltip: '重新刮削当前目录',
+                      tooltip: '更新刮削当前目录',
                       icon: const Icon(CupertinoIcons.arrow_clockwise_circle),
                       onPressed: () => _startPathScan(browseState.currentPath),
                     ),
@@ -121,7 +121,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                       },
                     ),
                     IconButton(
-                      tooltip: '重新刮削当前目录',
+                      tooltip: '更新刮削当前目录',
                       icon: const Icon(
                         CupertinoIcons.arrow_clockwise_circle,
                         size: 20,
@@ -299,14 +299,12 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
 
   Future<void> _startPathScan(String targetPath) async {
     final normalizedPath = targetPath.trim().isEmpty ? '/' : targetPath.trim();
-    await DialogUtils.showCustomDialog<void>(
+    await DialogUtils.showCustomDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder:
-          (_) => _PathScanDialog(
-            storageId: widget.storageId,
-            path: normalizedPath,
-          ),
+          (_) =>
+              PathScanDialog(storageId: widget.storageId, path: normalizedPath),
     );
   }
 
@@ -485,7 +483,7 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                 if (file.isDir)
                   ListTile(
                     leading: const Icon(CupertinoIcons.arrow_clockwise_circle),
-                    title: const Text('重新刮削此目录'),
+                    title: const Text('更新刮削此目录'),
                     subtitle: Text(
                       '仅重新扫描并强制刮削 ${file.path}',
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -1418,17 +1416,21 @@ class _CandidateScoreWrap extends StatelessWidget {
 
 enum _ScanDialogPhase { confirm, scanning, done }
 
-class _PathScanDialog extends ConsumerStatefulWidget {
+class PathScanDialog extends ConsumerStatefulWidget {
   final int storageId;
   final String path;
 
-  const _PathScanDialog({required this.storageId, required this.path});
+  const PathScanDialog({
+    super.key,
+    required this.storageId,
+    required this.path,
+  });
 
   @override
-  ConsumerState<_PathScanDialog> createState() => _PathScanDialogState();
+  ConsumerState<PathScanDialog> createState() => _PathScanDialogState();
 }
 
-class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
+class _PathScanDialogState extends ConsumerState<PathScanDialog> {
   _ScanDialogPhase _phase = _ScanDialogPhase.confirm;
   String? _error;
   ScanProgress? _finalProgress;
@@ -1559,7 +1561,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
           const SizedBox(width: 8),
           Text(
             _phase == _ScanDialogPhase.confirm
-                ? '重新刮削目录'
+                ? '更新刮削'
                 : _phase == _ScanDialogPhase.done
                 ? (_error != null ? '刮削失败' : '刮削完成')
                 : '正在刮削...',
@@ -2017,7 +2019,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
       case _ScanDialogPhase.done:
         return [
           shadcn.PrimaryButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, _error == null),
             leading: Icon(
               _error != null
                   ? shadcn.LucideIcons.circleAlert

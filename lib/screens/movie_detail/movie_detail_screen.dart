@@ -20,6 +20,7 @@ import '../../core/widgets/overview_preview_text.dart';
 import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import '../storages/storage_browse_screen.dart';
 
 typedef _MovieHeroImage =
     ({
@@ -1117,11 +1118,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-                child: const Text('重新刮削'),
+                leading: const Icon(
+                  CupertinoIcons.arrow_clockwise_circle,
+                  size: 18,
+                ),
+                child: const Text('更新刮削'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _scrapeMovie(context, movie.id);
+                  _updateMovieScraping(context, movie);
                 },
               ),
               shadcn.MenuButton(
@@ -1180,11 +1184,14 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 },
               ),
               shadcn.MenuButton(
-                leading: const Icon(CupertinoIcons.wand_stars, size: 18),
-                child: const Text('重新刮削'),
+                leading: const Icon(
+                  CupertinoIcons.arrow_clockwise_circle,
+                  size: 18,
+                ),
+                child: const Text('更新刮削'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  _scrapeMovie(context, movie.id);
+                  _updateMovieScraping(context, movie);
                 },
               ),
               shadcn.MenuButton(
@@ -1489,46 +1496,48 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     );
   }
 
-  Future<void> _scrapeMovie(BuildContext context, int id) async {
-    final service = ref.read(mediaServiceProvider);
-    if (service == null) {
+  Future<void> _updateMovieScraping(BuildContext context, Movie movie) async {
+    final storageId = movie.storageId;
+    final path = _movieScrapePath(movie);
+    if (storageId == null || path == null) {
       DialogUtils.showToast(
         context: context,
-        message: '未连接到服务器',
+        message: '缺少存储路径，无法更新刮削',
         isError: true,
       );
       return;
     }
 
-    final confirmed = await DialogUtils.showConfirmDialog(
+    final success = await DialogUtils.showCustomDialog<bool>(
       context: context,
-      title: '重新刮削',
-      content: '将从刮削源重新拉取元数据（海报、简介、演员表等）。是否继续？',
-      confirmText: '开始',
+      barrierDismissible: false,
+      builder: (_) => PathScanDialog(storageId: storageId, path: path),
     );
 
-    if (confirmed != true || !context.mounted) return;
-
-    DialogUtils.showLoadingDialog(context: context, message: '正在刮削...');
-
-    final resp = await service.scrapeMovie(id);
-
-    if (context.mounted) {
-      Navigator.pop(context);
-    }
     if (!context.mounted) return;
-
-    if (resp.isSuccess) {
-      ref.invalidate(movieDetailProvider(id));
-      DialogUtils.showToast(context: context, message: '刮削完成');
-      return;
+    if (success == true) {
+      ref.invalidate(movieDetailProvider(movie.id));
     }
+  }
 
-    DialogUtils.showToast(
-      context: context,
-      message: resp.error ?? '刮削失败',
-      isError: true,
-    );
+  String? _movieScrapePath(Movie movie) {
+    final sourceFolders = movie.sourceFolders;
+    if (sourceFolders != null) {
+      for (final folder in sourceFolders) {
+        final path = folder.trim();
+        if (path.isNotEmpty) return path;
+      }
+    }
+    return _movieDirectoryPath(movie);
+  }
+
+  String? _movieDirectoryPath(Movie movie) {
+    final filePath = movie.filePath?.trim().replaceAll('\\', '/');
+    if (filePath == null || filePath.isEmpty) return null;
+    final index = filePath.lastIndexOf('/');
+    if (index < 0) return null;
+    if (index == 0) return filePath.substring(0, 1);
+    return filePath.substring(0, index);
   }
 
   /// 构建文件信息区
