@@ -57,6 +57,7 @@ class CustomVideoControls extends StatefulWidget {
   final String? sourcePath;
   final Future<void> Function(SubtitleInfo sub)? onSelectExternalSubtitle;
   final Future<void> Function(Duration position)? onSeekRequested;
+  final bool Function()? isPlaybackErrorRecoveryActive;
   final int seekDuration;
 
   const CustomVideoControls({
@@ -81,6 +82,7 @@ class CustomVideoControls extends StatefulWidget {
     this.sourcePath,
     this.onSelectExternalSubtitle,
     this.onSeekRequested,
+    this.isPlaybackErrorRecoveryActive,
     this.seekDuration = 5,
   });
 
@@ -123,6 +125,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
+  Duration _lastTrustedPosition = Duration.zero;
   int _seekRequestVersion = 0;
   int _manualSeekPendingVersion = 0;
   bool _manualSeekPending = false;
@@ -211,10 +214,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       widget.player.stream.position.listen((p) {
         if (!mounted) return;
         final seekReached = _isManualSeekTargetReached(p);
+        final acceptPosition = !_isSuspiciousAutoEndPosition(p);
         if (!_dragging || seekReached) {
           setState(() {
-            if (!_dragging) {
+            if (!_dragging && acceptPosition) {
               _position = p;
+              _lastTrustedPosition = p;
             }
             if (seekReached) {
               _clearManualSeekPending();
@@ -810,6 +815,27 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     return (position.inMilliseconds - target.inMilliseconds).abs() <= 1000;
   }
 
+  bool _isNearPlaybackEnd(Duration position) {
+    if (_duration.inSeconds <= 180) return false;
+    return position >= _duration - const Duration(seconds: 60);
+  }
+
+  bool _isSuspiciousAutoEndPosition(Duration position) {
+    if (widget.isPlaybackErrorRecoveryActive?.call() != true) return false;
+    if (!_isNearPlaybackEnd(position)) return false;
+    if (_manualSeekPending && _isManualSeekTargetReached(position)) {
+      return false;
+    }
+    if (_lastTrustedPosition <= Duration.zero) return false;
+    if (_isNearPlaybackEnd(_lastTrustedPosition)) return false;
+    return position - _lastTrustedPosition >= const Duration(seconds: 30);
+  }
+
+  Duration _seekBasePosition() {
+    if (_lastTrustedPosition > Duration.zero) return _lastTrustedPosition;
+    return _position;
+  }
+
   void _clearManualSeekPending() {
     _manualSeekPendingTimer?.cancel();
     _manualSeekPendingTimer = null;
@@ -826,7 +852,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   void _seekRelative(int seconds) {
-    final newPos = _position + Duration(seconds: seconds);
+    final newPos = _seekBasePosition() + Duration(seconds: seconds);
     final clamped = Duration(
       milliseconds: newPos.inMilliseconds.clamp(0, _duration.inMilliseconds),
     );
@@ -844,6 +870,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     final manualSeekPendingVersion = ++_manualSeekPendingVersion;
     setState(() {
       _position = target;
+      _lastTrustedPosition = target;
       _dragging = true;
       _manualSeekPending = true;
       _manualSeekTarget = target;
@@ -866,6 +893,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         setState(() {
           if (isLatestSeek) {
             _position = target;
+            _lastTrustedPosition = target;
             _dragging = false;
           }
           if (hideSeekOverlay) {
@@ -1338,6 +1366,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                     final target = Duration(
                       milliseconds: (v * _duration.inMilliseconds).round(),
                     );
+                    _lastTrustedPosition = target;
                     unawaited(_commitSeek(target, restartHideTimer: true));
                   },
                   activeColor: Colors.white,

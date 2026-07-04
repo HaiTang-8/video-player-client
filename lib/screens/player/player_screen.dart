@@ -75,6 +75,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _initialLoadStarted = false;
   Future<void>? _activeSeekOperation;
   int _seekRequestVersion = 0;
+  DateTime? _lastNetworkPlaybackErrorAt;
+  Duration? _networkErrorPosition;
+  Duration _lastTrustedPlaybackPosition = Duration.zero;
+  bool _lastPositionWasSuspiciousEnd = false;
+  DateTime? _lastControlledSeekAt;
+  Duration? _lastControlledSeekTarget;
   final List<StreamSubscription> _subscriptions = [];
   late final Future<void> _playerNetworkConfigured;
 
@@ -109,7 +115,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // 配置 HTTP 流自动重连（暂停后恢复播放时需要）
       await platform.setProperty(
         'stream-lavf-o',
-        'reconnect=1,reconnect_streamed=1,reconnect_delay_max=5',
+        'reconnect=1,reconnect_streamed=1,reconnect_at_eof=1,'
+            'reconnect_on_network_error=1,reconnect_on_http_error=5xx,'
+            'reconnect_delay_max=5',
       );
       // 增加网络超时时间
       await platform.setProperty('network-timeout', '30');
@@ -358,18 +366,29 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           );
           // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
           if (error.contains('Could not open/initialize audio device')) return;
-          if (error.contains('ffurl_write')) return;
-          if (error.contains('ffurl_read')) return;
-          // 使用更精确的 tcp 错误匹配
-          if (error.contains('tcp: Connection refused') ||
-              error.contains('tcp: Connection reset') ||
-              error.contains('tcp: Connection timed out')) {
+          if (_isRecoverablePlaybackError(error)) {
+            _markNetworkPlaybackError();
             return;
           }
           setState(() {
             _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
             _isLoading = false;
           });
+        }
+      }),
+    );
+
+    _subscriptions.add(
+      _player.stream.position.listen((position) {
+        if (!mounted || _isDisposing) return;
+        final duration = _player.state.duration;
+        if (_isSuspiciousEndPosition(position, duration)) {
+          _lastPositionWasSuspiciousEnd = true;
+          return;
+        }
+        _lastPositionWasSuspiciousEnd = false;
+        if (position >= Duration.zero) {
+          _lastTrustedPlaybackPosition = position;
         }
       }),
     );
@@ -412,7 +431,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             'PlayerScreen',
             'Seeking to $targetPosition seconds',
           );
-          _player.seek(Duration(seconds: targetPosition));
+          final seekTarget = Duration(seconds: targetPosition);
+          _markControlledSeek(seekTarget);
+          _player.seek(seekTarget);
         }
       }),
     );
@@ -422,7 +443,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _player.stream.completed.listen((completed) {
         if (!mounted || _isDisposing) return;
         if (completed) {
-          unawaited(_saveProgress()); // 播放完成时保存进度
+          if (_isSuspiciousPlaybackCompletion()) {
+            LogService.instance.warn(
+              'PlayerScreen',
+              'Ignored suspicious completed after network error',
+            );
+            return;
+          }
+          unawaited(_saveProgress(fromCompleted: true)); // 播放完成时保存进度
         }
       }),
     );
@@ -482,6 +510,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _pendingSeekPosition = null;
     _routeInitialPosition = null;
     _hasSeekToInitialPosition = true;
+    _markControlledSeek(position);
 
     final seekFuture = Future<void>.sync(() => _player.seek(position));
     final operation = _performUserSeek(
@@ -508,7 +537,113 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     } catch (_) {}
   }
 
-  Future<void> _saveProgress({bool force = false}) async {
+  bool _isRecoverablePlaybackError(String error) {
+    final message = error.toLowerCase();
+    return message.contains('ffurl_write') ||
+        message.contains('ffurl_read') ||
+        message.contains('tcp: connection refused') ||
+        message.contains('tcp: connection reset') ||
+        message.contains('tcp: connection timed out') ||
+        message.contains('connection refused') ||
+        message.contains('connection reset') ||
+        message.contains('connection timed out') ||
+        message.contains('network is unreachable') ||
+        _isRecoverableHttpPlaybackError(message) ||
+        message.contains('end of file');
+  }
+
+  bool _isRecoverableHttpPlaybackError(String message) {
+    if (!message.contains('http error') &&
+        !message.contains('server returned')) {
+      return false;
+    }
+    final statusCode = _httpStatusCodeFromPlaybackError(message);
+    if (statusCode == null) return false;
+    return statusCode >= 500 && statusCode <= 599;
+  }
+
+  int? _httpStatusCodeFromPlaybackError(String message) {
+    final match = RegExp(r'\b([1-5]\d{2})\b').firstMatch(message);
+    if (match == null) return null;
+    return int.tryParse(match.group(1)!);
+  }
+
+  void _markNetworkPlaybackError() {
+    _lastNetworkPlaybackErrorAt = DateTime.now();
+    _networkErrorPosition = _lastTrustedPlaybackPosition;
+  }
+
+  bool _hasRecentNetworkPlaybackError() {
+    final lastErrorAt = _lastNetworkPlaybackErrorAt;
+    if (lastErrorAt == null) return false;
+    return DateTime.now().difference(lastErrorAt) <=
+        const Duration(seconds: 45);
+  }
+
+  void _markControlledSeek(Duration target) {
+    _lastControlledSeekAt = DateTime.now();
+    _lastControlledSeekTarget = target;
+    _lastTrustedPlaybackPosition = target;
+    _lastPositionWasSuspiciousEnd = false;
+  }
+
+  bool _isRecentControlledSeekPosition(Duration position) {
+    final target = _lastControlledSeekTarget;
+    final seekAt = _lastControlledSeekAt;
+    if (target == null || seekAt == null) return false;
+    if (DateTime.now().difference(seekAt) > const Duration(seconds: 20)) {
+      return false;
+    }
+    return (position.inMilliseconds - target.inMilliseconds).abs() <= 1500;
+  }
+
+  bool _isNearPlaybackEnd(Duration position, Duration duration) {
+    if (duration.inSeconds <= 180) return false;
+    return position >= duration - const Duration(seconds: 60);
+  }
+
+  bool _isSuspiciousEndPosition(Duration position, Duration duration) {
+    if (!_hasRecentNetworkPlaybackError()) return false;
+    if (!_isNearPlaybackEnd(position, duration)) return false;
+    if (_isRecentControlledSeekPosition(position)) return false;
+    final trusted = _networkErrorPosition ?? _lastTrustedPlaybackPosition;
+    if (trusted <= Duration.zero) return false;
+    if (_isNearPlaybackEnd(trusted, duration)) return false;
+    return position - trusted >= const Duration(seconds: 30);
+  }
+
+  bool _isSuspiciousPlaybackCompletion() {
+    final position = _player.state.position;
+    final duration = _player.state.duration;
+    return _lastPositionWasSuspiciousEnd ||
+        _isSuspiciousEndPosition(position, duration);
+  }
+
+  bool _shouldSkipProgressSave(
+    Duration position,
+    Duration duration, {
+    required bool force,
+    required bool fromCompleted,
+  }) {
+    if (force && _isRecentControlledSeekPosition(position)) return false;
+    if (fromCompleted && !_isSuspiciousPlaybackCompletion()) return false;
+    return _lastPositionWasSuspiciousEnd ||
+        _isSuspiciousEndPosition(position, duration);
+  }
+
+  void _resetPlaybackErrorTracking() {
+    _lastNetworkPlaybackErrorAt = null;
+    _networkErrorPosition = null;
+    _lastTrustedPlaybackPosition = Duration.zero;
+    _lastPositionWasSuspiciousEnd = false;
+    _lastControlledSeekAt = null;
+    _lastControlledSeekTarget = null;
+  }
+
+  Future<void> _saveProgress({
+    bool force = false,
+    bool fromCompleted = false,
+  }) async {
     try {
       if (!force && _activeSeekOperation != null) return;
       final position = _player.state.position;
@@ -516,6 +651,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       // 跳过无效数据或位置未变化
       if (duration.inSeconds <= 0) return;
+      if (_shouldSkipProgressSave(
+        position,
+        duration,
+        force: force,
+        fromCompleted: fromCompleted,
+      )) {
+        LogService.instance.warn(
+          'PlayerScreen',
+          'Skipped suspicious progress save: ${position.inSeconds}/${duration.inSeconds}',
+        );
+        return;
+      }
       if (!force && position == _lastSavedPosition) return;
 
       final service = _mediaService;
@@ -633,6 +780,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final position = _player.state.position;
       final duration = _player.state.duration;
       if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
+      if (_shouldSkipProgressSave(
+        position,
+        duration,
+        force: false,
+        fromCompleted: false,
+      )) {
+        return;
+      }
 
       final service = _mediaService;
       if (service == null) return;
@@ -723,6 +878,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _hasAppliedPlaybackSettings = false;
       _hasAutoSelectedSubtitle = false;
       _externalSubtitleAutoLoaded = false;
+      _resetPlaybackErrorTracking();
       if (episodeIndex != null) {
         _currentEpisodeIndex = episodeIndex;
         _pendingSeekPosition = null;
@@ -1263,6 +1419,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             sourcePath: _currentFilePath,
             onSelectExternalSubtitle: _loadExternalSubtitleTrack,
             onSeekRequested: _handleUserSeek,
+            isPlaybackErrorRecoveryActive: _hasRecentNetworkPlaybackError,
             seekDuration: playbackSettings.seekDuration,
           ),
           if (_isExiting)
