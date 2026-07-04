@@ -441,7 +441,10 @@ class _UpdateCheckTileState extends ConsumerState<_UpdateCheckTile> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(updateProvider.notifier).checkForUpdate();
+      final updateNotifier = ref.read(updateProvider.notifier);
+      if (updateNotifier.canCheckForUpdate) {
+        updateNotifier.checkForUpdate();
+      }
     });
   }
 

@@ -52,22 +52,35 @@ class UpdateNotifier extends Notifier<UpdateState> {
     return const UpdateState();
   }
 
-  bool get supportsUpdate => Platform.isWindows || Platform.isAndroid || Platform.isMacOS;
+  bool get supportsUpdate =>
+      Platform.isWindows || Platform.isAndroid || Platform.isMacOS;
+
+  bool get canCheckForUpdate =>
+      supportsUpdate &&
+      state.status != UpdateStatus.checking &&
+      state.status != UpdateStatus.downloading &&
+      state.status != UpdateStatus.installing;
 
   Future<void> checkForUpdate() async {
-    if (!supportsUpdate) return;
+    if (!canCheckForUpdate) return;
 
     state = state.copyWith(status: UpdateStatus.checking);
 
     try {
       final info = await UpdateService.instance.checkForUpdate();
       if (info != null) {
-        state = state.copyWith(status: UpdateStatus.available, releaseInfo: info);
+        state = state.copyWith(
+          status: UpdateStatus.available,
+          releaseInfo: info,
+        );
       } else {
         state = state.copyWith(status: UpdateStatus.upToDate);
       }
     } catch (e) {
-      state = state.copyWith(status: UpdateStatus.error, errorMessage: e.toString());
+      state = state.copyWith(
+        status: UpdateStatus.error,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -80,7 +93,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final info = state.releaseInfo;
     if (info == null) return;
 
-    state = state.copyWith(status: UpdateStatus.downloading, downloadProgress: 0);
+    state = state.copyWith(
+      status: UpdateStatus.downloading,
+      downloadProgress: 0,
+    );
 
     try {
       final filePath = await UpdateService.instance.downloadUpdate(
@@ -93,7 +109,10 @@ class UpdateNotifier extends Notifier<UpdateState> {
       state = state.copyWith(status: UpdateStatus.installing);
       await UpdateService.instance.installUpdate(filePath);
     } catch (e) {
-      state = state.copyWith(status: UpdateStatus.error, errorMessage: e.toString());
+      state = state.copyWith(
+        status: UpdateStatus.error,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -102,4 +121,6 @@ class UpdateNotifier extends Notifier<UpdateState> {
   }
 }
 
-final updateProvider = NotifierProvider<UpdateNotifier, UpdateState>(UpdateNotifier.new);
+final updateProvider = NotifierProvider<UpdateNotifier, UpdateState>(
+  UpdateNotifier.new,
+);
