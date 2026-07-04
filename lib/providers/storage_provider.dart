@@ -187,6 +187,21 @@ class StoragesNotifier extends Notifier<AsyncValue<List<Storage>>> {
     }
     return (false, null, response.error ?? '导入失败');
   }
+
+  Future<(bool success, ScrapeTestResult? result, String? error)> scrapeTest({
+    required int storageId,
+    required String path,
+  }) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return (false, null, '服务不可用');
+
+    final normalizedPath = path.trim().isEmpty ? '/' : path.trim();
+    final response = await service.scrapeTest(storageId, path: normalizedPath);
+    if (response.isSuccess && response.data != null) {
+      return (true, response.data, null);
+    }
+    return (false, null, response.error ?? '刮削测试失败');
+  }
 }
 
 class GlobalScanState {
@@ -437,6 +452,7 @@ class ScanStateNotifier extends Notifier<ScanState> {
   Future<(bool success, String? error)> startScan(
     int storageId, {
     bool forceScrape = false,
+    bool rematchTmdb = false,
     String? path,
   }) async {
     final service = ref.read(storageServiceProvider);
@@ -445,6 +461,7 @@ class ScanStateNotifier extends Notifier<ScanState> {
     final response = await service.startScan(
       storageId,
       forceScrape: forceScrape,
+      rematchTmdb: rematchTmdb,
       path: path,
     );
 
@@ -465,6 +482,7 @@ class ScanStateNotifier extends Notifier<ScanState> {
     int storageId, {
     required String path,
     bool forceScrape = false,
+    bool rematchTmdb = false,
   }) async {
     final service = ref.read(storageServiceProvider);
     if (service == null) {
@@ -474,6 +492,7 @@ class ScanStateNotifier extends Notifier<ScanState> {
     final response = await service.startScan(
       storageId,
       forceScrape: forceScrape,
+      rematchTmdb: rematchTmdb,
       path: path,
     );
 

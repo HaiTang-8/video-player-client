@@ -1,9 +1,11 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../core/utils/image_proxy.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/mobile_app_bar.dart';
@@ -308,6 +310,19 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     );
   }
 
+  Future<void> _startScrapeTest(String targetPath) async {
+    final normalizedPath = targetPath.trim().isEmpty ? '/' : targetPath.trim();
+    await DialogUtils.showCustomDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => _ScrapeTestDialog(
+            storageId: widget.storageId,
+            path: normalizedPath,
+          ),
+    );
+  }
+
   Future<void> _showFileInfo(BuildContext context, FileInfo file) async {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -480,6 +495,21 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     onTap: () async {
                       Navigator.pop(context);
                       await _startPathScan(file.path);
+                    },
+                  ),
+                if (file.isDir)
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.doc_text_search),
+                    title: const Text('测试刮削此目录'),
+                    subtitle: Text(
+                      '查看名称提取与刮削器命中详情，不写入媒体库',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _startScrapeTest(file.path);
                     },
                   ),
                 if (file.isDir)
@@ -669,6 +699,723 @@ class _FileTile extends StatelessWidget {
   }
 }
 
+enum _ScrapeTestPhase { confirm, loading, done }
+
+class _ScrapeTestDialog extends ConsumerStatefulWidget {
+  final int storageId;
+  final String path;
+
+  const _ScrapeTestDialog({required this.storageId, required this.path});
+
+  @override
+  ConsumerState<_ScrapeTestDialog> createState() => _ScrapeTestDialogState();
+}
+
+class _ScrapeTestDialogState extends ConsumerState<_ScrapeTestDialog> {
+  _ScrapeTestPhase _phase = _ScrapeTestPhase.confirm;
+  ScrapeTestResult? _result;
+  String? _error;
+
+  Future<void> _start() async {
+    setState(() {
+      _phase = _ScrapeTestPhase.loading;
+      _result = null;
+      _error = null;
+    });
+
+    final (success, result, error) = await ref
+        .read(storagesProvider.notifier)
+        .scrapeTest(storageId: widget.storageId, path: widget.path);
+    if (!mounted) return;
+
+    setState(() {
+      _phase = _ScrapeTestPhase.done;
+      _result = result;
+      _error = success ? result?.error : error;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final shadcnTheme = shadcn.Theme.of(context);
+    final hasError = _error != null && _result == null;
+    final titleIcon =
+        _phase == _ScrapeTestPhase.loading
+            ? shadcn.LucideIcons.loaderCircle
+            : hasError
+            ? shadcn.LucideIcons.circleAlert
+            : shadcn.LucideIcons.searchCheck;
+    final titleColor =
+        hasError
+            ? shadcnTheme.colorScheme.destructive
+            : shadcnTheme.colorScheme.primary;
+
+    return shadcn.AlertDialog(
+      barrierColor: Colors.transparent,
+      surfaceOpacity: 1,
+      title: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(titleIcon, color: titleColor, size: 22),
+          const SizedBox(width: 8),
+          Text(
+            _phase == _ScrapeTestPhase.loading ? '正在测试刮削...' : '测试刮削目录',
+            style: shadcnTheme.typography.large.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      content: _buildContent(theme, shadcnTheme),
+      actions: _buildActions(),
+    );
+  }
+
+  Widget _buildContent(ThemeData theme, shadcn.ThemeData shadcnTheme) {
+    final width =
+        WindowControls.isDesktop
+            ? 680.0
+            : MediaQuery.of(context).size.width * 0.86;
+    final maxHeight = MediaQuery.of(context).size.height * 0.72;
+
+    if (_phase == _ScrapeTestPhase.confirm) {
+      return SizedBox(
+        width: width,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '扫描该目录并调用当前主刮削器，只返回测试结果。',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _PathPreview(path: widget.path),
+          ],
+        ),
+      );
+    }
+
+    if (_phase == _ScrapeTestPhase.loading) {
+      return SizedBox(
+        width: width,
+        height: 180,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final result = _result;
+    return SizedBox(
+      width: width,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _PathPreview(path: widget.path),
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                _StatusBox(
+                  icon: shadcn.LucideIcons.circleAlert,
+                  color: shadcnTheme.colorScheme.destructive,
+                  text: _error!,
+                ),
+              ],
+              if (result != null) ...[
+                const SizedBox(height: 16),
+                _buildExtractionSection(theme, result),
+                const SizedBox(height: 16),
+                _buildMetadataSection(theme, result),
+                if (result.searchResults.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  _buildSearchResultsSection(theme, result.searchResults),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildActions() {
+    switch (_phase) {
+      case _ScrapeTestPhase.confirm:
+        return [
+          shadcn.OutlineButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          shadcn.PrimaryButton(onPressed: _start, child: const Text('开始测试')),
+        ];
+      case _ScrapeTestPhase.loading:
+        return [
+          shadcn.OutlineButton(onPressed: null, child: const Text('测试中...')),
+        ];
+      case _ScrapeTestPhase.done:
+        return [
+          if (_result == null)
+            shadcn.OutlineButton(onPressed: _start, child: const Text('重试')),
+          shadcn.PrimaryButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('完成'),
+          ),
+        ];
+    }
+  }
+
+  Widget _buildExtractionSection(ThemeData theme, ScrapeTestResult result) {
+    return _SectionCard(
+      title: '识别结果',
+      child: Column(
+        children: [
+          _InfoRow(label: '影视名称', value: result.mediaName),
+          _InfoRow(
+            label: '年份',
+            value: result.year > 0 ? '${result.year}' : '未识别',
+          ),
+          _InfoRow(label: '类型', value: result.isTVShow ? '剧集' : '电影'),
+          _InfoRow(label: '视频数量', value: '${result.videoCount}'),
+          if (result.seasons.isNotEmpty)
+            _SeasonComparisonList(seasons: result.seasons),
+          if (result.unmatchedSeasons.isNotEmpty)
+            _InfoRow(
+              label: '未匹配季度',
+              value: result.unmatchedSeasons.join(', '),
+              valueColor: theme.colorScheme.error,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetadataSection(ThemeData theme, ScrapeTestResult result) {
+    final metadata = result.scrape;
+    if (metadata == null) {
+      return const _SectionCard(title: '刮削详情', child: Text('暂无刮削详情'));
+    }
+
+    return _SectionCard(
+      title: '刮削详情',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _PosterImage(url: metadata.posterUrl),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  metadata.title.isEmpty ? '未命名' : metadata.title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (metadata.originalTitle.isNotEmpty &&
+                    metadata.originalTitle != metadata.title) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    metadata.originalTitle,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (metadata.provider.isNotEmpty)
+                      _InfoChip(text: metadata.provider.toUpperCase()),
+                    if (metadata.tmdbId > 0)
+                      _InfoChip(text: 'TMDB ${metadata.tmdbId}'),
+                    if (metadata.imdbId.isNotEmpty)
+                      _InfoChip(text: metadata.imdbId),
+                    if (metadata.releaseDate.isNotEmpty)
+                      _InfoChip(text: metadata.releaseDate),
+                    if (metadata.voteAverage > 0)
+                      _InfoChip(
+                        text: metadata.voteAverage.toStringAsFixed(1),
+                        icon: CupertinoIcons.star_fill,
+                      ),
+                  ],
+                ),
+                if (metadata.genres.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    metadata.genres.join(' / '),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (metadata.overview.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    metadata.overview,
+                    style: theme.textTheme.bodySmall,
+                    maxLines: 5,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchResultsSection(
+    ThemeData theme,
+    List<ScrapeSearchResult> results,
+  ) {
+    final visible = results.take(5).toList(growable: false);
+    return _SectionCard(
+      title: '搜索候选',
+      child: Column(
+        children: [
+          for (int i = 0; i < visible.length; i++) ...[
+            _SearchResultTile(index: i + 1, result: visible[i]),
+            if (i < visible.length - 1)
+              Divider(
+                height: 18,
+                color: theme.dividerColor.withValues(alpha: 0.4),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PathPreview extends StatelessWidget {
+  final String path;
+
+  const _PathPreview({required this.path});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: SelectableText(
+        path,
+        style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+      ),
+    );
+  }
+}
+
+class _StatusBox extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+
+  const _StatusBox({
+    required this.icon,
+    required this.color,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(color: color),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const _SectionCard({required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _InfoRow({required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value.isEmpty ? '-' : value,
+              style: theme.textTheme.bodySmall?.copyWith(color: valueColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeasonComparisonList extends StatelessWidget {
+  final List<ScrapeTestSeasonInfo> seasons;
+
+  const _SeasonComparisonList({required this.seasons});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 88,
+            child: Text(
+              '季度',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: seasons
+                  .map((season) => _SeasonComparisonRow(season: season))
+                  .toList(growable: false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeasonComparisonRow extends StatelessWidget {
+  final ScrapeTestSeasonInfo season;
+
+  const _SeasonComparisonRow({required this.season});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final highlight = season.hasEpisodeCountMismatch || !season.matched;
+    final color = highlight ? theme.colorScheme.error : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: SelectableText(
+        _text(),
+        style: theme.textTheme.bodySmall?.copyWith(color: color),
+      ),
+    );
+  }
+
+  String _text() {
+    final label = 'S${season.season.toString().padLeft(2, '0')}';
+    final local =
+        season.localEpisodeCount > 0
+            ? season.localEpisodeCount
+            : season.episodeCount;
+    if (!season.matched) {
+      return '$label 本地 $local 集 / TMDB 未匹配';
+    }
+
+    final tmdb =
+        season.tmdbEpisodeCount > 0 ? '${season.tmdbEpisodeCount} 集' : '未知';
+    final suffix = season.hasEpisodeCountMismatch ? '，集数不一致' : '';
+    return '$label 本地 $local 集 / TMDB $tmdb$suffix';
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final String text;
+  final IconData? icon;
+
+  const _InfoChip({required this.text, this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 12, color: theme.colorScheme.onSecondaryContainer),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            text,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PosterImage extends ConsumerWidget {
+  final String url;
+
+  const _PosterImage({required this.url});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final serverUrl = ref.watch(serverUrlProvider);
+    final token = ref.watch(authProvider).tokens?.accessToken;
+    final imageUrl = ImageProxy.proxyTMDBIfNeeded(url, serverUrl);
+
+    Widget placeholder() => Container(
+      width: 92,
+      height: 138,
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Icon(
+        CupertinoIcons.photo,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+
+    if (imageUrl.isEmpty) return placeholder();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: SizedBox(
+        width: 92,
+        height: 138,
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          httpHeaders:
+              token != null ? {'Authorization': 'Bearer $token'} : null,
+          fit: BoxFit.cover,
+          placeholder: (_, _) => placeholder(),
+          errorWidget: (_, _, _) => placeholder(),
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchResultTile extends StatelessWidget {
+  final int index;
+  final ScrapeSearchResult result;
+
+  const _SearchResultTile({required this.index, required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = result.title.isEmpty ? '未命名' : result.title;
+    final subtitleParts = [
+      if (result.score?.selected == true) '已选中',
+      if (result.releaseDate.isNotEmpty) result.releaseDate,
+      if (result.voteAverage > 0) result.voteAverage.toStringAsFixed(1),
+      if (result.mediaType.isNotEmpty) result.mediaType,
+      if (result.id > 0) 'ID ${result.id}',
+    ];
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            '$index',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (result.originalTitle.isNotEmpty &&
+                  result.originalTitle != title) ...[
+                const SizedBox(height: 2),
+                Text(
+                  result.originalTitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (subtitleParts.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  subtitleParts.join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (result.score != null) ...[
+                const SizedBox(height: 6),
+                _CandidateScoreWrap(score: result.score!),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CandidateScoreWrap extends StatelessWidget {
+  final ScrapeCandidateScore score;
+
+  const _CandidateScoreWrap({required this.score});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color =
+        score.selected ? theme.colorScheme.primary : theme.colorScheme.outline;
+    final parts = <String>[
+      '总分 ${score.total}',
+      '标题 ${score.title}',
+      if (score.year != 0) '年份 ${score.year}',
+      if (score.rank != 0) '排名 ${score.rank}',
+      if (score.vote != 0) '评分 ${score.vote}',
+      if (score.episode != 0) '集数 ${score.episode}',
+    ];
+    if (score.localEpisodeCount > 0 || score.tmdbEpisodeCount > 0) {
+      parts.add(
+        '本地 ${score.localEpisodeCount} / TMDB ${score.tmdbEpisodeCount}',
+      );
+    }
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: parts
+          .map(
+            (part) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: color.withValues(alpha: 0.35)),
+                color: color.withValues(alpha: 0.08),
+              ),
+              child: Text(
+                part,
+                style: theme.textTheme.labelSmall?.copyWith(color: color),
+              ),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
 enum _ScanDialogPhase { confirm, scanning, done }
 
 class _PathScanDialog extends ConsumerStatefulWidget {
@@ -687,6 +1434,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
   ScanProgress? _finalProgress;
   int? _activeTaskId;
   bool _waitingForTaskStart = false;
+  bool _rematchTmdb = false;
   final ScrollController _logScrollController = ScrollController();
   int _lastLogCount = 0;
 
@@ -729,6 +1477,7 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
         .startPathScanWithSse(
           widget.storageId,
           forceScrape: true,
+          rematchTmdb: _rematchTmdb,
           path: widget.path,
         );
     if (!mounted) return;
@@ -867,6 +1616,54 @@ class _PathScanDialogState extends ConsumerState<_PathScanDialog> {
                             style: theme.typography.small.copyWith(
                               fontFamily: 'monospace',
                               color: theme.colorScheme.foreground,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              shadcn.SurfaceCard(
+                padding: const EdgeInsets.all(14),
+                borderRadius: BorderRadius.circular(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      shadcn.LucideIcons.searchCheck,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '重新匹配 TMDB 条目',
+                                  style: theme.typography.small.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              shadcn.Switch(
+                                value: _rematchTmdb,
+                                onChanged: (value) {
+                                  setState(() => _rematchTmdb = value);
+                                },
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '开启后会按当前目录识别出的名称重新搜索，并覆盖已绑定的 TMDB ID，用于修正绑定错误。',
+                            style: theme.typography.small.copyWith(
+                              color: theme.colorScheme.mutedForeground,
                             ),
                           ),
                         ],

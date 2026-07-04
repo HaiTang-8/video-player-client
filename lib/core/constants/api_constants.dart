@@ -73,6 +73,8 @@ class ApiConstants {
       '$apiPrefix/storages/$id/scan/progress/stream';
   static String storageScanTasks(int id) =>
       '$apiPrefix/storages/$id/scan/tasks';
+  static String storageScrapeTest(int id) =>
+      '$apiPrefix/storages/$id/scrape/test';
   static String storageBrowse(int id) => '$apiPrefix/storages/$id/browse';
   static String storageBrowseRefresh(int id) =>
       '$apiPrefix/storages/$id/browse/refresh';

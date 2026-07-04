@@ -269,6 +269,241 @@ class FileInfo {
   }
 }
 
+class ScrapeTestResult {
+  final String path;
+  final String mediaName;
+  final int year;
+  final bool isTVShow;
+  final int videoCount;
+  final List<ScrapeTestSeasonInfo> seasons;
+  final List<int> unmatchedSeasons;
+  final ScrapeTestMetadata? scrape;
+  final List<ScrapeSearchResult> searchResults;
+  final String? error;
+
+  const ScrapeTestResult({
+    required this.path,
+    required this.mediaName,
+    required this.year,
+    required this.isTVShow,
+    required this.videoCount,
+    this.seasons = const [],
+    this.unmatchedSeasons = const [],
+    this.scrape,
+    this.searchResults = const [],
+    this.error,
+  });
+
+  factory ScrapeTestResult.fromJson(Map<String, dynamic> json) {
+    return ScrapeTestResult(
+      path: json['path'] as String? ?? '',
+      mediaName: json['media_name'] as String? ?? '',
+      year: json['year'] as int? ?? 0,
+      isTVShow: json['is_tv_show'] as bool? ?? false,
+      videoCount: json['video_count'] as int? ?? 0,
+      seasons:
+          (json['seasons'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (e) =>
+                    ScrapeTestSeasonInfo.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(growable: false) ??
+          const [],
+      unmatchedSeasons:
+          (json['unmatched_seasons'] as List?)
+              ?.whereType<num>()
+              .map((e) => e.toInt())
+              .toList(growable: false) ??
+          const [],
+      scrape:
+          json['scrape'] is Map
+              ? ScrapeTestMetadata.fromJson(
+                Map<String, dynamic>.from(json['scrape'] as Map),
+              )
+              : null,
+      searchResults:
+          (json['search_results'] as List?)
+              ?.whereType<Map>()
+              .map(
+                (e) =>
+                    ScrapeSearchResult.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(growable: false) ??
+          const [],
+      error: json['error'] as String?,
+    );
+  }
+}
+
+class ScrapeTestSeasonInfo {
+  final int season;
+  final int episodeCount;
+  final int localEpisodeCount;
+  final int tmdbEpisodeCount;
+  final int tmdbId;
+  final bool matched;
+
+  const ScrapeTestSeasonInfo({
+    required this.season,
+    required this.episodeCount,
+    this.localEpisodeCount = 0,
+    this.tmdbEpisodeCount = 0,
+    this.tmdbId = 0,
+    this.matched = false,
+  });
+
+  factory ScrapeTestSeasonInfo.fromJson(Map<String, dynamic> json) {
+    final episodeCount = json['episode_count'] as int? ?? 0;
+    return ScrapeTestSeasonInfo(
+      season: json['season'] as int? ?? 0,
+      episodeCount: episodeCount,
+      localEpisodeCount: json['local_episode_count'] as int? ?? episodeCount,
+      tmdbEpisodeCount: json['tmdb_episode_count'] as int? ?? 0,
+      tmdbId: json['tmdb_id'] as int? ?? 0,
+      matched: json['matched'] as bool? ?? false,
+    );
+  }
+
+  bool get hasTMDBEpisodeCount => matched && tmdbEpisodeCount > 0;
+
+  bool get hasEpisodeCountMismatch =>
+      hasTMDBEpisodeCount && localEpisodeCount != tmdbEpisodeCount;
+}
+
+class ScrapeTestMetadata {
+  final String provider;
+  final int tmdbId;
+  final String imdbId;
+  final String title;
+  final String originalTitle;
+  final String overview;
+  final String posterUrl;
+  final String backdropUrl;
+  final String releaseDate;
+  final double voteAverage;
+  final List<String> genres;
+
+  const ScrapeTestMetadata({
+    required this.provider,
+    this.tmdbId = 0,
+    this.imdbId = '',
+    required this.title,
+    this.originalTitle = '',
+    this.overview = '',
+    this.posterUrl = '',
+    this.backdropUrl = '',
+    this.releaseDate = '',
+    this.voteAverage = 0,
+    this.genres = const [],
+  });
+
+  factory ScrapeTestMetadata.fromJson(Map<String, dynamic> json) {
+    return ScrapeTestMetadata(
+      provider: json['provider'] as String? ?? '',
+      tmdbId: json['tmdb_id'] as int? ?? 0,
+      imdbId: json['imdb_id'] as String? ?? '',
+      title: json['title'] as String? ?? '',
+      originalTitle: json['original_title'] as String? ?? '',
+      overview: json['overview'] as String? ?? '',
+      posterUrl: json['poster_url'] as String? ?? '',
+      backdropUrl: json['backdrop_url'] as String? ?? '',
+      releaseDate: json['release_date'] as String? ?? '',
+      voteAverage: (json['vote_average'] as num?)?.toDouble() ?? 0,
+      genres:
+          (json['genres'] as List?)
+              ?.map((e) => e.toString())
+              .where((e) => e.isNotEmpty)
+              .toList(growable: false) ??
+          const [],
+    );
+  }
+}
+
+class ScrapeSearchResult {
+  final int id;
+  final String title;
+  final String originalTitle;
+  final String overview;
+  final String posterPath;
+  final String releaseDate;
+  final double voteAverage;
+  final String mediaType;
+  final ScrapeCandidateScore? score;
+
+  const ScrapeSearchResult({
+    required this.id,
+    required this.title,
+    this.originalTitle = '',
+    this.overview = '',
+    this.posterPath = '',
+    this.releaseDate = '',
+    this.voteAverage = 0,
+    this.mediaType = '',
+    this.score,
+  });
+
+  factory ScrapeSearchResult.fromJson(Map<String, dynamic> json) {
+    return ScrapeSearchResult(
+      id: json['id'] as int? ?? 0,
+      title: json['title'] as String? ?? '',
+      originalTitle: json['original_title'] as String? ?? '',
+      overview: json['overview'] as String? ?? '',
+      posterPath: json['poster_path'] as String? ?? '',
+      releaseDate: json['release_date'] as String? ?? '',
+      voteAverage: (json['vote_average'] as num?)?.toDouble() ?? 0,
+      mediaType: json['media_type'] as String? ?? '',
+      score:
+          json['score'] is Map
+              ? ScrapeCandidateScore.fromJson(
+                Map<String, dynamic>.from(json['score'] as Map),
+              )
+              : null,
+    );
+  }
+}
+
+class ScrapeCandidateScore {
+  final int total;
+  final int title;
+  final int year;
+  final int rank;
+  final int vote;
+  final int episode;
+  final bool confident;
+  final bool selected;
+  final int localEpisodeCount;
+  final int tmdbEpisodeCount;
+
+  const ScrapeCandidateScore({
+    this.total = 0,
+    this.title = 0,
+    this.year = 0,
+    this.rank = 0,
+    this.vote = 0,
+    this.episode = 0,
+    this.confident = false,
+    this.selected = false,
+    this.localEpisodeCount = 0,
+    this.tmdbEpisodeCount = 0,
+  });
+
+  factory ScrapeCandidateScore.fromJson(Map<String, dynamic> json) {
+    return ScrapeCandidateScore(
+      total: json['total'] as int? ?? 0,
+      title: json['title'] as int? ?? 0,
+      year: json['year'] as int? ?? 0,
+      rank: json['rank'] as int? ?? 0,
+      vote: json['vote'] as int? ?? 0,
+      episode: json['episode'] as int? ?? 0,
+      confident: json['confident'] as bool? ?? false,
+      selected: json['selected'] as bool? ?? false,
+      localEpisodeCount: json['local_episode_count'] as int? ?? 0,
+      tmdbEpisodeCount: json['tmdb_episode_count'] as int? ?? 0,
+    );
+  }
+}
+
 /// 存储源导入结果
 class StorageImportResult {
   final int successCount;

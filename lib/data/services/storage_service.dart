@@ -87,11 +87,15 @@ class StorageService {
   Future<ApiResponse<ScanProgress>> startScan(
     int storageId, {
     bool forceScrape = false,
+    bool rematchTmdb = false,
     String? path,
   }) async {
     final payload = <String, dynamic>{};
     if (forceScrape) {
       payload['force_scrape'] = true;
+    }
+    if (rematchTmdb) {
+      payload['rematch_tmdb'] = true;
     }
     final normalizedPath = path?.trim();
     if (normalizedPath != null &&
@@ -155,6 +159,19 @@ class StorageService {
               (json as List)
                   .map((e) => ScanProgress.fromJson(e as Map<String, dynamic>))
                   .toList(),
+    );
+  }
+
+  Future<ApiResponse<ScrapeTestResult>> scrapeTest(
+    int storageId, {
+    required String path,
+  }) async {
+    return _client.post<ScrapeTestResult>(
+      ApiConstants.storageScrapeTest(storageId),
+      data: {'path': path},
+      receiveTimeout: const Duration(seconds: 120),
+      fromJson:
+          (json) => ScrapeTestResult.fromJson(json as Map<String, dynamic>),
     );
   }
 
