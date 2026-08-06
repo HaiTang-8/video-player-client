@@ -10,7 +10,18 @@ import '../../providers/providers.dart';
 class PlaybackSettingsScreen extends ConsumerWidget {
   const PlaybackSettingsScreen({super.key});
 
-  static const _speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+  static const _speedOptions = [
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.25,
+    1.5,
+    1.75,
+    2.0,
+    2.5,
+    3.0,
+  ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -20,15 +31,16 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     final settings = ref.watch(playbackSettingsProvider);
 
     return Scaffold(
-      appBar: isDesktop
-          ? DesktopAppBar(
-              title: const Text('播放设置'),
-              onBack: () => context.pop(),
-            )
-          : MobileAppBar(
-              title: const Text('播放设置'),
-              onBack: () => context.pop(),
-            ),
+      appBar:
+          isDesktop
+              ? DesktopAppBar(
+                title: const Text('播放设置'),
+                onBack: () => context.pop(),
+              )
+              : MobileAppBar(
+                title: const Text('播放设置'),
+                onBack: () => context.pop(),
+              ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
@@ -44,7 +56,12 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                 iconColor: Colors.orange,
                 title: '时长',
                 subtitle: '${settings.seekDuration}秒',
-                onTap: () => _showSeekDurationPicker(context, ref, settings.seekDuration),
+                onTap:
+                    () => _showSeekDurationPicker(
+                      context,
+                      ref,
+                      settings.seekDuration,
+                    ),
               ),
             ],
           ),
@@ -70,14 +87,49 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                 iconColor: Colors.blue,
                 title: '默认速度',
                 subtitle: '${settings.playbackSpeed}x',
-                onTap: () => _showSpeedPicker(context, ref, settings.playbackSpeed),
+                onTap:
+                    () => _showSpeedPicker(
+                      context,
+                      ref,
+                      title: '默认速度',
+                      current: settings.playbackSpeed,
+                      onSelected:
+                          (speed) => ref
+                              .read(playbackSettingsProvider.notifier)
+                              .setPlaybackSpeed(speed),
+                    ),
+              ),
+              Divider(
+                height: 1,
+                indent: 60,
+                color: theme.dividerColor.withValues(alpha: 0.3),
+              ),
+              _buildListTile(
+                context,
+                theme,
+                isDark,
+                icon: CupertinoIcons.speedometer,
+                iconColor: Colors.purple,
+                title: '长按倍速',
+                subtitle: '${settings.longPressSpeed}x',
+                onTap:
+                    () => _showSpeedPicker(
+                      context,
+                      ref,
+                      title: '长按倍速',
+                      current: settings.longPressSpeed,
+                      onSelected:
+                          (speed) => ref
+                              .read(playbackSettingsProvider.notifier)
+                              .setLongPressSpeed(speed),
+                    ),
               ),
             ],
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text(
-              '设置视频播放的默认速度',
+              '设置默认播放速度和长按临时倍速',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -167,7 +219,11 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showSeekDurationPicker(BuildContext context, WidgetRef ref, int current) {
+  void _showSeekDurationPicker(
+    BuildContext context,
+    WidgetRef ref,
+    int current,
+  ) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     int selected = current;
@@ -178,74 +234,92 @@ class PlaybackSettingsScreen extends ConsumerWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => SizedBox(
-          height: 300,
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    CupertinoButton(
-                      child: Text(
-                        '取消',
-                        style: TextStyle(color: theme.colorScheme.primary),
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    Text(
-                      '快进/快退时长',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    CupertinoButton(
-                      child: Text(
-                        '完成',
-                        style: TextStyle(
-                          color: theme.colorScheme.primary,
-                          fontWeight: FontWeight.w500,
+      builder:
+          (context) => StatefulBuilder(
+            builder:
+                (context, setState) => SizedBox(
+                  height: 300,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            CupertinoButton(
+                              child: Text(
+                                '取消',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                            ),
+                            Text(
+                              '快进/快退时长',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            CupertinoButton(
+                              child: Text(
+                                '完成',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onPressed: () {
+                                ref
+                                    .read(playbackSettingsProvider.notifier)
+                                    .setSeekDuration(selected);
+                                Navigator.pop(context);
+                              },
+                            ),
+                          ],
                         ),
                       ),
-                      onPressed: () {
-                        ref.read(playbackSettingsProvider.notifier).setSeekDuration(selected);
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
-              Expanded(
-                child: CupertinoPicker(
-                  scrollController: FixedExtentScrollController(
-                    initialItem: (current - 1).clamp(0, 59),
-                  ),
-                  itemExtent: 40,
-                  onSelectedItemChanged: (index) {
-                    setState(() => selected = index + 1);
-                  },
-                  children: List.generate(
-                    60,
-                    (index) => Center(
-                      child: Text(
-                        '${index + 1}秒',
-                        style: theme.textTheme.titleMedium,
+                      Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.3),
                       ),
-                    ),
+                      Expanded(
+                        child: CupertinoPicker(
+                          scrollController: FixedExtentScrollController(
+                            initialItem: (current - 1).clamp(0, 59),
+                          ),
+                          itemExtent: 40,
+                          onSelectedItemChanged: (index) {
+                            setState(() => selected = index + 1);
+                          },
+                          children: List.generate(
+                            60,
+                            (index) => Center(
+                              child: Text(
+                                '${index + 1}秒',
+                                style: theme.textTheme.titleMedium,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
           ),
-        ),
-      ),
     );
   }
 
-  void _showSpeedPicker(BuildContext context, WidgetRef ref, double current) {
+  void _showSpeedPicker(
+    BuildContext context,
+    WidgetRef ref, {
+    required String title,
+    required double current,
+    required ValueChanged<double> onSelected,
+  }) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -259,38 +333,48 @@ class PlaybackSettingsScreen extends ConsumerWidget {
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.6,
       ),
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text(
-                '播放速度',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w500,
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            Divider(height: 1, color: theme.dividerColor.withValues(alpha: 0.3)),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: _speedOptions.map((speed) => _buildSpeedOption(
-                        context,
-                        ref,
-                        theme,
-                        speed,
-                        current,
-                      )).toList(),
+                Divider(
+                  height: 1,
+                  color: theme.dividerColor.withValues(alpha: 0.3),
                 ),
-              ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children:
+                          _speedOptions
+                              .map(
+                                (speed) => _buildSpeedOption(
+                                  context,
+                                  ref,
+                                  theme,
+                                  speed,
+                                  current,
+                                  onSelected,
+                                ),
+                              )
+                              .toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+          ),
     );
   }
 
@@ -300,6 +384,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     ThemeData theme,
     double speed,
     double current,
+    ValueChanged<double> onSelected,
   ) {
     final isSelected = (speed - current).abs() < 0.001;
 
@@ -307,7 +392,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          ref.read(playbackSettingsProvider.notifier).setPlaybackSpeed(speed);
+          onSelected(speed);
           Navigator.pop(context);
         },
         child: Padding(
@@ -318,7 +403,8 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                 child: Text(
                   '${speed}x',
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w500 : FontWeight.normal,
                     color: isSelected ? theme.colorScheme.primary : null,
                   ),
                 ),

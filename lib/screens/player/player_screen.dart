@@ -69,6 +69,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _externalSubtitleAutoLoaded = false;
   List<Episode>? _episodes;
   double? _sessionPlaybackSpeed;
+  double? _sessionVolume;
   int? _pendingSeekPosition;
   int? _routeInitialPosition;
   bool _hasAppliedPlaybackSettings = false;
@@ -166,6 +167,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _onSpeedChanged(double speed) {
     _sessionPlaybackSpeed = speed;
+  }
+
+  void _onVolumeChanged(double volume) {
+    _sessionVolume = volume;
+  }
+
+  Future<void> _restoreSessionVolumeIfNeeded() async {
+    final volume = _sessionVolume;
+    if (volume == null) return;
+    await _player.setVolume(volume * 100);
   }
 
   int? _normalizeSeekPosition(int? position) {
@@ -931,6 +942,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         await _player.open(Media(localPath));
 
         if (!mounted) return;
+        await _restoreSessionVolumeIfNeeded();
+        if (!mounted) return;
 
         _mediaService ??= ref.read(mediaServiceProvider);
         _startProgressTimer();
@@ -1006,6 +1019,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _currentFilePath = filePath;
       await _player.open(Media(playUrl, httpHeaders: headers));
 
+      if (!mounted) return;
+      await _restoreSessionVolumeIfNeeded();
       if (!mounted) return;
 
       _mediaService ??= ref.read(mediaServiceProvider); // 确保 service 已缓存
@@ -1416,11 +1431,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             externalSubtitles: _externalSubtitles,
             serverUrl: ref.read(serverUrlProvider),
             onSpeedChanged: _onSpeedChanged,
+            initialVolume: _sessionVolume,
+            onVolumeChanged: _onVolumeChanged,
             sourcePath: _currentFilePath,
             onSelectExternalSubtitle: _loadExternalSubtitleTrack,
             onSeekRequested: _handleUserSeek,
             isPlaybackErrorRecoveryActive: _hasRecentNetworkPlaybackError,
             seekDuration: playbackSettings.seekDuration,
+            longPressSpeed: playbackSettings.longPressSpeed,
           ),
           if (_isExiting)
             Container(

@@ -54,11 +54,14 @@ class CustomVideoControls extends StatefulWidget {
   final List<SubtitleInfo> externalSubtitles;
   final String? serverUrl;
   final void Function(double speed)? onSpeedChanged;
+  final double? initialVolume;
+  final void Function(double volume)? onVolumeChanged;
   final String? sourcePath;
   final Future<void> Function(SubtitleInfo sub)? onSelectExternalSubtitle;
   final Future<void> Function(Duration position)? onSeekRequested;
   final bool Function()? isPlaybackErrorRecoveryActive;
   final int seekDuration;
+  final double longPressSpeed;
 
   const CustomVideoControls({
     super.key,
@@ -79,11 +82,14 @@ class CustomVideoControls extends StatefulWidget {
     this.externalSubtitles = const [],
     this.serverUrl,
     this.onSpeedChanged,
+    this.initialVolume,
+    this.onVolumeChanged,
     this.sourcePath,
     this.onSelectExternalSubtitle,
     this.onSeekRequested,
     this.isPlaybackErrorRecoveryActive,
     this.seekDuration = 5,
+    this.longPressSpeed = 2.0,
   });
 
   @override
@@ -181,6 +187,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _applyInitialVolume();
     _initBrightness();
     _initCurrentTracks();
     _setupListeners();
@@ -190,6 +197,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       unawaited(_refreshNotchSide());
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant CustomVideoControls oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialVolume != oldWidget.initialVolume) {
+      _applyInitialVolume();
+    }
+  }
+
+  void _applyInitialVolume() {
+    final initialVolume = widget.initialVolume;
+    if (initialVolume == null) return;
+    _volume = initialVolume.clamp(0.0, _maxVolume);
   }
 
   Future<void> _initBrightness() async {
@@ -318,6 +339,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     }
     final mb = kb / 1024;
     return '${mb.toStringAsFixed(1)} MB/s';
+  }
+
+  static String _formatPlaybackSpeed(double speed) {
+    if ((speed - speed.roundToDouble()).abs() < 0.001) {
+      return '${speed.round()}x';
+    }
+    return '${speed.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}x';
   }
 
   @override
@@ -607,11 +635,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   List<_PlayerHelpEntry> _desktopHelpEntries() {
     final seekDuration = widget.seekDuration;
+    final longPressSpeed = _formatPlaybackSpeed(widget.longPressSpeed);
     return [
       _PlayerHelpEntry('播放 / 暂停', ['Space']),
       _PlayerHelpEntry('后退 $seekDuration 秒', ['←']),
       _PlayerHelpEntry('前进 $seekDuration 秒', ['→']),
-      _PlayerHelpEntry('临时 2 倍速', ['长按 →']),
+      _PlayerHelpEntry('临时 $longPressSpeed', ['长按 →']),
       _PlayerHelpEntry('音量增加', ['↑']),
       _PlayerHelpEntry('音量降低', ['↓']),
       _PlayerHelpEntry('静音 / 取消静音', ['M']),
@@ -626,15 +655,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   List<_PlayerHelpEntry> _mobileHelpEntries() {
-    return const [
-      _PlayerHelpEntry('显示 / 隐藏控制栏', ['点击屏幕']),
-      _PlayerHelpEntry('拖动播放进度', ['横向滑动']),
-      _PlayerHelpEntry('调节亮度', ['左侧上下滑动']),
-      _PlayerHelpEntry('调节音量', ['右侧上下滑动']),
-      _PlayerHelpEntry('临时 2 倍速', ['长按屏幕']),
-      _PlayerHelpEntry('媒体信息', ['三指点击']),
-      _PlayerHelpEntry('锁定 / 解锁控制栏', ['锁定按钮']),
-      _PlayerHelpEntry('选择播放集数', ['播放列表按钮']),
+    final longPressSpeed = _formatPlaybackSpeed(widget.longPressSpeed);
+    return [
+      const _PlayerHelpEntry('显示 / 隐藏控制栏', ['点击屏幕']),
+      const _PlayerHelpEntry('拖动播放进度', ['横向滑动']),
+      const _PlayerHelpEntry('调节亮度', ['左侧上下滑动']),
+      const _PlayerHelpEntry('调节音量', ['右侧上下滑动']),
+      _PlayerHelpEntry('临时 $longPressSpeed', ['长按屏幕']),
+      const _PlayerHelpEntry('媒体信息', ['三指点击']),
+      const _PlayerHelpEntry('锁定 / 解锁控制栏', ['锁定按钮']),
+      const _PlayerHelpEntry('选择播放集数', ['播放列表按钮']),
     ];
   }
 
@@ -932,6 +962,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _setVolume(double value) {
     final volume = value.clamp(0.0, _maxVolume);
     setState(() => _volume = volume);
+    widget.onVolumeChanged?.call(volume);
     widget.player.setVolume(volume * 100);
   }
 
@@ -946,7 +977,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _startLongPressSpeed() {
     if (_isLongPressSpeed) return;
     _originalSpeed = _playbackSpeed;
-    widget.player.setRate(2.0);
+    widget.player.setRate(widget.longPressSpeed);
     setState(() => _isLongPressSpeed = true);
   }
 
@@ -1254,7 +1285,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               ),
             if (_isLongPressSpeed)
               PlayerOverlayNotice(
-                text: '倍速中 2x',
+                text: '倍速中 ${_formatPlaybackSpeed(widget.longPressSpeed)}',
                 position: PlayerOverlayNoticePosition.top,
                 safePadding: MediaQuery.of(context).padding,
               ),
