@@ -9,8 +9,6 @@ import 'password_text_field.dart';
 class DialogUtils {
   DialogUtils._();
 
-  static const _barrierColor = Color.fromRGBO(0, 0, 0, 0.8);
-
   static Future<T?> showCustomDialog<T>({
     required BuildContext context,
     required WidgetBuilder builder,
@@ -19,12 +17,12 @@ class DialogUtils {
     final container = ProviderScope.containerOf(context);
     container.read(windowBorderVisibleProvider.notifier).hide();
     try {
-      return await shadcn.showDialog<T>(
+      return await const shadcn.DialogOverlayHandler().show<T>(
         context: context,
-        barrierColor: _barrierColor,
-        barrierDismissible: barrierDismissible,
+        alignment: Alignment.center,
+        barrierDismissable: barrierDismissible,
         builder: builder,
-      );
+      ).future;
     } finally {
       container.read(windowBorderVisibleProvider.notifier).show();
     }

@@ -7,6 +7,10 @@ class ShadcnZhLocalizations extends ShadcnLocalizations {
   @override
   String get formNotEmpty => '此字段不能为空';
   @override
+  String get formPhoneNumberInvalid => '手机号格式无效';
+  @override
+  String get formPhoneNumberEmpty => '手机号不能为空';
+  @override
   String get invalidValue => '无效的值';
   @override
   String get invalidEmail => '无效的邮箱';

@@ -80,7 +80,7 @@ dependencies:
   screen_brightness: ^2.1.7
 
   # shadcn UI 组件库
-  shadcn_flutter: ^0.0.49
+  shadcn_flutter: 0.0.53
 
   # 桌面端平滑滚动
   scroll_animator: ^0.3.0
