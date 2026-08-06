@@ -145,7 +145,13 @@ class AuthInterceptor extends Interceptor {
           final response = await dio.fetch(req.options);
           req.handler.resolve(response);
         } catch (e) {
-          req.handler.next(DioException(requestOptions: req.options, error: e));
+          req.handler.next(
+            DioException(
+              requestOptions: req.options,
+              error: e,
+              message: 'Retry after token refresh failed: $e',
+            ),
+          );
         }
       }
     } else {
@@ -157,6 +163,7 @@ class AuthInterceptor extends Interceptor {
           DioException(
             requestOptions: req.options,
             error: 'Token refresh failed',
+            message: 'Token refresh failed',
           ),
         );
       }
@@ -421,15 +428,59 @@ class ApiClient {
         errorMessage = e.message ?? '网络错误';
     }
 
+    final details = _formatDioErrorDetails(e);
+
     // Avoid pretty/ANSI console output. Keep messages single-line & stable.
     LogService.instance.error(
       'ApiClient',
-      'API Error: $errorMessage (${e.type}) [${e.requestOptions.method} ${e.requestOptions.path}]',
+      'API Error: $errorMessage (${e.type}) [${e.requestOptions.method} ${e.requestOptions.path}]$details',
     );
 
     onError?.call(errorMessage);
 
     return ApiResponse<T>(success: false, error: errorMessage);
+  }
+
+  String _formatDioErrorDetails(DioException e) {
+    final parts = <String>[];
+    final statusCode = e.response?.statusCode;
+    if (statusCode != null) {
+      parts.add('status=$statusCode');
+    }
+
+    final uri = e.requestOptions.uri.toString();
+    if (uri.isNotEmpty) {
+      parts.add('url=${_compactLogValue(uri)}');
+    }
+
+    final message = e.message;
+    if (message != null && message.isNotEmpty) {
+      parts.add('message=${_compactLogValue(message)}');
+    }
+
+    final rawError = e.error;
+    if (rawError != null) {
+      parts.add('error=${_compactLogValue(rawError.toString())}');
+    }
+
+    final responseData = e.response?.data;
+    if (responseData is Map<String, dynamic>) {
+      final responseError = responseData['error'] ?? responseData['message'];
+      if (responseError != null) {
+        parts.add('response=${_compactLogValue(responseError.toString())}');
+      }
+    } else if (responseData is String && responseData.isNotEmpty) {
+      parts.add('response=${_compactLogValue(responseData)}');
+    }
+
+    if (parts.isEmpty) return '';
+    return ' {${parts.join(', ')}}';
+  }
+
+  String _compactLogValue(String value) {
+    final compact = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 240) return compact;
+    return '${compact.substring(0, 240)}...';
   }
 }
 
