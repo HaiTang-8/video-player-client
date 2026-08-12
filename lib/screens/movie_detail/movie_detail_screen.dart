@@ -52,6 +52,10 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
       DetailBackgroundPaletteMode.fullImage;
 
+  void _invalidateMovieDetail() {
+    ref.invalidate(movieDetailProvider(widget.movieId));
+  }
+
   WatchProgressKey get _watchProgressKey => (
     mediaType: 'movie',
     mediaId: widget.movieId,
@@ -358,10 +362,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                               actions: [
                                 IconButton(
                                   icon: const Icon(Icons.refresh),
-                                  onPressed:
-                                      () => ref.invalidate(
-                                        movieDetailProvider(widget.movieId),
-                                      ),
+                                  onPressed: _invalidateMovieDetail,
                                 ),
                               ],
                             ),
@@ -378,10 +379,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 error:
                     (error, stack) => AppErrorWidget(
                       message: error.toString(),
-                      onRetry:
-                          () => ref.invalidate(
-                            movieDetailProvider(widget.movieId),
-                          ),
+                      onRetry: _invalidateMovieDetail,
                     ),
                 data: (movie) {
                   if (movie == null) {
@@ -1133,7 +1131,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 child: const Text('刷新'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  ref.invalidate(movieDetailProvider(widget.movieId));
+                  _invalidateMovieDetail();
                 },
               ),
             ],
@@ -1199,7 +1197,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                 child: const Text('刷新'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  ref.invalidate(movieDetailProvider(widget.movieId));
+                  _invalidateMovieDetail();
                 },
               ),
             ],
@@ -1482,7 +1480,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         if (!context.mounted) return;
 
         if (updateResp.isSuccess) {
-          ref.invalidate(movieDetailProvider(widget.movieId));
+          _invalidateMovieDetail();
           ref.read(postersProvider.notifier).refresh();
           DialogUtils.showToast(context: context, message: '更新成功');
         } else {
@@ -1516,7 +1514,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
 
     if (!context.mounted) return;
     if (success == true) {
-      ref.invalidate(movieDetailProvider(movie.id));
+      _invalidateMovieDetail();
     }
   }
 
