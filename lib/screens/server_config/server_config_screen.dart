@@ -436,9 +436,13 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
               child:
                   isTestingProxy
                       ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                        width: 28,
+                        height: 4,
+                        child: shadcn.LinearProgressIndicator(
+                          value: null,
+                          minHeight: 4,
+                          borderRadius: BorderRadius.all(Radius.circular(2)),
+                        ),
                       )
                       : const Text('检测代理'),
             ),
