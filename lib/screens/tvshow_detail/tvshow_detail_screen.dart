@@ -32,6 +32,27 @@ typedef _TvHeroImage =
       bool usePoster,
     });
 
+void _invalidateTvShowDetailData(
+  ProviderContainer container,
+  int tvShowId, {
+  Iterable<int> seasonIds = const <int>[],
+  int? tmdbId,
+}) {
+  container.invalidate(tvShowDetailProvider(tvShowId));
+  for (final seasonId in seasonIds.toSet()) {
+    final seasonParams = (tvShowId: tvShowId, seasonId: seasonId);
+    container.invalidate(seasonEpisodesProvider(seasonParams));
+    container.invalidate(seasonSourceGroupsProvider(seasonParams));
+    container.invalidate(
+      seasonEpisodeProgressesProvider((
+        tvShowId: tvShowId,
+        seasonId: seasonId,
+        tmdbId: tmdbId,
+      )),
+    );
+  }
+}
+
 /// Emby 风格剧集详情页面
 class TvShowDetailScreen extends ConsumerStatefulWidget {
   final int tvShowId;
@@ -57,6 +78,21 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   String? _mobileBackgroundImageUrl;
   DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
       DetailBackgroundPaletteMode.fullImage;
+
+  void _invalidateTvShowDetail() {
+    final tvShow =
+        ref.read(tvShowDetailProvider(widget.tvShowId)).asData?.value;
+    final seasonIds = <int>{
+      if (_selectedSeasonId != null) _selectedSeasonId!,
+      for (final season in tvShow?.seasons ?? const <Season>[]) season.id,
+    };
+    _invalidateTvShowDetailData(
+      ref.container,
+      widget.tvShowId,
+      seasonIds: seasonIds,
+      tmdbId: _tmdbId,
+    );
+  }
 
   WatchProgressKey? get _seasonWatchProgressKey {
     final seasonId = _selectedSeasonId;
@@ -551,10 +587,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               actions: [
                                 IconButton(
                                   icon: const Icon(Icons.refresh),
-                                  onPressed:
-                                      () => ref.invalidate(
-                                        tvShowDetailProvider(widget.tvShowId),
-                                      ),
+                                  onPressed: _invalidateTvShowDetail,
                                 ),
                               ],
                             ),
@@ -571,10 +604,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 error:
                     (error, stack) => AppErrorWidget(
                       message: error.toString(),
-                      onRetry:
-                          () => ref.invalidate(
-                            tvShowDetailProvider(widget.tvShowId),
-                          ),
+                      onRetry: _invalidateTvShowDetail,
                     ),
                 data: (tvShow) {
                   if (tvShow == null) {
@@ -1603,7 +1633,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 child: const Text('刷新'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+                  _invalidateTvShowDetail();
                 },
               ),
             ],
@@ -1684,7 +1714,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                 child: const Text('刷新'),
                 onPressed: (menuContext) {
                   shadcn.closeOverlay(menuContext);
-                  ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+                  _invalidateTvShowDetail();
                 },
               ),
             ],
@@ -2274,7 +2304,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         if (!context.mounted) return;
 
         if (updateResp.isSuccess) {
-          ref.invalidate(tvShowDetailProvider(widget.tvShowId));
+          _invalidateTvShowDetail();
           ref.read(postersProvider.notifier).refresh();
           DialogUtils.showToast(context: context, message: '更新成功');
         } else {
@@ -2312,14 +2342,13 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
 
     if (!context.mounted) return;
     if (success == true) {
-      ref.invalidate(tvShowDetailProvider(tvShow.id));
+      _invalidateTvShowDetail();
     }
   }
 
   String? _tvShowScrapePath(TvShow tvShow, Season? selectedSeason) {
-    List<SourceGroup>? sourceGroups;
     if (selectedSeason != null) {
-      sourceGroups = ref
+      final sourceGroups = ref
           .read(
             seasonSourceGroupsProvider((
               tvShowId: widget.tvShowId,
@@ -2327,8 +2356,24 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
             )),
           )
           .maybeWhen(data: (groups) => groups, orElse: () => null);
+      if (sourceGroups == null || sourceGroups.isEmpty) {
+        return null;
+      }
+
+      for (final group in sourceGroups) {
+        if (group.isPrimary && group.scanPath.trim().isNotEmpty) {
+          return group.scanPath.trim();
+        }
+      }
+      for (final group in sourceGroups) {
+        if (group.scanPath.trim().isNotEmpty) {
+          return group.scanPath.trim();
+        }
+      }
+      return null;
     }
-    final path = _resolveSelectedSourceFolder(tvShow, sourceGroups)?.trim();
+
+    final path = _firstNonEmptySourceFolder(tvShow.sourceFolders)?.trim();
     return path == null || path.isEmpty ? null : path;
   }
 
@@ -2369,7 +2414,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     if (!context.mounted) return;
 
     if (resp.isSuccess) {
-      ref.invalidate(tvShowDetailProvider(id));
+      _invalidateTvShowDetail();
       DialogUtils.showToast(context: context, message: '同步完成');
       return;
     }
@@ -2495,11 +2540,14 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
       }
     }
 
-    final sourceFolders = tvShow.sourceFolders;
-    if (sourceFolders == null || sourceFolders.isEmpty) {
+    return _firstNonEmptySourceFolder(tvShow.sourceFolders);
+  }
+
+  String? _firstNonEmptySourceFolder(List<String>? folders) {
+    if (folders == null || folders.isEmpty) {
       return null;
     }
-    for (final folder in sourceFolders) {
+    for (final folder in folders) {
       if (folder.isNotEmpty) {
         return folder;
       }
@@ -3275,12 +3323,11 @@ class _SourceGroupsSheet extends ConsumerWidget {
       tvShowId,
       seasonId,
       group.folderPath,
+      resolution: group.resolution,
+      storageId: group.storageId,
     );
     if (response.isSuccess) {
-      container.invalidate(
-        seasonSourceGroupsProvider((tvShowId: tvShowId, seasonId: seasonId)),
-      );
-      container.invalidate(tvShowDetailProvider(tvShowId));
+      _invalidateTvShowDetailData(container, tvShowId, seasonIds: [seasonId]);
     }
   }
 }

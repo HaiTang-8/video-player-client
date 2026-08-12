@@ -1,17 +1,21 @@
 /// 播放源分组模型（按文件夹聚合）
 class SourceGroup {
   final String folderPath;
+  final String scanPath;
   final int fileCount;
   final int totalSize;
   final String? resolution;
+  final int? storageId;
   final String? storageName;
   final bool isPrimary;
 
   SourceGroup({
     required this.folderPath,
+    required this.scanPath,
     required this.fileCount,
     required this.totalSize,
     this.resolution,
+    this.storageId,
     this.storageName,
     this.isPrimary = false,
   });
@@ -19,9 +23,11 @@ class SourceGroup {
   factory SourceGroup.fromJson(Map<String, dynamic> json) {
     return SourceGroup(
       folderPath: json['folder_path'] as String? ?? '',
+      scanPath: json['scan_path'] as String? ?? '',
       fileCount: (json['file_count'] as num?)?.toInt() ?? 0,
       totalSize: (json['total_size'] as num?)?.toInt() ?? 0,
       resolution: json['resolution'] as String?,
+      storageId: (json['storage_id'] as num?)?.toInt(),
       storageName: json['storage_name'] as String?,
       isPrimary: json['is_primary'] as bool? ?? false,
     );

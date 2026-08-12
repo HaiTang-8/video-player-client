@@ -284,11 +284,20 @@ class MediaService {
   Future<ApiResponse<void>> setSeasonPrimarySource(
     int tvShowId,
     int seasonId,
-    String folderPath,
-  ) async {
+    String folderPath, {
+    String? resolution,
+    int? storageId,
+  }) async {
+    final data = <String, dynamic>{'folder_path': folderPath};
+    if (resolution != null && resolution.trim().isNotEmpty) {
+      data['resolution'] = resolution;
+    }
+    if (storageId != null && storageId > 0) {
+      data['storage_id'] = storageId;
+    }
     return _client.post(
       ApiConstants.seasonPrimarySource(tvShowId, seasonId),
-      data: {'folder_path': folderPath},
+      data: data,
     );
   }
 
