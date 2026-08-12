@@ -17,7 +17,7 @@ class DialogUtils {
     final container = ProviderScope.containerOf(context);
     container.read(windowBorderVisibleProvider.notifier).hide();
     try {
-      return await const shadcn.DialogOverlayHandler().show<T>(
+      return await const shadcn.DialogOverlayHandler().show<T?>(
         context: context,
         alignment: Alignment.center,
         barrierDismissable: barrierDismissible,

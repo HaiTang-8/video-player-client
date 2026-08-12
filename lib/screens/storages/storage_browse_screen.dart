@@ -1985,7 +1985,7 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
       case _ScanDialogPhase.confirm:
         return [
           shadcn.OutlineButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
             child: const Text('取消'),
           ),
           shadcn.PrimaryButton(
@@ -2003,7 +2003,7 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
                   .cancelScan(widget.storageId);
               if (!mounted) return;
               if (result.success) {
-                Navigator.pop(context);
+                Navigator.pop(context, false);
                 return;
               }
               DialogUtils.showToast(
