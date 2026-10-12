@@ -205,7 +205,9 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
         ...WidgetsApp.defaultActions,
         ScrollIntent: AnimatedScrollAction(),
       },
-      builder: (context, child) => WindowBorder(child: child ?? const SizedBox()),
+      builder: (context, child) => WindowBorder(
+        child: shadcn.DrawerOverlay(child: child ?? const SizedBox()),
+      ),
     );
   }
 }
