@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,29 +5,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/detail_background_palette.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/detail_hero_background.dart';
 import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/overview_preview_text.dart';
-import '../../core/utils/image_proxy.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../storages/storage_browse_screen.dart';
-
-typedef _MovieHeroImage =
-    ({
-      double imageHeight,
-      double layoutHeight,
-      String? imageUrl,
-      bool usePoster,
-    });
 
 /// 电影详情页面
 class MovieDetailScreen extends ConsumerStatefulWidget {
@@ -40,17 +30,13 @@ class MovieDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<MovieDetailScreen> createState() => _MovieDetailScreenState();
 }
 
-class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
-  static const double _mobilePosterBottomInset = 96;
+class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen>
+    with DetailHeroPaletteMixin<MovieDetailScreen> {
   Movie? _movie;
   final _castScrollController = ScrollController();
   WatchHistoryItem? _watchHistory;
   bool _historyLoaded = false;
   bool _showSolidAppBar = false;
-  Color? _mobileBackgroundColor;
-  String? _mobileBackgroundImageUrl;
-  DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
-      DetailBackgroundPaletteMode.fullImage;
 
   void _invalidateMovieDetail() {
     ref.invalidate(movieDetailProvider(widget.movieId));
@@ -119,187 +105,22 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
     return false;
   }
 
-  Color _detailBackgroundColor(
-    BuildContext context, {
-    required String? imageUrl,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    final fallbackColor = context.appColors.cardBackground;
-    if (WindowControls.isDesktop || imageUrl == null || imageUrl.isEmpty) {
-      return fallbackColor;
-    }
-    final cachedColor = DetailBackgroundPalette.getCached(imageUrl, mode: mode);
-    if (_mobileBackgroundImageUrl == imageUrl &&
-        _mobileBackgroundPaletteMode == mode) {
-      return _mobileBackgroundColor ?? cachedColor ?? fallbackColor;
-    }
-    return cachedColor ?? fallbackColor;
-  }
+  @override
+  String get heroPaletteDebugLabel =>
+      'screen=movie_detail movieId=${widget.movieId}';
 
-  Color _detailSurfaceColor(
-    BuildContext context, {
-    required String? imageUrl,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    final baseColor = _detailBackgroundColor(
-      context,
-      imageUrl: imageUrl,
-      mode: mode,
-    );
-    return _detailSurfaceColorFromBase(context, baseColor);
-  }
-
-  Color _detailSurfaceColorFromBase(
-    BuildContext context,
-    Color backgroundColor,
-  ) {
-    final fallbackColor = context.appColors.cardBackground;
-    return Color.lerp(backgroundColor, fallbackColor, 0.24) ?? fallbackColor;
-  }
-
-  Color _detailGradientHighlightColor(Color backgroundColor) {
-    final hsl = HSLColor.fromColor(backgroundColor);
-    return hsl
-        .withSaturation((hsl.saturation * 1.12).clamp(0.0, 0.62))
-        .withLightness((hsl.lightness + 0.05).clamp(0.12, 0.30))
-        .toColor();
-  }
-
-  Color _detailGradientBridgeColor(Color backgroundColor, Color surfaceColor) {
-    return Color.lerp(
-          _detailGradientHighlightColor(backgroundColor),
-          surfaceColor,
-          0.42,
-        ) ??
-        surfaceColor;
-  }
-
-  String _backgroundDebugContext(
-    String imageUrl,
-    DetailBackgroundPaletteMode mode,
-  ) {
-    return 'screen=movie_detail '
-        'movieId=${widget.movieId} '
-        'mode=${mode.name} '
-        'imageUrl=$imageUrl';
-  }
-
-  void _resolveMobileBackgroundColor(
-    String? imageUrl,
-    String? accessToken, {
-    required bool isDesktop,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    if (isDesktop || imageUrl == null || imageUrl.isEmpty) {
-      return;
-    }
-    if (_mobileBackgroundImageUrl == imageUrl &&
-        _mobileBackgroundPaletteMode == mode) {
-      return;
-    }
-
-    _mobileBackgroundImageUrl = imageUrl;
-    _mobileBackgroundPaletteMode = mode;
-    _mobileBackgroundColor = DetailBackgroundPalette.getCached(
-      imageUrl,
-      mode: mode,
-    );
-    final headers =
-        accessToken != null
-            ? <String, String>{'Authorization': 'Bearer $accessToken'}
-            : null;
-
-    DetailBackgroundPalette.resolve(
-      imageUrl,
-      provider: CachedNetworkImageProvider(imageUrl, headers: headers),
-      fallbackColor: AppColors.dark.cardBackground,
-      mode: mode,
-      debugContext: _backgroundDebugContext(imageUrl, mode),
-    ).then((color) {
-      if (!mounted ||
-          _mobileBackgroundImageUrl != imageUrl ||
-          _mobileBackgroundPaletteMode != mode) {
-        return;
-      }
-      if (_mobileBackgroundColor == color) {
-        return;
-      }
-      setState(() {
-        _mobileBackgroundColor = color;
-      });
-    });
-  }
-
-  _MovieHeroImage _resolveHeroImage(
+  DetailHeroImage _heroImageFor(
     Movie movie,
     Size screenSize,
     String? serverBaseUrl, {
     required bool isDesktop,
   }) {
-    String? imagePathRaw;
-    bool usePoster = false;
-    if (isDesktop) {
-      imagePathRaw = movie.backdropPath;
-      if (imagePathRaw == null || imagePathRaw.isEmpty) {
-        imagePathRaw = movie.posterPath;
-        usePoster = true;
-      }
-    } else {
-      imagePathRaw = movie.posterPath;
-      usePoster = true;
-      if (imagePathRaw == null || imagePathRaw.isEmpty) {
-        imagePathRaw = movie.backdropPath;
-        usePoster = false;
-      }
-    }
-
-    var imagePath = imagePathRaw;
-    if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
-      final uri = Uri.tryParse(imagePathRaw);
-      final segments = uri?.pathSegments ?? const <String>[];
-      final currentSize = segments.length >= 3 ? segments[2] : '';
-      const smallSizes = <String>{'w92', 'w154', 'w185', 'w342', 'w500'};
-      if (smallSizes.contains(currentSize)) {
-        imagePath = ImageProxy.withTMDBSize(
-          imagePathRaw,
-          usePoster ? 'w780' : 'w1280',
-        );
-      }
-    }
-
-    final imageHeight =
-        (() {
-          if (usePoster) {
-            if (isDesktop) {
-              return screenSize.height * 0.75;
-            }
-            const posterAspect = 2 / 3;
-            final idealHeight = screenSize.width / posterAspect;
-            final maxHeight = screenSize.height * 0.85;
-            return idealHeight.clamp(0.0, maxHeight).toDouble();
-          }
-          const backdropAspect = 16 / 9;
-          final idealHeight = screenSize.width / backdropAspect;
-          final minHeight = screenSize.height * 0.55;
-          final maxHeight = screenSize.height * 0.9;
-          return idealHeight.clamp(minHeight, maxHeight);
-        })().ceilToDouble();
-    final layoutHeight =
-        (!isDesktop && usePoster
-                ? imageHeight + _mobilePosterBottomInset
-                : imageHeight)
-            .ceilToDouble();
-
-    final imageUrl =
-        imagePath != null && imagePath.isNotEmpty
-            ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
-            : null;
-
-    return (
-      imageHeight: imageHeight,
-      layoutHeight: layoutHeight,
-      imageUrl: imageUrl,
-      usePoster: usePoster,
+    return DetailHeroImage.resolve(
+      posterPath: movie.posterPath,
+      backdropPath: movie.backdropPath,
+      screenSize: screenSize,
+      serverBaseUrl: serverBaseUrl,
+      isDesktop: isDesktop,
     );
   }
 
@@ -307,7 +128,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Widget build(BuildContext context) {
     final movieAsync = ref.watch(movieDetailProvider(widget.movieId));
     final baseTheme = Theme.of(context);
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = MediaQuery.sizeOf(context);
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
     final accessToken = ref.watch(authProvider).tokens?.accessToken;
@@ -321,172 +142,121 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
           final resolvedHeroImage =
               resolvedMovie == null
                   ? null
-                  : _resolveHeroImage(
+                  : _heroImageFor(
                     resolvedMovie,
                     screenSize,
                     serverBaseUrl,
                     isDesktop: isDesktop,
                   );
-          final scaffoldBackgroundColor = _detailBackgroundColor(
+          final targetBackgroundColor = heroBackgroundColor(
             context,
-            imageUrl: resolvedHeroImage?.imageUrl ?? _mobileBackgroundImageUrl,
-            mode:
-                resolvedHeroImage?.usePoster == true
-                    ? DetailBackgroundPaletteMode.posterBottom
-                    : _mobileBackgroundPaletteMode,
+            resolvedHeroImage,
+            isDesktop: isDesktop,
           );
-          final resolvedSurfaceBackgroundColor =
-              isDesktop
-                  ? scaffoldBackgroundColor
-                  : _detailSurfaceColorFromBase(
-                    context,
-                    scaffoldBackgroundColor,
-                  );
 
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle.light,
-            child: Scaffold(
-              backgroundColor: resolvedSurfaceBackgroundColor,
-              appBar:
+          return TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: targetBackgroundColor),
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+            builder: (context, animatedBackgroundColor, _) {
+              final detailBackgroundColor =
+                  animatedBackgroundColor ?? targetBackgroundColor;
+              final detailSurfaceColor =
                   isDesktop
-                      ? movieAsync.when(
-                        loading:
-                            () => DesktopAppBar(
-                              title: const Text('加载中...'),
-                              onBack: () => context.pop(),
-                            ),
-                        error:
-                            (error, stack) => DesktopAppBar(
-                              title: const Text('电影详情'),
-                              onBack: () => context.pop(),
-                              actions: [
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: _invalidateMovieDetail,
+                      ? detailBackgroundColor
+                      : DetailHeroBackground.surfaceColorFor(
+                        context,
+                        detailBackgroundColor,
+                      );
+
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle.light,
+                child: Scaffold(
+                  backgroundColor: detailSurfaceColor,
+                  appBar:
+                      isDesktop
+                          ? movieAsync.when(
+                            loading:
+                                () => DesktopAppBar(
+                                  title: const Text('加载中...'),
+                                  onBack: () => context.pop(),
                                 ),
-                              ],
-                            ),
-                        data:
-                            (movie) => DesktopAppBar(
-                              title: Text(movie?.title ?? '电影详情'),
-                              onBack: () => context.pop(),
-                              actions: _buildDesktopActions(movie),
-                            ),
-                      )
-                      : null,
-              body: movieAsync.when(
-                loading: () => const DetailSkeletonLoader.movie(),
-                error:
-                    (error, stack) => AppErrorWidget(
-                      message: error.toString(),
-                      onRetry: _invalidateMovieDetail,
-                    ),
-                data: (movie) {
-                  if (movie == null) {
-                    return const AppErrorWidget(message: '电影不存在');
-                  }
-                  _movie = movie;
-                  final heroImage =
-                      resolvedHeroImage ??
-                      _resolveHeroImage(
-                        movie,
-                        screenSize,
-                        serverBaseUrl,
+                            error:
+                                (error, stack) => DesktopAppBar(
+                                  title: const Text('电影详情'),
+                                  onBack: () => context.pop(),
+                                  actions: [
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onPressed: _invalidateMovieDetail,
+                                    ),
+                                  ],
+                                ),
+                            data:
+                                (movie) => DesktopAppBar(
+                                  title: Text(movie?.title ?? '电影详情'),
+                                  onBack: () => context.pop(),
+                                  actions: _buildDesktopActions(movie),
+                                ),
+                          )
+                          : null,
+                  body: movieAsync.when(
+                    loading: () => const DetailSkeletonLoader.movie(),
+                    error:
+                        (error, stack) => AppErrorWidget(
+                          message: error.toString(),
+                          onRetry: _invalidateMovieDetail,
+                        ),
+                    data: (movie) {
+                      if (movie == null) {
+                        return const AppErrorWidget(message: '电影不存在');
+                      }
+                      _movie = movie;
+                      final heroImage =
+                          resolvedHeroImage ??
+                          _heroImageFor(
+                            movie,
+                            screenSize,
+                            serverBaseUrl,
+                            isDesktop: isDesktop,
+                          );
+                      resolveHeroPalette(
+                        heroImage,
+                        accessToken,
                         isDesktop: isDesktop,
                       );
-                  _resolveMobileBackgroundColor(
-                    heroImage.imageUrl,
-                    accessToken,
-                    isDesktop: isDesktop,
-                    mode:
-                        heroImage.usePoster
-                            ? DetailBackgroundPaletteMode.posterBottom
-                            : DetailBackgroundPaletteMode.fullImage,
-                  );
-                  final detailBackgroundColor = _detailBackgroundColor(
-                    context,
-                    imageUrl: heroImage.imageUrl,
-                    mode:
-                        heroImage.usePoster
-                            ? DetailBackgroundPaletteMode.posterBottom
-                            : DetailBackgroundPaletteMode.fullImage,
-                  );
-                  final detailSurfaceColor =
-                      isDesktop
-                          ? detailBackgroundColor
-                          : _detailSurfaceColorFromBase(
-                            context,
-                            detailBackgroundColor,
-                          );
-                  if (!_historyLoaded) {
-                    _historyLoaded = true;
-                    _loadWatchHistory();
-                  }
+                      if (!_historyLoaded) {
+                        _historyLoaded = true;
+                        _loadWatchHistory();
+                      }
 
-                  final cast =
-                      (movie.castDetail != null && movie.castDetail!.isNotEmpty)
-                          ? movie.castDetail!
-                          : (movie.cast != null
-                              ? movie.cast!
-                                  .where((e) => e.trim().isNotEmpty)
-                                  .map((e) => CastMember(name: e.trim()))
-                                  .toList()
-                              : const <CastMember>[]);
+                      final cast =
+                          (movie.castDetail != null &&
+                                  movie.castDetail!.isNotEmpty)
+                              ? movie.castDetail!
+                              : (movie.cast != null
+                                  ? movie.cast!
+                                      .where((e) => e.trim().isNotEmpty)
+                                      .map((e) => CastMember(name: e.trim()))
+                                      .toList()
+                                  : const <CastMember>[]);
 
-                  if (isDesktop) {
-                    return CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: _buildBackgroundWithHero(
-                            context,
-                            movie,
-                            heroImage,
-                            accessToken,
-                            backgroundColor: detailBackgroundColor,
-                            surfaceColor: detailSurfaceColor,
-                            isDesktop: true,
-                          ),
-                        ),
-                        if (cast.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: _buildCastSection(
-                              context,
-                              theme,
-                              cast,
-                              serverBaseUrl,
-                              accessToken,
-                            ),
-                          ),
-                        SliverToBoxAdapter(
-                          child: _buildFileInfoSection(context, theme, movie),
-                        ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                      ],
-                    );
-                  }
-
-                  return Stack(
-                    children: [
-                      NotificationListener<ScrollNotification>(
-                        onNotification: _handleMainScroll,
-                        child: CustomScrollView(
+                      if (isDesktop) {
+                        return CustomScrollView(
                           slivers: [
                             SliverToBoxAdapter(
-                              child: _buildBackgroundWithHero(
-                                context,
-                                movie,
-                                heroImage,
-                                accessToken,
+                              child: DetailHeroBackground(
+                                heroImage: heroImage,
+                                accessToken: accessToken,
                                 backgroundColor: detailBackgroundColor,
                                 surfaceColor: detailSurfaceColor,
-                                isDesktop: false,
+                                isDesktop: true,
+                                content: _buildDesktopHeroContent(
+                                  context,
+                                  movie,
+                                ),
                               ),
                             ),
-                            if (movie.overview != null &&
-                                movie.overview!.isNotEmpty)
-                              SliverToBoxAdapter(
-                                child: _buildOverviewSection(movie),
-                              ),
                             if (cast.isNotEmpty)
                               SliverToBoxAdapter(
                                 child: _buildCastSection(
@@ -508,166 +278,71 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
                               child: SizedBox(height: 32),
                             ),
                           ],
-                        ),
-                      ),
-                      _buildMobileAppBar(
-                        context,
-                        movie,
-                        solid: _showSolidAppBar,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                        );
+                      }
+
+                      return Stack(
+                        children: [
+                          NotificationListener<ScrollNotification>(
+                            onNotification: _handleMainScroll,
+                            child: CustomScrollView(
+                              slivers: [
+                                SliverToBoxAdapter(
+                                  child: DetailHeroBackground(
+                                    heroImage: heroImage,
+                                    accessToken: accessToken,
+                                    backgroundColor: detailBackgroundColor,
+                                    surfaceColor: detailSurfaceColor,
+                                    isDesktop: false,
+                                    content: _buildMobileHeroContent(
+                                      context,
+                                      movie,
+                                    ),
+                                  ),
+                                ),
+                                if (movie.overview != null &&
+                                    movie.overview!.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _buildOverviewSection(movie),
+                                  ),
+                                if (cast.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _buildCastSection(
+                                      context,
+                                      theme,
+                                      cast,
+                                      serverBaseUrl,
+                                      accessToken,
+                                    ),
+                                  ),
+                                SliverToBoxAdapter(
+                                  child: _buildFileInfoSection(
+                                    context,
+                                    theme,
+                                    movie,
+                                  ),
+                                ),
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 32),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildMobileAppBar(
+                            context,
+                            movie,
+                            solid: _showSolidAppBar,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
-    );
-  }
-
-  /// 构建背景图（含渐变蒙版和 Hero 内容）
-  Widget _buildBackgroundWithHero(
-    BuildContext context,
-    Movie movie,
-    _MovieHeroImage heroImage,
-    String? accessToken, {
-    required Color backgroundColor,
-    required Color surfaceColor,
-    required bool isDesktop,
-  }) {
-    final imageHeight = heroImage.imageHeight;
-    final layoutHeight = heroImage.layoutHeight;
-    final gradientHeight =
-        ((imageHeight * 0.5) + (layoutHeight - imageHeight)).ceilToDouble();
-    final bottomMaskHeight =
-        (gradientHeight * 1.45).clamp(0.0, layoutHeight).toDouble();
-    final imageUrl = heroImage.imageUrl;
-    final gradientHighlightColor = _detailGradientHighlightColor(
-      backgroundColor,
-    );
-    final gradientBridgeColor = _detailGradientBridgeColor(
-      backgroundColor,
-      surfaceColor,
-    );
-
-    return Stack(
-      children: [
-        Container(
-          width: double.infinity,
-          height: layoutHeight,
-          color: isDesktop ? backgroundColor : surfaceColor,
-        ),
-        // 背景图
-        if (imageUrl != null && imageUrl.isNotEmpty)
-          CachedNetworkImage(
-            imageUrl: imageUrl,
-            httpHeaders:
-                accessToken != null
-                    ? {'Authorization': 'Bearer $accessToken'}
-                    : null,
-            width: double.infinity,
-            height: imageHeight,
-            fit: isDesktop ? BoxFit.cover : BoxFit.fitWidth,
-            alignment: Alignment.topCenter,
-            errorWidget:
-                (_, _, _) =>
-                    Container(height: imageHeight, color: Colors.grey[300]),
-            placeholder:
-                (_, _) =>
-                    Container(height: imageHeight, color: Colors.grey[300]),
-          )
-        else
-          Container(height: imageHeight, color: Colors.grey[300]),
-
-        // 渐变蒙版
-        if (!isDesktop)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: MediaQuery.of(context).padding.top + 96,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.black.withValues(alpha: 0.18),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: gradientHeight,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors:
-                    isDesktop
-                        ? [
-                          backgroundColor.withValues(alpha: 0.0),
-                          backgroundColor.withValues(alpha: 0.2),
-                          backgroundColor.withValues(alpha: 0.5),
-                          backgroundColor.withValues(alpha: 0.8),
-                          backgroundColor,
-                        ]
-                        : [
-                          gradientHighlightColor.withValues(alpha: 0.0),
-                          gradientHighlightColor.withValues(alpha: 0.18),
-                          gradientBridgeColor.withValues(alpha: 0.48),
-                          surfaceColor.withValues(alpha: 0.82),
-                          surfaceColor,
-                        ],
-                stops: const [0.0, 0.18, 0.45, 0.78, 1.0],
-              ),
-            ),
-          ),
-        ),
-        if (!isDesktop)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: bottomMaskHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    surfaceColor.withValues(alpha: 0.06),
-                    surfaceColor.withValues(alpha: 0.18),
-                    surfaceColor.withValues(alpha: 0.42),
-                    surfaceColor.withValues(alpha: 0.74),
-                    surfaceColor.withValues(alpha: 0.94),
-                    surfaceColor,
-                  ],
-                  stops: const [0.0, 0.2, 0.42, 0.66, 0.86, 1.0],
-                ),
-              ),
-            ),
-          ),
-
-        // Hero 内容（叠加在渐变蒙版上）
-        Positioned(
-          left: 12,
-          right: 12,
-          bottom: 24,
-          child:
-              isDesktop
-                  ? _buildDesktopHeroContent(context, movie)
-                  : _buildMobileHeroContent(context, movie),
-        ),
-      ],
     );
   }
 
@@ -679,6 +354,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
       children: [
         Text(
           movie.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: colors.textPrimary,
             fontSize: 28,
@@ -733,6 +410,8 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
         // 第一行：标题
         Text(
           movie.title,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: colors.textPrimary,
             fontSize: 24,
@@ -872,11 +551,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Widget _buildFullWidthPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final buttonForeground = heroSurfaceColor(context);
     final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {
@@ -965,11 +640,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   }) {
     final colors = context.appColors;
     final hasFile = movie.filePath != null && movie.filePath!.isNotEmpty;
-    final backgroundColor = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final backgroundColor = heroSurfaceColor(context);
 
     return Positioned(
       top: 0,
@@ -1211,11 +882,7 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen> {
   Widget _buildPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final buttonForeground = heroSurfaceColor(context);
     final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {

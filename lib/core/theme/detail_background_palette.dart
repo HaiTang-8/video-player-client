@@ -27,25 +27,45 @@ class DetailBackgroundPalette {
   static final Map<String, Color> _cache = <String, Color>{};
   static final Map<String, Future<Color>> _inFlight = <String, Future<Color>>{};
 
+  /// [visibleFraction] 为海报在界面上可见部分的高度占比，
+  /// posterBottom 模式下只采样可见区域的底部。
   static String buildCacheKey(
     String sourceKey, {
     DetailBackgroundPaletteMode mode = DetailBackgroundPaletteMode.fullImage,
-  }) => '${mode.name}::$sourceKey';
+    double visibleFraction = 1,
+  }) {
+    final fraction =
+        mode == DetailBackgroundPaletteMode.posterBottom && visibleFraction < 1
+            ? '@${visibleFraction.toStringAsFixed(2)}'
+            : '';
+    return '${mode.name}$fraction::$sourceKey';
+  }
 
   static Color? getCached(
     String cacheKey, {
     DetailBackgroundPaletteMode mode = DetailBackgroundPaletteMode.fullImage,
-  }) => _cache[buildCacheKey(cacheKey, mode: mode)];
+    double visibleFraction = 1,
+  }) =>
+      _cache[buildCacheKey(
+        cacheKey,
+        mode: mode,
+        visibleFraction: visibleFraction,
+      )];
 
   static Future<Color> resolve(
     String cacheKey, {
     required ImageProvider provider,
     required Color fallbackColor,
     DetailBackgroundPaletteMode mode = DetailBackgroundPaletteMode.fullImage,
+    double visibleFraction = 1,
     String? debugContext,
   }) {
-    final resolvedCacheKey = buildCacheKey(cacheKey, mode: mode);
-    final region = _regionFor(mode);
+    final resolvedCacheKey = buildCacheKey(
+      cacheKey,
+      mode: mode,
+      visibleFraction: visibleFraction,
+    );
+    final region = _regionFor(mode, visibleFraction);
     final cached = _cache[resolvedCacheKey];
     if (cached != null) {
       _debug(
@@ -75,6 +95,7 @@ class DetailBackgroundPalette {
       provider: provider,
       fallbackColor: fallbackColor,
       mode: mode,
+      visibleFraction: visibleFraction,
       debugContext: debugContext,
     ).then((color) {
       _cache[resolvedCacheKey] = color;
@@ -94,11 +115,16 @@ class DetailBackgroundPalette {
     required ImageProvider provider,
     required Color fallbackColor,
     required DetailBackgroundPaletteMode mode,
+    required double visibleFraction,
     String? debugContext,
   }) async {
-    final region = _regionFor(mode);
+    final region = _regionFor(mode, visibleFraction);
     try {
-      final palette = await _generatePalette(provider, mode: mode);
+      final palette = await _generatePalette(
+        provider,
+        mode: mode,
+        visibleFraction: visibleFraction,
+      );
       _debug(
         'palette-ready mode=${mode.name} region=${_formatRect(region)} '
         'palette=${_describePalette(palette)}${_contextText(debugContext)}',
@@ -163,21 +189,29 @@ class DetailBackgroundPalette {
   static Future<PaletteGenerator> _generatePalette(
     ImageProvider provider, {
     required DetailBackgroundPaletteMode mode,
+    double visibleFraction = 1,
   }) {
     return PaletteGenerator.fromImageProvider(
       provider,
       size: _sampleSize,
-      region: _regionFor(mode),
+      region: _regionFor(mode, visibleFraction),
       maximumColorCount: 20,
     );
   }
 
-  static Rect? _regionFor(DetailBackgroundPaletteMode mode) {
+  static Rect? _regionFor(
+    DetailBackgroundPaletteMode mode, [
+    double visibleFraction = 1,
+  ]) {
     if (mode != DetailBackgroundPaletteMode.posterBottom) {
       return null;
     }
-    final top = _sampleSize.height * _posterBottomRegionStart;
-    return Rect.fromLTWH(0, top, _sampleSize.width, _sampleSize.height - top);
+    final bottom = _sampleSize.height * _clampDouble(visibleFraction, 0.4, 1);
+    final top = math.max(
+      0.0,
+      bottom - _sampleSize.height * (1 - _posterBottomRegionStart),
+    );
+    return Rect.fromLTRB(0, top, _sampleSize.width, bottom);
   }
 
   static _PaletteCandidate _pickCandidate(

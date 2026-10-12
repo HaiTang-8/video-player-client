@@ -6,12 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/detail_background_palette.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_back_button.dart';
 import '../../core/widgets/scrollable_row_with_arrows.dart';
 import '../../core/widgets/cast_avatar.dart';
 import '../../core/widgets/desktop_app_bar.dart';
+import '../../core/widgets/detail_hero_background.dart';
 import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
@@ -23,14 +23,6 @@ import '../../data/services/api_client.dart';
 import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
 import '../storages/storage_browse_screen.dart';
-
-typedef _TvHeroImage =
-    ({
-      double imageHeight,
-      double layoutHeight,
-      String? imageUrl,
-      bool usePoster,
-    });
 
 void _invalidateTvShowDetailData(
   ProviderContainer container,
@@ -63,8 +55,8 @@ class TvShowDetailScreen extends ConsumerStatefulWidget {
   ConsumerState<TvShowDetailScreen> createState() => _TvShowDetailScreenState();
 }
 
-class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
-  static const double _mobilePosterBottomInset = 96;
+class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
+    with DetailHeroPaletteMixin<TvShowDetailScreen> {
   int? _selectedSeasonId;
   int _selectedSeasonIndex = 0;
   final _castScrollController = ScrollController();
@@ -74,10 +66,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   int? _lastAutoScrolledSeasonId;
   int? _tmdbId;
   bool _showSolidAppBar = false;
-  Color? _mobileBackgroundColor;
-  String? _mobileBackgroundImageUrl;
-  DetailBackgroundPaletteMode _mobileBackgroundPaletteMode =
-      DetailBackgroundPaletteMode.fullImage;
 
   void _invalidateTvShowDetail() {
     final tvShow =
@@ -296,72 +284,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     return false;
   }
 
-  Color _detailBackgroundColor(
-    BuildContext context, {
-    required String? imageUrl,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    final fallbackColor = context.appColors.cardBackground;
-    if (WindowControls.isDesktop || imageUrl == null || imageUrl.isEmpty) {
-      return fallbackColor;
-    }
-    final cachedColor = DetailBackgroundPalette.getCached(imageUrl, mode: mode);
-    if (_mobileBackgroundImageUrl == imageUrl &&
-        _mobileBackgroundPaletteMode == mode) {
-      return _mobileBackgroundColor ?? cachedColor ?? fallbackColor;
-    }
-    return cachedColor ?? fallbackColor;
-  }
-
-  Color _detailSurfaceColor(
-    BuildContext context, {
-    required String? imageUrl,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    final baseColor = _detailBackgroundColor(
-      context,
-      imageUrl: imageUrl,
-      mode: mode,
-    );
-    return _detailSurfaceColorFromBase(context, baseColor);
-  }
-
-  Color _detailSurfaceColorFromBase(
-    BuildContext context,
-    Color backgroundColor,
-  ) {
-    final fallbackColor = context.appColors.cardBackground;
-    return Color.lerp(backgroundColor, fallbackColor, 0.24) ?? fallbackColor;
-  }
-
-  Color _detailGradientHighlightColor(Color backgroundColor) {
-    final hsl = HSLColor.fromColor(backgroundColor);
-    return hsl
-        .withSaturation((hsl.saturation * 1.12).clamp(0.0, 0.62))
-        .withLightness((hsl.lightness + 0.05).clamp(0.12, 0.30))
-        .toColor();
-  }
-
-  Color _detailGradientBridgeColor(Color backgroundColor, Color surfaceColor) {
-    return Color.lerp(
-          _detailGradientHighlightColor(backgroundColor),
-          surfaceColor,
-          0.42,
-        ) ??
-        surfaceColor;
-  }
-
-  String _backgroundDebugContext(
-    String imageUrl,
-    DetailBackgroundPaletteMode mode,
-  ) {
-    return 'screen=tvshow_detail '
-        'tvShowId=${widget.tvShowId} '
-        'seasonId=${_selectedSeasonId ?? "none"} '
-        'mode=${mode.name} '
-        'imageUrl=$imageUrl';
-  }
-
   List<CrewMember> _seasonDirectors(Season? season) {
     final crew = season?.crewDetail;
     if (crew == null || crew.isEmpty) {
@@ -395,129 +317,36 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
     return department == 'directing' || department == '导演';
   }
 
-  void _resolveMobileBackgroundColor(
-    String? imageUrl,
-    String? accessToken, {
-    required bool isDesktop,
-    required DetailBackgroundPaletteMode mode,
-  }) {
-    if (isDesktop || imageUrl == null || imageUrl.isEmpty) {
-      return;
-    }
-    if (_mobileBackgroundImageUrl == imageUrl &&
-        _mobileBackgroundPaletteMode == mode) {
-      return;
-    }
+  @override
+  String get heroPaletteDebugLabel =>
+      'screen=tvshow_detail tvShowId=${widget.tvShowId} '
+      'seasonId=${_selectedSeasonId ?? "none"}';
 
-    _mobileBackgroundImageUrl = imageUrl;
-    _mobileBackgroundPaletteMode = mode;
-    _mobileBackgroundColor = DetailBackgroundPalette.getCached(
-      imageUrl,
-      mode: mode,
-    );
-    final headers =
-        accessToken != null
-            ? <String, String>{'Authorization': 'Bearer $accessToken'}
-            : null;
-
-    DetailBackgroundPalette.resolve(
-      imageUrl,
-      provider: CachedNetworkImageProvider(imageUrl, headers: headers),
-      fallbackColor: AppColors.dark.cardBackground,
-      mode: mode,
-      debugContext: _backgroundDebugContext(imageUrl, mode),
-    ).then((color) {
-      if (!mounted ||
-          _mobileBackgroundImageUrl != imageUrl ||
-          _mobileBackgroundPaletteMode != mode) {
-        return;
-      }
-      if (_mobileBackgroundColor == color) {
-        return;
-      }
-      setState(() {
-        _mobileBackgroundColor = color;
-      });
-    });
-  }
-
-  _TvHeroImage _resolveHeroImage(
+  DetailHeroImage _heroImageFor(
     TvShow tvShow,
     Season? selectedSeason,
     Size screenSize,
     String? serverBaseUrl, {
     required bool isDesktop,
   }) {
-    String? imagePathRaw;
-    bool usePoster = false;
-    if (isDesktop) {
-      imagePathRaw = tvShow.backdropPath;
-      if ((imagePathRaw == null || imagePathRaw.isEmpty) &&
-          tvShow.backdrops != null &&
-          tvShow.backdrops!.isNotEmpty) {
-        imagePathRaw =
-            tvShow.backdrops![_selectedSeasonIndex % tvShow.backdrops!.length];
-      }
-      if (imagePathRaw == null || imagePathRaw.isEmpty) {
-        imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
-        usePoster = true;
-      }
-    } else {
-      imagePathRaw = selectedSeason?.posterPath ?? tvShow.posterPath;
-      usePoster = true;
-      if (imagePathRaw == null || imagePathRaw.isEmpty) {
-        imagePathRaw = tvShow.backdropPath;
-        usePoster = false;
-      }
-    }
-
-    var imagePath = imagePathRaw;
-    if (imagePathRaw != null && ImageProxy.isTMDBImageUrl(imagePathRaw)) {
-      final uri = Uri.tryParse(imagePathRaw);
-      final segments = uri?.pathSegments ?? const <String>[];
-      final currentSize = segments.length >= 3 ? segments[2] : '';
-      const smallSizes = <String>{'w92', 'w154', 'w185', 'w342', 'w500'};
-      if (smallSizes.contains(currentSize)) {
-        imagePath = ImageProxy.withTMDBSize(
-          imagePathRaw,
-          usePoster ? 'w780' : 'w1280',
-        );
-      }
-    }
-
-    final imageHeight =
-        (() {
-          if (usePoster) {
-            if (isDesktop) {
-              return screenSize.height * 0.75;
-            }
-            const posterAspect = 2 / 3;
-            final idealHeight = screenSize.width / posterAspect;
-            final maxHeight = screenSize.height * 0.75;
-            return idealHeight.clamp(0.0, maxHeight).toDouble();
-          }
-          const backdropAspect = 16 / 9;
-          final idealHeight = screenSize.width / backdropAspect;
-          final minHeight = screenSize.height * 0.55;
-          final maxHeight = screenSize.height * 0.9;
-          return idealHeight.clamp(minHeight, maxHeight);
-        })().ceilToDouble();
-    final layoutHeight =
-        (!isDesktop && usePoster
-                ? imageHeight + _mobilePosterBottomInset
-                : imageHeight)
-            .ceilToDouble();
-
-    final imageUrl =
-        imagePath != null && imagePath.isNotEmpty
-            ? ImageProxy.proxyTMDBIfNeeded(imagePath, serverBaseUrl)
-            : null;
-
-    return (
-      imageHeight: imageHeight,
-      layoutHeight: layoutHeight,
-      imageUrl: imageUrl,
-      usePoster: usePoster,
+    final backdrops = tvShow.backdrops;
+    final backdropPath =
+        tvShow.backdropPath?.isNotEmpty == true
+            ? tvShow.backdropPath
+            : (backdrops != null && backdrops.isNotEmpty
+                ? backdrops[_selectedSeasonIndex % backdrops.length]
+                : null);
+    final seasonPoster = selectedSeason?.posterPath;
+    return DetailHeroImage.resolve(
+      posterPath:
+          seasonPoster != null && seasonPoster.isNotEmpty
+              ? seasonPoster
+              : tvShow.posterPath,
+      backdropPath: backdropPath,
+      screenSize: screenSize,
+      serverBaseUrl: serverBaseUrl,
+      isDesktop: isDesktop,
+      mobilePosterMaxHeightFactor: 0.75,
     );
   }
 
@@ -525,7 +354,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget build(BuildContext context) {
     final tvShowAsync = ref.watch(tvShowDetailProvider(widget.tvShowId));
     final baseTheme = Theme.of(context);
-    final screenSize = MediaQuery.of(context).size;
+    final screenSize = MediaQuery.sizeOf(context);
     final isDesktop = WindowControls.isDesktop;
     final serverBaseUrl = ref.watch(serverUrlProvider);
     final accessToken = ref.watch(authProvider).tokens?.accessToken;
@@ -545,278 +374,167 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
           final resolvedHeroImage =
               resolvedTvShow == null
                   ? null
-                  : _resolveHeroImage(
+                  : _heroImageFor(
                     resolvedTvShow,
                     resolvedSelectedSeason,
                     screenSize,
                     serverBaseUrl,
                     isDesktop: isDesktop,
                   );
-          final scaffoldBackgroundColor = _detailBackgroundColor(
+          final targetBackgroundColor = heroBackgroundColor(
             context,
-            imageUrl: resolvedHeroImage?.imageUrl ?? _mobileBackgroundImageUrl,
-            mode:
-                resolvedHeroImage?.usePoster == true
-                    ? DetailBackgroundPaletteMode.posterBottom
-                    : _mobileBackgroundPaletteMode,
+            resolvedHeroImage,
+            isDesktop: isDesktop,
           );
-          final resolvedSurfaceBackgroundColor =
-              isDesktop
-                  ? scaffoldBackgroundColor
-                  : _detailSurfaceColorFromBase(
-                    context,
-                    scaffoldBackgroundColor,
-                  );
 
-          return AnnotatedRegion<SystemUiOverlayStyle>(
-            value: SystemUiOverlayStyle.light,
-            child: Scaffold(
-              backgroundColor: resolvedSurfaceBackgroundColor,
-              appBar:
+          return TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: targetBackgroundColor),
+            duration: const Duration(milliseconds: 280),
+            curve: Curves.easeOut,
+            builder: (context, animatedBackgroundColor, _) {
+              final detailBackgroundColor =
+                  animatedBackgroundColor ?? targetBackgroundColor;
+              final detailSurfaceColor =
                   isDesktop
-                      ? tvShowAsync.when(
-                        loading:
-                            () => DesktopAppBar(
-                              title: const Text('加载中...'),
-                              onBack: () => context.pop(),
-                            ),
-                        error:
-                            (error, stack) => DesktopAppBar(
-                              title: const Text('剧集详情'),
-                              onBack: () => context.pop(),
-                              actions: [
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: _invalidateTvShowDetail,
+                      ? detailBackgroundColor
+                      : DetailHeroBackground.surfaceColorFor(
+                        context,
+                        detailBackgroundColor,
+                      );
+
+              return AnnotatedRegion<SystemUiOverlayStyle>(
+                value: SystemUiOverlayStyle.light,
+                child: Scaffold(
+                  backgroundColor: detailSurfaceColor,
+                  appBar:
+                      isDesktop
+                          ? tvShowAsync.when(
+                            loading:
+                                () => DesktopAppBar(
+                                  title: const Text('加载中...'),
+                                  onBack: () => context.pop(),
                                 ),
-                              ],
-                            ),
-                        data:
-                            (tvShow) => DesktopAppBar(
-                              title: Text(tvShow?.name ?? '剧集详情'),
-                              onBack: () => context.pop(),
-                              actions: _buildDesktopActions(tvShow),
-                            ),
-                      )
-                      : null,
-              body: tvShowAsync.when(
-                loading: () => const DetailSkeletonLoader.tvShow(),
-                error:
-                    (error, stack) => AppErrorWidget(
-                      message: error.toString(),
-                      onRetry: _invalidateTvShowDetail,
-                    ),
-                data: (tvShow) {
-                  if (tvShow == null) {
-                    return const AppErrorWidget(message: '剧集不存在');
-                  }
-                  _tmdbId = int.tryParse(tvShow.tmdbId ?? '');
+                            error:
+                                (error, stack) => DesktopAppBar(
+                                  title: const Text('剧集详情'),
+                                  onBack: () => context.pop(),
+                                  actions: [
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onPressed: _invalidateTvShowDetail,
+                                    ),
+                                  ],
+                                ),
+                            data:
+                                (tvShow) => DesktopAppBar(
+                                  title: Text(tvShow?.name ?? '剧集详情'),
+                                  onBack: () => context.pop(),
+                                  actions: _buildDesktopActions(tvShow),
+                                ),
+                          )
+                          : null,
+                  body: tvShowAsync.when(
+                    loading: () => const DetailSkeletonLoader.tvShow(),
+                    error:
+                        (error, stack) => AppErrorWidget(
+                          message: error.toString(),
+                          onRetry: _invalidateTvShowDetail,
+                        ),
+                    data: (tvShow) {
+                      if (tvShow == null) {
+                        return const AppErrorWidget(message: '剧集不存在');
+                      }
+                      _tmdbId = int.tryParse(tvShow.tmdbId ?? '');
 
-                  final cast =
-                      (tvShow.castDetail != null &&
-                              tvShow.castDetail!.isNotEmpty)
-                          ? tvShow.castDetail!
-                          : (tvShow.cast != null
-                              ? tvShow.cast!
-                                  .where((e) => e.trim().isNotEmpty)
-                                  .map((e) => CastMember(name: e.trim()))
-                                  .toList()
-                              : const <CastMember>[]);
+                      final cast =
+                          (tvShow.castDetail != null &&
+                                  tvShow.castDetail!.isNotEmpty)
+                              ? tvShow.castDetail!
+                              : (tvShow.cast != null
+                                  ? tvShow.cast!
+                                      .where((e) => e.trim().isNotEmpty)
+                                      .map((e) => CastMember(name: e.trim()))
+                                      .toList()
+                                  : const <CastMember>[]);
 
-                  if (_selectedSeasonId == null &&
-                      tvShow.seasons != null &&
-                      tvShow.seasons!.isNotEmpty) {
-                    _selectedSeasonId = tvShow.seasons!.first.id;
-                    _selectedSeasonIndex = 0;
-                    _loadSeasonWatchHistory(_selectedSeasonId!);
-                  }
+                      if (_selectedSeasonId == null &&
+                          tvShow.seasons != null &&
+                          tvShow.seasons!.isNotEmpty) {
+                        _selectedSeasonId = tvShow.seasons!.first.id;
+                        _selectedSeasonIndex = 0;
+                        _loadSeasonWatchHistory(_selectedSeasonId!);
+                      }
 
-                  final selectedSeason =
-                      tvShow.seasons != null &&
-                              _selectedSeasonIndex < tvShow.seasons!.length
-                          ? tvShow.seasons![_selectedSeasonIndex]
-                          : null;
-                  final episodeProgresses =
-                      selectedSeason == null
-                          ? const <int, WatchHistoryItem>{}
-                          : ref
-                              .watch(
-                                seasonEpisodeProgressesProvider((
-                                  tvShowId: widget.tvShowId,
-                                  seasonId: selectedSeason.id,
-                                  tmdbId: _tmdbId,
-                                )),
-                              )
-                              .maybeWhen(
-                                data:
-                                    (items) => {
-                                      for (final item
-                                          in items ??
-                                              const <WatchHistoryItem>[])
-                                        if (item.episodeId != null)
-                                          item.episodeId!: item,
-                                    },
-                                orElse: () => const <int, WatchHistoryItem>{},
-                              );
+                      final selectedSeason =
+                          tvShow.seasons != null &&
+                                  _selectedSeasonIndex < tvShow.seasons!.length
+                              ? tvShow.seasons![_selectedSeasonIndex]
+                              : null;
+                      final episodeProgresses =
+                          selectedSeason == null
+                              ? const <int, WatchHistoryItem>{}
+                              : ref
+                                  .watch(
+                                    seasonEpisodeProgressesProvider((
+                                      tvShowId: widget.tvShowId,
+                                      seasonId: selectedSeason.id,
+                                      tmdbId: _tmdbId,
+                                    )),
+                                  )
+                                  .maybeWhen(
+                                    data:
+                                        (items) => {
+                                          for (final item
+                                              in items ??
+                                                  const <WatchHistoryItem>[])
+                                            if (item.episodeId != null)
+                                              item.episodeId!: item,
+                                        },
+                                    orElse:
+                                        () => const <int, WatchHistoryItem>{},
+                                  );
 
-                  final seasonBackdrop =
-                      tvShow.backdrops != null && tvShow.backdrops!.isNotEmpty
-                          ? tvShow.backdrops![_selectedSeasonIndex %
-                              tvShow.backdrops!.length]
-                          : null;
-                  final episodeFallbackImage =
-                      seasonBackdrop ??
-                      selectedSeason?.posterPath ??
-                      tvShow.backdropPath ??
-                      tvShow.posterPath;
-                  final heroImage =
-                      resolvedHeroImage ??
-                      _resolveHeroImage(
-                        tvShow,
-                        selectedSeason,
-                        screenSize,
-                        serverBaseUrl,
+                      final seasonBackdrop =
+                          tvShow.backdrops != null &&
+                                  tvShow.backdrops!.isNotEmpty
+                              ? tvShow.backdrops![_selectedSeasonIndex %
+                                  tvShow.backdrops!.length]
+                              : null;
+                      final episodeFallbackImage =
+                          seasonBackdrop ??
+                          selectedSeason?.posterPath ??
+                          tvShow.backdropPath ??
+                          tvShow.posterPath;
+                      final heroImage =
+                          resolvedHeroImage ??
+                          _heroImageFor(
+                            tvShow,
+                            selectedSeason,
+                            screenSize,
+                            serverBaseUrl,
+                            isDesktop: isDesktop,
+                          );
+                      resolveHeroPalette(
+                        heroImage,
+                        accessToken,
                         isDesktop: isDesktop,
                       );
-                  _resolveMobileBackgroundColor(
-                    heroImage.imageUrl,
-                    accessToken,
-                    isDesktop: isDesktop,
-                    mode:
-                        heroImage.usePoster
-                            ? DetailBackgroundPaletteMode.posterBottom
-                            : DetailBackgroundPaletteMode.fullImage,
-                  );
-                  final detailBackgroundColor = _detailBackgroundColor(
-                    context,
-                    imageUrl: heroImage.imageUrl,
-                    mode:
-                        heroImage.usePoster
-                            ? DetailBackgroundPaletteMode.posterBottom
-                            : DetailBackgroundPaletteMode.fullImage,
-                  );
-                  final detailSurfaceColor =
-                      isDesktop
-                          ? detailBackgroundColor
-                          : _detailSurfaceColorFromBase(
-                            context,
-                            detailBackgroundColor,
-                          );
 
-                  if (isDesktop) {
-                    return CustomScrollView(
-                      slivers: [
-                        SliverToBoxAdapter(
-                          child: _buildBackgroundWithHero(
-                            context,
-                            tvShow,
-                            selectedSeason,
-                            heroImage,
-                            accessToken,
-                            backgroundColor: detailBackgroundColor,
-                            surfaceColor: detailSurfaceColor,
-                            isDesktop: true,
-                          ),
-                        ),
-                        if (tvShow.seasons != null &&
-                            tvShow.seasons!.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: _buildEpisodeSelector(
-                              context,
-                              theme,
-                              tvShow,
-                            ),
-                          ),
-                        if (selectedSeason != null &&
-                            selectedSeason.episodes != null &&
-                            selectedSeason.episodes!.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: _EpisodesCarouselDirect(
-                              episodes: selectedSeason.episodes!,
-                              tvShowId: widget.tvShowId,
-                              seasonId: selectedSeason.id,
-                              tvShowName: tvShow.name,
-                              serverBaseUrl: serverBaseUrl,
-                              fallbackImageUrl: episodeFallbackImage,
-                              scrollController: _episodesScrollController,
-                              episodeProgresses: episodeProgresses,
-                              tmdbId: _tmdbId,
-                              onEpisodesLoaded: (episodes) {
-                                _autoScrollToWatchedEpisode(
-                                  episodes: episodes,
-                                  seasonId: selectedSeason.id,
-                                );
-                              },
-                            ),
-                          )
-                        else if (_selectedSeasonId != null)
-                          SliverToBoxAdapter(
-                            child: _EpisodesCarousel(
-                              tvShowId: widget.tvShowId,
-                              seasonId: _selectedSeasonId!,
-                              tvShowName: tvShow.name,
-                              fallbackImageUrl: episodeFallbackImage,
-                              scrollController: _episodesScrollController,
-                              episodeProgresses: episodeProgresses,
-                              tmdbId: _tmdbId,
-                              onEpisodesLoaded: (episodes) {
-                                _autoScrollToWatchedEpisode(
-                                  episodes: episodes,
-                                  seasonId: _selectedSeasonId!,
-                                );
-                              },
-                            ),
-                          ),
-                        if (selectedSeason != null &&
-                            _hasSeasonRelatedCast(selectedSeason))
-                          SliverToBoxAdapter(
-                            child: _buildSeasonCreditsSection(
-                              context,
-                              theme,
-                              selectedSeason,
-                              serverBaseUrl,
-                              accessToken,
-                            ),
-                          )
-                        else if (cast.isNotEmpty)
-                          SliverToBoxAdapter(
-                            child: _buildCastSection(
-                              context,
-                              theme,
-                              cast,
-                              serverBaseUrl,
-                              accessToken,
-                            ),
-                          ),
-                        SliverToBoxAdapter(
-                          child: _buildFileInfoSection(
-                            context,
-                            theme,
-                            tvShow,
-                            selectedSeason,
-                          ),
-                        ),
-                        const SliverToBoxAdapter(child: SizedBox(height: 32)),
-                      ],
-                    );
-                  }
-
-                  return Stack(
-                    children: [
-                      NotificationListener<ScrollNotification>(
-                        onNotification: _handleMainScroll,
-                        child: CustomScrollView(
+                      if (isDesktop) {
+                        return CustomScrollView(
                           slivers: [
                             SliverToBoxAdapter(
-                              child: _buildBackgroundWithHero(
-                                context,
-                                tvShow,
-                                selectedSeason,
-                                heroImage,
-                                accessToken,
+                              child: DetailHeroBackground(
+                                heroImage: heroImage,
+                                accessToken: accessToken,
                                 backgroundColor: detailBackgroundColor,
                                 surfaceColor: detailSurfaceColor,
-                                isDesktop: false,
+                                isDesktop: true,
+                                content: _buildDesktopHeroContent(
+                                  context,
+                                  tvShow,
+                                  selectedSeason,
+                                ),
                               ),
                             ),
                             if (tvShow.seasons != null &&
@@ -868,11 +586,6 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                                   },
                                 ),
                               ),
-                            if (tvShow.overview != null &&
-                                tvShow.overview!.isNotEmpty)
-                              SliverToBoxAdapter(
-                                child: _buildOverviewSection(tvShow),
-                              ),
                             if (selectedSeason != null &&
                                 _hasSeasonRelatedCast(selectedSeason))
                               SliverToBoxAdapter(
@@ -906,168 +619,136 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                               child: SizedBox(height: 32),
                             ),
                           ],
-                        ),
-                      ),
-                      _buildMobileAppBar(
-                        context,
-                        tvShow,
-                        selectedSeason,
-                        solid: _showSolidAppBar,
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
+                        );
+                      }
+
+                      return Stack(
+                        children: [
+                          NotificationListener<ScrollNotification>(
+                            onNotification: _handleMainScroll,
+                            child: CustomScrollView(
+                              slivers: [
+                                SliverToBoxAdapter(
+                                  child: DetailHeroBackground(
+                                    heroImage: heroImage,
+                                    accessToken: accessToken,
+                                    backgroundColor: detailBackgroundColor,
+                                    surfaceColor: detailSurfaceColor,
+                                    isDesktop: false,
+                                    content: _buildMobileHeroContent(
+                                      context,
+                                      tvShow,
+                                      selectedSeason,
+                                    ),
+                                  ),
+                                ),
+                                if (tvShow.seasons != null &&
+                                    tvShow.seasons!.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _buildEpisodeSelector(
+                                      context,
+                                      theme,
+                                      tvShow,
+                                    ),
+                                  ),
+                                if (selectedSeason != null &&
+                                    selectedSeason.episodes != null &&
+                                    selectedSeason.episodes!.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _EpisodesCarouselDirect(
+                                      episodes: selectedSeason.episodes!,
+                                      tvShowId: widget.tvShowId,
+                                      seasonId: selectedSeason.id,
+                                      tvShowName: tvShow.name,
+                                      serverBaseUrl: serverBaseUrl,
+                                      fallbackImageUrl: episodeFallbackImage,
+                                      scrollController:
+                                          _episodesScrollController,
+                                      episodeProgresses: episodeProgresses,
+                                      tmdbId: _tmdbId,
+                                      onEpisodesLoaded: (episodes) {
+                                        _autoScrollToWatchedEpisode(
+                                          episodes: episodes,
+                                          seasonId: selectedSeason.id,
+                                        );
+                                      },
+                                    ),
+                                  )
+                                else if (_selectedSeasonId != null)
+                                  SliverToBoxAdapter(
+                                    child: _EpisodesCarousel(
+                                      tvShowId: widget.tvShowId,
+                                      seasonId: _selectedSeasonId!,
+                                      tvShowName: tvShow.name,
+                                      fallbackImageUrl: episodeFallbackImage,
+                                      scrollController:
+                                          _episodesScrollController,
+                                      episodeProgresses: episodeProgresses,
+                                      tmdbId: _tmdbId,
+                                      onEpisodesLoaded: (episodes) {
+                                        _autoScrollToWatchedEpisode(
+                                          episodes: episodes,
+                                          seasonId: _selectedSeasonId!,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                if (tvShow.overview != null &&
+                                    tvShow.overview!.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _buildOverviewSection(tvShow),
+                                  ),
+                                if (selectedSeason != null &&
+                                    _hasSeasonRelatedCast(selectedSeason))
+                                  SliverToBoxAdapter(
+                                    child: _buildSeasonCreditsSection(
+                                      context,
+                                      theme,
+                                      selectedSeason,
+                                      serverBaseUrl,
+                                      accessToken,
+                                    ),
+                                  )
+                                else if (cast.isNotEmpty)
+                                  SliverToBoxAdapter(
+                                    child: _buildCastSection(
+                                      context,
+                                      theme,
+                                      cast,
+                                      serverBaseUrl,
+                                      accessToken,
+                                    ),
+                                  ),
+                                SliverToBoxAdapter(
+                                  child: _buildFileInfoSection(
+                                    context,
+                                    theme,
+                                    tvShow,
+                                    selectedSeason,
+                                  ),
+                                ),
+                                const SliverToBoxAdapter(
+                                  child: SizedBox(height: 32),
+                                ),
+                              ],
+                            ),
+                          ),
+                          _buildMobileAppBar(
+                            context,
+                            tvShow,
+                            selectedSeason,
+                            solid: _showSolidAppBar,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              );
+            },
           );
         },
       ),
-    );
-  }
-
-  /// 构建背景图（含渐变蒙版和 Hero 内容）
-  Widget _buildBackgroundWithHero(
-    BuildContext context,
-    TvShow tvShow,
-    Season? selectedSeason,
-    _TvHeroImage heroImage,
-    String? accessToken, {
-    required Color backgroundColor,
-    required Color surfaceColor,
-    required bool isDesktop,
-  }) {
-    final imageHeight = heroImage.imageHeight;
-    final layoutHeight = heroImage.layoutHeight;
-    final gradientHeight =
-        ((imageHeight * 0.5) + (layoutHeight - imageHeight)).ceilToDouble();
-    final bottomMaskHeight =
-        (gradientHeight * 1.45).clamp(0.0, layoutHeight).toDouble();
-    final imageUrl = heroImage.imageUrl;
-    final gradientHighlightColor = _detailGradientHighlightColor(
-      backgroundColor,
-    );
-    final gradientBridgeColor = _detailGradientBridgeColor(
-      backgroundColor,
-      surfaceColor,
-    );
-
-    return Stack(
-      children: [
-        Container(
-          width: double.infinity,
-          height: layoutHeight,
-          color: isDesktop ? backgroundColor : surfaceColor,
-        ),
-        // 背景图
-        if (imageUrl != null && imageUrl.isNotEmpty)
-          CachedNetworkImage(
-            imageUrl: imageUrl,
-            httpHeaders:
-                accessToken != null
-                    ? {'Authorization': 'Bearer $accessToken'}
-                    : null,
-            width: double.infinity,
-            height: imageHeight,
-            fit: isDesktop ? BoxFit.cover : BoxFit.fitWidth,
-            alignment: Alignment.topCenter,
-            errorWidget:
-                (_, _, _) =>
-                    Container(height: imageHeight, color: Colors.grey[300]),
-            placeholder:
-                (_, _) =>
-                    Container(height: imageHeight, color: Colors.grey[300]),
-          )
-        else
-          Container(height: imageHeight, color: Colors.grey[300]),
-
-        // 渐变蒙版
-        if (!isDesktop)
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: MediaQuery.of(context).padding.top + 96,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.45),
-                    Colors.black.withValues(alpha: 0.18),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: gradientHeight,
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors:
-                    isDesktop
-                        ? [
-                          backgroundColor.withValues(alpha: 0.0),
-                          backgroundColor.withValues(alpha: 0.2),
-                          backgroundColor.withValues(alpha: 0.5),
-                          backgroundColor.withValues(alpha: 0.8),
-                          backgroundColor,
-                        ]
-                        : [
-                          gradientHighlightColor.withValues(alpha: 0.0),
-                          gradientHighlightColor.withValues(alpha: 0.18),
-                          gradientBridgeColor.withValues(alpha: 0.48),
-                          surfaceColor.withValues(alpha: 0.82),
-                          surfaceColor,
-                        ],
-                stops: const [0.0, 0.18, 0.45, 0.78, 1.0],
-              ),
-            ),
-          ),
-        ),
-        if (!isDesktop)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            height: bottomMaskHeight,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    surfaceColor.withValues(alpha: 0.06),
-                    surfaceColor.withValues(alpha: 0.18),
-                    surfaceColor.withValues(alpha: 0.42),
-                    surfaceColor.withValues(alpha: 0.74),
-                    surfaceColor.withValues(alpha: 0.94),
-                    surfaceColor,
-                  ],
-                  stops: const [0.0, 0.2, 0.42, 0.66, 0.86, 1.0],
-                ),
-              ),
-            ),
-          ),
-
-        // Hero 内容（叠加在渐变蒙版上）
-        Positioned(
-          left: 12,
-          right: 12,
-          bottom: 24,
-          child:
-              isDesktop
-                  ? _buildDesktopHeroContent(context, tvShow, selectedSeason)
-                  : _buildMobileHeroContent(context, tvShow, selectedSeason),
-        ),
-      ],
     );
   }
 
@@ -1087,6 +768,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: colors.textPrimary,
             fontSize: 28,
@@ -1163,6 +846,8 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
                   selectedSeason != null)
               ? '${tvShow.name} ${selectedSeason.displayName}'
               : tvShow.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: colors.textPrimary,
             fontSize: 24,
@@ -1330,11 +1015,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget _buildFullWidthPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final buttonForeground = heroSurfaceColor(context);
     final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {
@@ -1429,11 +1110,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
         selectedSeason != null &&
         selectedSeason.episodes != null &&
         selectedSeason.episodes!.any((e) => e.hasFile);
-    final backgroundColor = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final backgroundColor = heroSurfaceColor(context);
 
     return Positioned(
       top: 0,
@@ -1728,11 +1405,7 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen> {
   Widget _buildPlayButton(BuildContext context) {
     final colors = context.appColors;
     final buttonBackground = colors.textPrimary;
-    final buttonForeground = _detailSurfaceColor(
-      context,
-      imageUrl: _mobileBackgroundImageUrl,
-      mode: _mobileBackgroundPaletteMode,
-    );
+    final buttonForeground = heroSurfaceColor(context);
     final history = _currentWatchHistory;
     String buttonText = '播放';
     if (history != null) {
