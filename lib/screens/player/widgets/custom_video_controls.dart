@@ -88,7 +88,7 @@ class CustomVideoControls extends StatefulWidget {
     this.onSelectExternalSubtitle,
     this.onSeekRequested,
     this.isPlaybackErrorRecoveryActive,
-    this.seekDuration = 5,
+    this.seekDuration = 10,
     this.longPressSpeed = 2.0,
   });
 
@@ -1875,45 +1875,88 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  Widget _buildPlayControls() {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        IconButton(
-          icon: Icon(
-            BootstrapIcons.skipStartFill,
-            color: widget.hasPrevious ? Colors.white : Colors.white38,
-            size: 26,
-          ),
-          onPressed: widget.hasPrevious ? widget.onPrevious : null,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 48),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-          icon: Icon(
-            _playing
-                ? BootstrapIcons.stopCircleFill
-                : BootstrapIcons.playCircleFill,
+  Widget _buildSeekIcon(bool forward) => Stack(
+    alignment: Alignment.center,
+    children: [
+      Transform.flip(
+        flipX: forward,
+        child: const Icon(Icons.replay, color: Colors.white, size: 26),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          '${widget.seekDuration}',
+          style: const TextStyle(
             color: Colors.white,
-            size: 32,
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+            height: 1,
           ),
-          onPressed: () => widget.player.playOrPause(),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 48),
         ),
-        const SizedBox(width: 8),
-        IconButton(
-          icon: Icon(
-            BootstrapIcons.skipEndFill,
-            color: widget.hasNext ? Colors.white : Colors.white38,
-            size: 26,
+      ),
+    ],
+  );
+
+  List<Widget> _buildSeekButton(bool forward) => [
+    const SizedBox(width: 8),
+    IconButton(
+      icon: _buildSeekIcon(forward),
+      onPressed:
+          () => _seekRelative(
+            forward ? widget.seekDuration : -widget.seekDuration,
           ),
-          onPressed: widget.hasNext ? widget.onNext : null,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(minWidth: 48),
-        ),
-      ],
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 48),
+      tooltip: '${forward ? '前进' : '后退'} ${widget.seekDuration} 秒',
+    ),
+  ];
+
+  Widget _buildPlayControls() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final showSeek = constraints.maxWidth >= 600;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: Icon(
+                BootstrapIcons.skipStartFill,
+                color: widget.hasPrevious ? Colors.white : Colors.white38,
+                size: 26,
+              ),
+              onPressed: widget.hasPrevious ? widget.onPrevious : null,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 48),
+            ),
+            if (showSeek) ..._buildSeekButton(false),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(
+                _playing
+                    ? BootstrapIcons.stopCircleFill
+                    : BootstrapIcons.playCircleFill,
+                color: Colors.white,
+                size: 32,
+              ),
+              onPressed: () => widget.player.playOrPause(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 48),
+            ),
+            if (showSeek) ..._buildSeekButton(true),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: Icon(
+                BootstrapIcons.skipEndFill,
+                color: widget.hasNext ? Colors.white : Colors.white38,
+                size: 26,
+              ),
+              onPressed: widget.hasNext ? widget.onNext : null,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 48),
+            ),
+          ],
+        );
+      },
     );
   }
 
