@@ -129,7 +129,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   double _panAccumulatedDx = 0;
   double _panAccumulatedDy = 0;
 
-  Duration _position = Duration.zero;
+  final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   Duration _duration = Duration.zero;
   Duration _lastTrustedPosition = Duration.zero;
   int _seekRequestVersion = 0;
@@ -235,18 +235,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       widget.player.stream.position.listen((p) {
         if (!mounted) return;
         final seekReached = _isManualSeekTargetReached(p);
-        final acceptPosition = !_isSuspiciousAutoEndPosition(p);
-        if (!_dragging || seekReached) {
-          setState(() {
-            if (!_dragging && acceptPosition) {
-              _position = p;
-              _lastTrustedPosition = p;
-            }
-            if (seekReached) {
-              _clearManualSeekPending();
-            }
-          });
+        if (!_dragging && !_isSuspiciousAutoEndPosition(p)) {
+          _position.value = p;
+          _lastTrustedPosition = p;
         }
+        if (seekReached) setState(_clearManualSeekPending);
       }),
     );
     _subscriptions.add(
@@ -352,6 +345,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notchOnRight.dispose();
+    _position.dispose();
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
@@ -490,8 +484,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         _wasPlayingBeforeSeek = _playing;
         if (_playing) widget.player.pause();
         setState(() {
-          _seekStartPosition = _position;
-          _seekPosition = _position;
+          _seekStartPosition = _position.value;
+          _seekPosition = _position.value;
           _showSeekOverlay = true;
         });
       } else {
@@ -863,7 +857,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Duration _seekBasePosition() {
     if (_lastTrustedPosition > Duration.zero) return _lastTrustedPosition;
-    return _position;
+    return _position.value;
   }
 
   void _clearManualSeekPending() {
@@ -898,8 +892,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }) async {
     final seekRequestVersion = ++_seekRequestVersion;
     final manualSeekPendingVersion = ++_manualSeekPendingVersion;
+    _position.value = target;
     setState(() {
-      _position = target;
       _lastTrustedPosition = target;
       _dragging = true;
       _manualSeekPending = true;
@@ -920,9 +914,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     } finally {
       if (mounted) {
         final isLatestSeek = seekRequestVersion == _seekRequestVersion;
+        if (isLatestSeek) _position.value = target;
         setState(() {
           if (isLatestSeek) {
-            _position = target;
             _lastTrustedPosition = target;
             _dragging = false;
           }
@@ -1023,6 +1017,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       final fps = await platform.getProperty('container-fps');
       final videoBitrate = await platform.getProperty('video-bitrate');
       final hwdec = await platform.getProperty('hwdec-current');
+      final outputFps = await platform.getProperty('estimated-vf-fps');
+      final decoderDrops = await platform.getProperty(
+        'decoder-frame-drop-count',
+      );
+      final outputDrops = await platform.getProperty('frame-drop-count');
 
       if (videoCodec.isNotEmpty) info['视频编码'] = videoCodec;
       if (videoWidth.isNotEmpty && videoHeight.isNotEmpty) {
@@ -1039,6 +1038,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         }
       }
       if (hwdec.isNotEmpty && hwdec != 'no') info['硬解'] = hwdec;
+      final outputFpsVal = double.tryParse(outputFps);
+      if (outputFpsVal != null) {
+        info['输出帧率'] = '${outputFpsVal.toStringAsFixed(2)} fps';
+      }
+      info['丢帧(解码/输出)'] =
+          '${decoderDrops.isEmpty ? '0' : decoderDrops} / '
+          '${outputDrops.isEmpty ? '0' : outputDrops}';
 
       // 音频参数
       final audioCodec = await platform.getProperty('audio-codec-name');
@@ -1064,7 +1070,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }
 
       // 播放信息
+      if (!mounted) return;
       info['倍速'] = '${_playbackSpeed}x';
+      info['屏幕刷新率'] = '${View.of(context).display.refreshRate.round()} Hz';
       info['音量'] = '${(_volume * 100).toInt()}%';
 
       // 源路径
@@ -1351,72 +1359,74 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       left: horizontalPadding + padding.left,
       right: horizontalPadding + padding.right,
       bottom: _isLocked ? (padding.bottom + 16) : (56 + bottomPadding),
-      child: Row(
-        children: [
-          Text(
-            _formatDuration(_position),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+      child: ValueListenableBuilder<Duration>(
+        valueListenable: _position,
+        builder: (context, position, _) => _buildProgressRow(position),
+      ),
+    );
+  }
+
+  Widget _buildProgressRow(Duration position) {
+    return Row(
+      children: [
+        Text(
+          _formatDuration(position),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: IgnorePointer(
-              ignoring: _isLocked,
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 3,
-                  thumbShape: RoundSliderThumbShape(
-                    enabledThumbRadius: _isLocked ? 0 : 6,
-                  ),
-                  overlayShape: const RoundSliderOverlayShape(
-                    overlayRadius: 12,
-                  ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: IgnorePointer(
+            ignoring: _isLocked,
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                thumbShape: RoundSliderThumbShape(
+                  enabledThumbRadius: _isLocked ? 0 : 6,
                 ),
-                child: Slider(
-                  value:
-                      _duration.inMilliseconds > 0
-                          ? (_position.inMilliseconds /
-                                  _duration.inMilliseconds)
-                              .clamp(0.0, 1.0)
-                          : 0,
-                  onChangeStart: (_) {
-                    _dragging = true;
-                    _hideTimer?.cancel();
-                  },
-                  onChanged: (v) {
-                    setState(() {
-                      _position = Duration(
-                        milliseconds: (v * _duration.inMilliseconds).round(),
-                      );
-                    });
-                  },
-                  onChangeEnd: (v) {
-                    final target = Duration(
-                      milliseconds: (v * _duration.inMilliseconds).round(),
-                    );
-                    _lastTrustedPosition = target;
-                    unawaited(_commitSeek(target, restartHideTimer: true));
-                  },
-                  activeColor: Colors.white,
-                  inactiveColor: Colors.white38,
-                ),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+              ),
+              child: Slider(
+                value:
+                    _duration.inMilliseconds > 0
+                        ? (position.inMilliseconds / _duration.inMilliseconds)
+                            .clamp(0.0, 1.0)
+                        : 0,
+                onChangeStart: (_) {
+                  _dragging = true;
+                  _hideTimer?.cancel();
+                },
+                onChanged: (v) {
+                  _position.value = Duration(
+                    milliseconds: (v * _duration.inMilliseconds).round(),
+                  );
+                },
+                onChangeEnd: (v) {
+                  final target = Duration(
+                    milliseconds: (v * _duration.inMilliseconds).round(),
+                  );
+                  _lastTrustedPosition = target;
+                  unawaited(_commitSeek(target, restartHideTimer: true));
+                },
+                activeColor: Colors.white,
+                inactiveColor: Colors.white38,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          Text(
-            _formatDuration(_duration),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _formatDuration(_duration),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

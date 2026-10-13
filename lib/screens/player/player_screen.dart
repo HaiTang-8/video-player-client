@@ -21,6 +21,7 @@ import '../../data/services/download_service.dart';
 import '../../data/services/log_service.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
+import 'speed_frame_limiter.dart';
 import 'widgets/custom_video_controls.dart';
 
 /// 视频播放器页面
@@ -51,6 +52,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   late final Player _player;
   late final VideoController _controller;
+  late final SpeedFrameLimiter _speedFrameLimiter;
   late final Dio _dio;
   bool _isLoading = true;
   String? _error;
@@ -99,6 +101,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       configuration: const PlayerConfiguration(bufferSize: 256 * 1024 * 1024),
     );
     _controller = VideoController(_player);
+    _speedFrameLimiter = SpeedFrameLimiter(_player);
     _routeInitialPosition = widget.initialPosition;
     _initEpisodeIndex();
     _playerNetworkConfigured = _configurePlayerNetwork();
@@ -781,6 +784,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _exitFullscreen();
     }
     _dio.close();
+    _speedFrameLimiter.dispose();
     _player.dispose();
     super.dispose();
   }
