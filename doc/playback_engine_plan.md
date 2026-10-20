@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 0 进行中**（0.2、0.3 已完成；0.1 设备基线等待用户在真机上测试）
+> 状态：**Stage 1 已完成，待真机回归**（Stage 0.1 设备基线已跳过；下一步按主力平台选择 Stage 2 或 Stage 3+4）
 > 最后更新：2026-10-13
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -217,6 +217,8 @@ client/test/playback/
 | 测试替身 (Fake) | `FakePlaybackEngine` | 不依赖原生库测试会话逻辑 |
 
 ### 4.4 核心契约（草案：实现时可以微调，但必须同步更新本节）
+
+> 已实现的接口以 `lib/playback/domain/` 下的代码为准，与下方草案的差异见 §12 中 Stage 1.1–1.4 的记录。尚未实现的部分（Pigeon、原生引擎相关能力等）仍按草案执行。
 
 ```dart
 enum PlaybackEngineKind { mpvTexture, mpvNativeWindow, aether, media3 }
@@ -488,20 +490,20 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 0。**风险**：重构约 3.7k 行，必须小步提交，每步保证可运行。
 
-- [ ] 1.1 新建 `lib/playback/domain/` 下的全部模型和 `PlaybackStateHub`（只新增，不接线）。
-- [ ] 1.2 定义 `PlaybackEngine` 与可选能力接口（§4.4）。
-- [ ] 1.3 `MpvEngineBase` + `MpvTextureEngine`：
+- [x] 1.1 新建 `lib/playback/domain/` 下的全部模型和 `PlaybackStateHub`（只新增，不接线）。
+- [x] 1.2 定义 `PlaybackEngine` 与可选能力接口（§4.4）。
+- [x] 1.3 `MpvEngineBase` + `MpvTextureEngine`：
   - 把 `_configurePlayerNetwork` 的属性迁入 `MpvOptions`。
   - 把 `speed_frame_limiter.dart` 移到 `engines/mpv/`，测试同步迁移。
   - mpv 错误字符串识别迁入 `MpvErrorMapper`。
   - `_fetchMediaInfo` 迁入 `MpvDiagnostics`（实现 `MediaDiagnosticsProvider`），`cache-speed` 迁入 `NetworkThroughputProvider`。
   - media_kit 轨道映射为领域轨道模型。
   - `buildVideoView` 返回 `Video(controller, controls: NoVideoControls, fit)`。
-- [ ] 1.4 `PlaybackEngineFactory`、`EngineSelector`（暂时只有一条规则返回 `[mpvTexture]`）、`PlatformEnvironment`、`playback_providers.dart`。
-- [ ] 1.5 从 `PlayerScreen` 拆出会话层组件（§4.5），`PlayerScreen` 只保留页面职责：路由参数、全屏、选集 UI 回调、加载/错误态展示。
-- [ ] 1.6 `CustomVideoControls` 改为接收 `PlaybackEngine`（或 `PlaybackSession`），去掉 `Player` / `VideoController` 参数；轨道类型换成领域模型；音量按 `capabilities.maxVolume` 计算；网速、媒体信息按能力接口显隐。
-- [ ] 1.7 测试：`FakePlaybackEngine`；为选择器、错误映射、`SubtitleAutoSelector`、`SeekCoordinator`、`PlaybackProgressTracker`（可疑结束判断）写单元测试。
-- [ ] 1.8 DV 提示（依赖 0.2 的结论）：mpv 引擎填充 `VideoInfo.dynamicRange` 和 `dolbyVisionProfile`；当 `!capabilities.dolbyVisionColor && dolbyVisionProfile == 5` 时，用 `PlayerOverlayNotice` 提示“当前播放内核无法正确显示杜比视界 Profile 5，画面颜色可能异常”；媒体信息面板增加“动态范围”“播放内核”两项。
+- [x] 1.4 `PlaybackEngineFactory`、`EngineSelector`（暂时只有一条规则返回 `[mpvTexture]`）、`PlatformEnvironment`、`playback_providers.dart`。
+- [x] 1.5 从 `PlayerScreen` 拆出会话层组件（§4.5），`PlayerScreen` 只保留页面职责：路由参数、全屏、选集 UI 回调、加载/错误态展示。
+- [x] 1.6 `CustomVideoControls` 改为接收 `PlaybackEngine`（或 `PlaybackSession`），去掉 `Player` / `VideoController` 参数；轨道类型换成领域模型；音量按 `capabilities.maxVolume` 计算；网速、媒体信息按能力接口显隐。
+- [x] 1.7 测试：`FakePlaybackEngine`；为选择器、错误映射、`SubtitleAutoSelector`、`SeekCoordinator`、`PlaybackProgressTracker`（可疑结束判断）写单元测试。
+- [x] 1.8 DV 提示（依赖 0.2 的结论）：mpv 引擎填充 `VideoInfo.dynamicRange` 和 `dolbyVisionProfile`；当 `!capabilities.dolbyVisionColor && dolbyVisionProfile == 5` 时，用 `PlayerOverlayNotice` 提示“当前播放内核无法正确显示杜比视界 Profile 5，画面颜色可能异常”；媒体信息面板增加“动态范围”“播放内核”两项。
 
 **验收**：
 - §6 第 3 条中的两条 grep 自查都为空。
@@ -676,6 +678,8 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 1.3–1.4 mpv 引擎与选择层 | 完成 | 提交 `72697ec`。`SelectedTracks` 新增 `subtitleOff`，用来区分 mpv 的“自动选择”和“关闭”；以文本加载的外挂字幕使用 `external:<标题>` 作为稳定 id |
 | 2026-10-21 | Stage 1.6 控制层切换 | 完成，待真机回归 | `CustomVideoControls` 和 `PlayerScreen` 不再依赖 media_kit，`PlayerScreen` 暂时直接持有引擎。可见变化：音轨、字幕菜单不再显示 mpv 的 “auto” 伪轨道；错误页标题由 “MPV错误” 改为 “mpv 错误” |
 | 2026-10-21 | Stage 1.5 会话层拆分 | 完成，待真机回归 | `PlayerScreen` 从 1413 行减到 577 行，逻辑迁入 `lib/playback/session/`；全量 66 个测试通过。用户要求继续推进，1.6 与 1.5 合并到 Stage 1 结束后统一做真机回归。相对原逻辑的差异：① 重试会保留尚未生效的起播位置（原来剧集续播加载失败后，重试会从头播放）；② 地址解析完成后，加载提示会正确切换为“正在加载视频”；③ 加载期间暂停进度定时保存，避免把上一集的位置记到新一集上 |
+| 2026-10-21 | Stage 1.8 杜比视界提示 | 完成，待真机回归 | mpv 日志级别改为 `v`；`DolbyVisionLogDetector` 加上解码器色彩参数推断填充 `VideoInfo`；识别到 P5 时在顶部提示 6 秒（每次加载一次）；媒体信息新增“动态范围”“播放内核”。注意：推断 P5 依赖 `video-dec-params`，信号 A（容器配置记录）仍缺少规范样片验证 |
+| 2026-10-21 | Stage 1 收尾 | 完成 | §6 第 3 条的两条依赖自查为空；全量 72 个测试通过；`flutter analyze` 无问题。待用户按 §10 做真机回归 |
 
 ---
 

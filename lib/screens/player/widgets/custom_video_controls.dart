@@ -152,6 +152,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   double _hintSpeed = 1.0;
   Timer? _speedHintTimer;
 
+  // 杜比视界颜色提示（每次加载提示一次）
+  VideoInfo _videoInfo = const VideoInfo();
+  bool _dolbyVisionHintShown = false;
+  bool _showDolbyVisionHint = false;
+  Timer? _dolbyVisionHintTimer;
+
   // D键二倍速锁定
   bool _isDoubleSpeedLocked = false;
   double _speedBeforeDoubleLock = 1.0;
@@ -191,6 +197,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
     // 首帧后刷新一次刘海方向（避免 initState 时 MediaQuery 还没就绪）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _maybeShowDolbyVisionHint();
       unawaited(_refreshNotchSide());
     });
   }
@@ -222,6 +229,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   void _initCurrentTracks() {
     final state = widget.engine.state;
+    _videoInfo = state.videoInfo;
     _applySelectedTracks(state.selectedTracks);
     _audioTracks = state.tracks.audio;
     _subtitleTracks = state.tracks.subtitle;
@@ -235,6 +243,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   void _setupListeners() {
     final streams = widget.engine.streams;
+    _subscriptions.add(
+      streams.videoInfo.listen((info) {
+        if (!mounted) return;
+        setState(() => _videoInfo = info);
+        _maybeShowDolbyVisionHint();
+      }),
+    );
     _subscriptions.add(
       streams.position.listen((p) {
         if (!mounted) return;
@@ -294,6 +309,25 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
+  void _maybeShowDolbyVisionHint() {
+    if (_dolbyVisionHintShown ||
+        widget.engine.capabilities.dolbyVisionColor ||
+        _videoInfo.dolbyVisionProfile != 5) {
+      return;
+    }
+    _dolbyVisionHintShown = true;
+    setState(() => _showDolbyVisionHint = true);
+    _dolbyVisionHintTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _showDolbyVisionHint = false);
+    });
+  }
+
+  String get _dynamicRangeText {
+    final profile = _videoInfo.dolbyVisionProfile;
+    final label = _videoInfo.dynamicRange.label;
+    return profile == null ? label : '$label Profile $profile';
+  }
+
   void _startSpeedPolling() {
     _speedTimer?.cancel();
     _speedTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) async {
@@ -350,6 +384,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _volumeOverlayTimer?.cancel();
     _speedHintTimer?.cancel();
     _speedTimer?.cancel();
+    _dolbyVisionHintTimer?.cancel();
     _manualSeekPendingTimer?.cancel();
     // 确保长按倍速状态被重置
     if (_isLongPressSpeed) {
@@ -1011,6 +1046,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
       // 播放信息
       if (!mounted) return;
+      if (_videoInfo.dynamicRange != VideoDynamicRange.unknown) {
+        info['动态范围'] = _dynamicRangeText;
+      }
+      info['播放内核'] = widget.engine.kind.label;
       info['倍速'] = '${_playbackSpeed}x';
       info['屏幕刷新率'] = '${View.of(context).display.refreshRate.round()} Hz';
       info['音量'] = '${(_volume * 100).toInt()}%';
@@ -1239,6 +1278,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             if (_showSpeedHint && !_isLongPressSpeed)
               PlayerOverlayNotice(
                 text: '${_hintSpeed}x',
+                position: PlayerOverlayNoticePosition.top,
+                safePadding: MediaQuery.of(context).padding,
+              ),
+            if (_showDolbyVisionHint && !_isLongPressSpeed && !_showSpeedHint)
+              PlayerOverlayNotice(
+                text: '杜比视界 Profile 5',
+                secondaryText: '当前播放内核无法正确还原颜色，画面可能偏色',
                 position: PlayerOverlayNoticePosition.top,
                 safePadding: MediaQuery.of(context).padding,
               ),
