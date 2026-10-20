@@ -111,7 +111,8 @@
 - 音量语义：控制层的 `_maxVolume = 2.0`，调用 `setVolume(volume * 100)`（mpv 支持 0–200）。
 - 原生通道：已有 `media_player/orientation`（iOS/Android）、存储、下载器通道。窗口控制统一走 `lib/core/window/window_controls.dart`。
 - 最低系统版本：iOS App 13.4（扩展 16.2），macOS 10.15，Android `flutter.minSdkVersion`。
-- Flutter 版本：项目通过 FVM 固定为 **3.35.7**（`client/.fvmrc`）。本机全局 SDK 是 3.38.5，用它跑会因为框架源码不一致导致测试加载失败，还会改写 `pubspec.lock`。`fvm` 命令不在 PATH 时，直接用 `client/.fvm/flutter_sdk/bin/flutter`。
+- Flutter 版本：项目通过 FVM 固定为 **3.38.5**（`client/.fvmrc`，2026-10-20 从 3.35.7 升级）。本机全局 SDK `/Users/zhouquan/application/flutter` 也是 3.38.5，可以直接用；`fvm` 在 `~/.pub-cache/bin/fvm`（不在 PATH）。被 gitignore 的本地缓存 `client/.fvm/flutter_sdk` 在执行 `fvm use 3.38.5` 之前仍然指向 3.35.7，**不要用它**。
+- **pub 镜像**：命令行执行 `pub get` 前必须先 `export PUB_HOSTED_URL=https://pub.flutter-io.cn FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`（用户在 `~/.zshrc` 里配置了，但 agent 的 shell 不一定会加载）。漏掉的话，pub 会把所有依赖重新解析到 pub.dev，大面积改写 `pubspec.lock` 和生成的插件注册文件。
 - `client/vendor/media_kit_libs_macos_video` **没有被 pubspec 引用**，不要依赖它。
 - 后端**没有**媒体技术信息探测（无 ffprobe），客户端拿不到预先探测好的 HDR / DV 信息。
 
@@ -657,6 +658,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-13 | Stage 0.2 DV 检测验证 | 完成 | 结论见 §5.1：属性检测不出 DV；用日志信号 A / B；遗留：规范 P5 / P8.1 样片、Android / Windows 构建待验证。临时程序和样片已删除 |
 | 2026-10-13 | Stage 0.1 设备基线 | 进行中 | 等待用户在真机上测试，结果填入 §13 |
 | 2026-10-13 | Stage 0.3 回归清单 | 完成 | 沿用 §10 |
+| 2026-10-20 | Flutter 升级 | 完成 | `.fvmrc` 改为 3.38.5，`pubspec.lock` 保持 `ae0134c` 的版本；在 3.38.5 下全项目 analyze 无问题、16 个测试通过 |
 
 ---
 
