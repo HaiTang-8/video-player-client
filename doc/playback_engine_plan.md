@@ -659,6 +659,9 @@ abstract class NativePlayerEventApi {
 | 2026-10-13 | Stage 0.1 设备基线 | 跳过 | 2026-10-20 用户决定跳过。§13 留空，Stage 1 的验收只按 §10 回归清单进行，没有改造前的实测数据可以对比 |
 | 2026-10-13 | Stage 0.3 回归清单 | 完成 | 沿用 §10 |
 | 2026-10-20 | Flutter 升级 | 完成 | `.fvmrc` 改为 3.38.5，`pubspec.lock` 保持 `ae0134c` 的版本；在 3.38.5 下全项目 analyze 无问题、16 个测试通过 |
+| 2026-10-21 | Stage 1.1–1.2 领域层 | 完成 | 提交 `c1f1f18`。接口相比 §4.4 草案的变化：`EngineCapabilities` 只保留 `dolbyVisionColor` 和 `maxVolume`（其余能力等接入对应引擎时再加）；`selectSubtitleTrack(null)` 表示关闭字幕；`addExternalSubtitle` 会加载并选中字幕；暂不定义 `VideoTrackInfo` / `MediaHints` |
+| 2026-10-21 | Stage 1.3–1.4 mpv 引擎与选择层 | 完成 | 提交 `72697ec`。`SelectedTracks` 新增 `subtitleOff`，用来区分 mpv 的“自动选择”和“关闭”；以文本加载的外挂字幕使用 `external:<标题>` 作为稳定 id |
+| 2026-10-21 | Stage 1.6 控制层切换 | 完成，待真机回归 | `CustomVideoControls` 和 `PlayerScreen` 不再依赖 media_kit，`PlayerScreen` 暂时直接持有引擎。可见变化：音轨、字幕菜单不再显示 mpv 的 “auto” 伪轨道；错误页标题由 “MPV错误” 改为 “mpv 错误” |
 
 ---
 

@@ -5,9 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:media_kit/media_kit.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
-import 'package:media_kit_video/media_kit_video.dart';
 import '../../core/utils/http_utils.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
@@ -21,7 +19,9 @@ import '../../data/services/download_service.dart';
 import '../../data/services/log_service.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
-import '../../playback/engines/mpv/speed_frame_limiter.dart';
+import '../../playback/domain/playback_domain.dart';
+import '../../playback/playback_providers.dart';
+import '../../playback/selection/engine_selection_rule.dart';
 import 'widgets/custom_video_controls.dart';
 
 /// 视频播放器页面
@@ -50,9 +50,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  late final Player _player;
-  late final VideoController _controller;
-  late final SpeedFrameLimiter _speedFrameLimiter;
+  late final PlaybackEngine _engine;
   late final Dio _dio;
   bool _isLoading = true;
   String? _error;
@@ -97,14 +95,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         receiveTimeout: const Duration(seconds: 10),
       ),
     );
-    _player = Player(
-      configuration: const PlayerConfiguration(bufferSize: 256 * 1024 * 1024),
-    );
-    _controller = VideoController(_player);
-    _speedFrameLimiter = SpeedFrameLimiter(_player);
+    _engine = _createEngine();
     _routeInitialPosition = widget.initialPosition;
     _initEpisodeIndex();
-    _playerNetworkConfigured = _configurePlayerNetwork();
+    _playerNetworkConfigured = _engine.initialize();
     _setupPlayerListeners();
     _prepareInitialPlayback();
     // 移动端默认进入全屏模式
@@ -113,24 +107,20 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  Future<void> _configurePlayerNetwork() async {
-    final platform = _player.platform;
-    if (platform is NativePlayer) {
-      // 配置 HTTP 流自动重连（暂停后恢复播放时需要）
-      await platform.setProperty(
-        'stream-lavf-o',
-        'reconnect=1,reconnect_streamed=1,reconnect_at_eof=1,'
-            'reconnect_on_network_error=1,reconnect_on_http_error=5xx,'
-            'reconnect_delay_max=5',
-      );
-      // 增加网络超时时间
-      await platform.setProperty('network-timeout', '30');
-      await platform.setProperty('cache', 'yes');
-      await platform.setProperty('demuxer-max-back-bytes', '64MiB');
-      await platform.setProperty('cache-secs', '30');
-      await platform.setProperty('cache-pause', 'yes');
-      await platform.setProperty('cache-pause-wait', '3');
-    }
+  PlaybackEngine _createEngine() {
+    final decision = ref
+        .read(engineSelectorProvider)
+        .select(
+          EngineSelectionContext(
+            environment: ref.read(platformEnvironmentProvider),
+          ),
+        );
+    final kind = decision.candidates.first;
+    LogService.instance.info(
+      'PlayerScreen',
+      'Playback engine: ${kind.label} (${decision.reason})',
+    );
+    return ref.read(playbackEngineFactoryProvider).create(kind);
   }
 
   void _initEpisodeIndex() {
@@ -165,7 +155,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final speed =
         _sessionPlaybackSpeed ??
         ref.read(playbackSettingsProvider).playbackSpeed;
-    _player.setRate(speed);
+    _engine.setRate(speed);
   }
 
   void _onSpeedChanged(double speed) {
@@ -179,7 +169,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _restoreSessionVolumeIfNeeded() async {
     final volume = _sessionVolume;
     if (volume == null) return;
-    await _player.setVolume(volume * 100);
+    await _engine.setVolume(volume);
   }
 
   int? _normalizeSeekPosition(int? position) {
@@ -285,7 +275,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     await _awaitActiveSeekOperation();
     if (episodeIndex != null) {
       // 切换剧集触发确认弹窗前先暂停当前播放，避免继续播放干扰选择
-      await _player.pause();
+      await _engine.pause();
     }
     await _loadEpisodesIfNeeded();
     if (!mounted || _isDisposing) return;
@@ -371,31 +361,30 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _setupPlayerListeners() {
     // 监听播放器错误
     _subscriptions.add(
-      _player.stream.error.listen((error) {
+      _engine.streams.errors.listen((error) {
         if (!mounted || _isDisposing) return;
-        if (error.isNotEmpty) {
-          LogService.instance.error(
-            'PlayerScreen',
-            'MPV error: $error, url: $_currentStreamUrl',
-          );
-          // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
-          if (error.contains('Could not open/initialize audio device')) return;
-          if (_isRecoverablePlaybackError(error)) {
-            _markNetworkPlaybackError();
-            return;
-          }
-          setState(() {
-            _error = 'MPV错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
-            _isLoading = false;
-          });
+        LogService.instance.error(
+          'PlayerScreen',
+          '${_engine.kind.label} error: $error, url: $_currentStreamUrl',
+        );
+        // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
+        if (error.kind == PlaybackErrorKind.audioOutput) return;
+        if (error.recoverable) {
+          _markNetworkPlaybackError();
+          return;
         }
+        setState(() {
+          _error =
+              '${_engine.kind.label} 错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
+          _isLoading = false;
+        });
       }),
     );
 
     _subscriptions.add(
-      _player.stream.position.listen((position) {
+      _engine.streams.position.listen((position) {
         if (!mounted || _isDisposing) return;
-        final duration = _player.state.duration;
+        final duration = _engine.state.duration;
         if (_isSuspiciousEndPosition(position, duration)) {
           _lastPositionWasSuspiciousEnd = true;
           return;
@@ -409,7 +398,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // 监听缓冲状态
     _subscriptions.add(
-      _player.stream.buffering.listen((buffering) {
+      _engine.streams.buffering.listen((buffering) {
         if (!mounted || _isDisposing) return;
         // 可选：显示缓冲状态
       }),
@@ -417,7 +406,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // 监听视频时长，准备好后 seek 到初始位置并设置倍速
     _subscriptions.add(
-      _player.stream.duration.listen((duration) {
+      _engine.streams.duration.listen((duration) {
         if (!mounted || _isDisposing) return;
         if (duration.inSeconds <= 0) return;
 
@@ -447,14 +436,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           );
           final seekTarget = Duration(seconds: targetPosition);
           _markControlledSeek(seekTarget);
-          _player.seek(seekTarget);
+          _engine.seek(seekTarget);
         }
       }),
     );
 
     // 监听播放完成
     _subscriptions.add(
-      _player.stream.completed.listen((completed) {
+      _engine.streams.completed.listen((completed) {
         if (!mounted || _isDisposing) return;
         if (completed) {
           if (_isSuspiciousPlaybackCompletion()) {
@@ -471,7 +460,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     // 监听内嵌字幕轨道加载（用于自动选择简体中文字幕）
     _subscriptions.add(
-      _player.stream.tracks.listen((tracks) {
+      _engine.streams.tracks.listen((tracks) {
         if (!mounted || _isDisposing) return;
         if (tracks.subtitle.isNotEmpty) {
           _tryAutoSelectEmbeddedSubtitle();
@@ -494,7 +483,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     const toleranceMs = 1000;
     for (var i = 0; i < 10; i++) {
       if (seekRequestVersion != _seekRequestVersion) return;
-      final current = _player.state.position;
+      final current = _engine.state.position;
       if ((current.inMilliseconds - target.inMilliseconds).abs() <=
           toleranceMs) {
         return;
@@ -526,7 +515,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hasSeekToInitialPosition = true;
     _markControlledSeek(position);
 
-    final seekFuture = Future<void>.sync(() => _player.seek(position));
+    final seekFuture = Future<void>.sync(() => _engine.seek(position));
     final operation = _performUserSeek(
       position,
       seekRequestVersion,
@@ -549,37 +538,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     try {
       await operation;
     } catch (_) {}
-  }
-
-  bool _isRecoverablePlaybackError(String error) {
-    final message = error.toLowerCase();
-    return message.contains('ffurl_write') ||
-        message.contains('ffurl_read') ||
-        message.contains('tcp: connection refused') ||
-        message.contains('tcp: connection reset') ||
-        message.contains('tcp: connection timed out') ||
-        message.contains('connection refused') ||
-        message.contains('connection reset') ||
-        message.contains('connection timed out') ||
-        message.contains('network is unreachable') ||
-        _isRecoverableHttpPlaybackError(message) ||
-        message.contains('end of file');
-  }
-
-  bool _isRecoverableHttpPlaybackError(String message) {
-    if (!message.contains('http error') &&
-        !message.contains('server returned')) {
-      return false;
-    }
-    final statusCode = _httpStatusCodeFromPlaybackError(message);
-    if (statusCode == null) return false;
-    return statusCode >= 500 && statusCode <= 599;
-  }
-
-  int? _httpStatusCodeFromPlaybackError(String message) {
-    final match = RegExp(r'\b([1-5]\d{2})\b').firstMatch(message);
-    if (match == null) return null;
-    return int.tryParse(match.group(1)!);
   }
 
   void _markNetworkPlaybackError() {
@@ -627,8 +585,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   bool _isSuspiciousPlaybackCompletion() {
-    final position = _player.state.position;
-    final duration = _player.state.duration;
+    final position = _engine.state.position;
+    final duration = _engine.state.duration;
     return _lastPositionWasSuspiciousEnd ||
         _isSuspiciousEndPosition(position, duration);
   }
@@ -660,8 +618,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }) async {
     try {
       if (!force && _activeSeekOperation != null) return;
-      final position = _player.state.position;
-      final duration = _player.state.duration;
+      final position = _engine.state.position;
+      final duration = _engine.state.duration;
 
       // 跳过无效数据或位置未变化
       if (duration.inSeconds <= 0) return;
@@ -784,16 +742,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _exitFullscreen();
     }
     _dio.close();
-    _speedFrameLimiter.dispose();
-    _player.dispose();
+    _engine.dispose();
     super.dispose();
   }
 
   /// 同步版本的进度保存，用于 dispose 时的最后尝试
   void _saveProgressSync() {
     try {
-      final position = _player.state.position;
-      final duration = _player.state.duration;
+      final position = _engine.state.position;
+      final duration = _engine.state.duration;
       if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
       if (_shouldSkipProgressSave(
         position,
@@ -879,7 +836,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (!mounted) return;
     await _awaitActiveSeekOperation();
     if (episodeIndex != null) {
-      await _player.pause();
+      await _engine.pause();
       await _saveProgress();
     }
     setState(() {
@@ -943,7 +900,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       // 使用本地缓存播放
       if (localPath != null) {
         _currentStreamUrl = localPath;
-        await _player.open(Media(localPath));
+        await _engine.open(PlaybackSource.localFile(localPath));
 
         if (!mounted) return;
         await _restoreSessionVolumeIfNeeded();
@@ -1021,7 +978,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
       _currentStreamUrl = playUrl;
       _currentFilePath = filePath;
-      await _player.open(Media(playUrl, httpHeaders: headers));
+      await _engine.open(PlaybackSource.network(playUrl, httpHeaders: headers));
 
       if (!mounted) return;
       await _restoreSessionVolumeIfNeeded();
@@ -1192,8 +1149,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         ),
       );
       if (response.data != null) {
-        await _player.setSubtitleTrack(
-          SubtitleTrack.data(response.data!, title: sub.displayName),
+        await _engine.addExternalSubtitle(
+          ExternalSubtitle.data(response.data!, title: sub.displayName),
         );
       }
     } catch (e) {
@@ -1201,9 +1158,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  SubtitleTrack? _findChineseSubtitleTrack(List<SubtitleTrack> tracks) {
-    final validTracks =
-        tracks.where((t) => t.id != 'no' && t.id != 'auto').toList();
+  SubtitleTrackInfo? _findChineseSubtitleTrack(List<SubtitleTrackInfo> tracks) {
+    final validTracks = tracks;
     if (validTracks.isEmpty) return null;
 
     const chineseLanguages = [
@@ -1248,12 +1204,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _tryAutoSelectEmbeddedSubtitle() {
     if (_hasAutoSelectedSubtitle || _externalSubtitleAutoLoaded) return;
 
-    final tracks = _player.state.tracks.subtitle;
+    final tracks = _engine.state.tracks.subtitle;
     final chineseTrack = _findChineseSubtitleTrack(tracks);
 
     if (chineseTrack != null) {
       _hasAutoSelectedSubtitle = true;
-      _player.setSubtitleTrack(chineseTrack);
+      _engine.selectSubtitleTrack(chineseTrack);
       final displayName =
           chineseTrack.title ?? chineseTrack.language ?? chineseTrack.id;
       DialogUtils.showToast(
@@ -1412,14 +1368,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       body: Stack(
         children: [
           CustomVideoControls(
-            player: _player,
-            controller: _controller,
+            engine: _engine,
             title: _displayTitle,
             onBack: () async {
               if (_isExiting) return;
               setState(() => _isExiting = true);
               await _awaitActiveSeekOperation();
-              await _player.pause();
+              await _engine.pause();
               await _saveProgress();
               if (context.mounted) Navigator.of(context).pop();
             },

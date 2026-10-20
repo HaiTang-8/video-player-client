@@ -3,8 +3,6 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
-import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     as shadcn
@@ -25,6 +23,7 @@ import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
+import '../../../playback/domain/playback_domain.dart';
 import 'player_top_bar.dart';
 import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
@@ -37,8 +36,7 @@ class _PlayerHelpEntry {
 }
 
 class CustomVideoControls extends StatefulWidget {
-  final Player player;
-  final VideoController controller;
+  final PlaybackEngine engine;
   final String? title;
   final VoidCallback? onBack;
   final VoidCallback? onPrevious;
@@ -65,8 +63,7 @@ class CustomVideoControls extends StatefulWidget {
 
   const CustomVideoControls({
     super.key,
-    required this.player,
-    required this.controller,
+    required this.engine,
     this.title,
     this.onBack,
     this.onPrevious,
@@ -98,8 +95,6 @@ class CustomVideoControls extends StatefulWidget {
 
 class _CustomVideoControlsState extends State<CustomVideoControls>
     with WidgetsBindingObserver {
-  static const double _maxVolume = 2.0;
-
   // iOS 横屏下 SafeArea/viewPadding 可能是“左右对称”的（例如 Dynamic Island 机型），
   // 仅凭 inset 无法判断刘海到底在左还是在右。为了满足“刘海在右侧才给播放列表右侧留安全距离”
   // 的需求，这里通过原生接口读取真实的 UIInterfaceOrientation。
@@ -140,10 +135,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   bool _playing = true; // 初始为 true，视频加载后自动播放
   bool _buffering = true; // 初始为 true，显示加载指示器
   double _volume = 1.0;
-  List<AudioTrack> _audioTracks = [];
-  List<SubtitleTrack> _subtitleTracks = [];
-  AudioTrack? _currentAudioTrack;
-  SubtitleTrack? _currentSubtitleTrack;
+  List<AudioTrackInfo> _audioTracks = [];
+  List<SubtitleTrackInfo> _subtitleTracks = [];
+  AudioTrackInfo? _currentAudioTrack;
+  SubtitleTrackInfo? _currentSubtitleTrack;
+  bool _subtitleOff = false;
   double _playbackSpeed = 1.0;
 
   // 长按倍速
@@ -207,6 +203,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     }
   }
 
+  double get _maxVolume => widget.engine.capabilities.maxVolume;
+
   void _applyInitialVolume() {
     final initialVolume = widget.initialVolume;
     if (initialVolume == null) return;
@@ -223,16 +221,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   void _initCurrentTracks() {
-    final track = widget.player.state.track;
-    _currentAudioTrack = track.audio;
-    _currentSubtitleTrack = track.subtitle;
-    _audioTracks = widget.player.state.tracks.audio;
-    _subtitleTracks = widget.player.state.tracks.subtitle;
+    final state = widget.engine.state;
+    _applySelectedTracks(state.selectedTracks);
+    _audioTracks = state.tracks.audio;
+    _subtitleTracks = state.tracks.subtitle;
+  }
+
+  void _applySelectedTracks(SelectedTracks selected) {
+    _currentAudioTrack = selected.audio;
+    _currentSubtitleTrack = selected.subtitle;
+    _subtitleOff = selected.subtitleOff;
   }
 
   void _setupListeners() {
+    final streams = widget.engine.streams;
     _subscriptions.add(
-      widget.player.stream.position.listen((p) {
+      streams.position.listen((p) {
         if (!mounted) return;
         final seekReached = _isManualSeekTargetReached(p);
         if (!_dragging && !_isSuspiciousAutoEndPosition(p)) {
@@ -243,17 +247,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }),
     );
     _subscriptions.add(
-      widget.player.stream.duration.listen((d) {
+      streams.duration.listen((d) {
         if (mounted) setState(() => _duration = d);
       }),
     );
     _subscriptions.add(
-      widget.player.stream.playing.listen((p) {
+      streams.playing.listen((p) {
         if (mounted) setState(() => _playing = p);
       }),
     );
     _subscriptions.add(
-      widget.player.stream.buffering.listen((b) {
+      streams.buffering.listen((b) {
         if (!mounted) return;
         setState(() => _buffering = b);
         if (b) {
@@ -264,12 +268,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }),
     );
     _subscriptions.add(
-      widget.player.stream.volume.listen((v) {
-        if (mounted) setState(() => _volume = (v / 100).clamp(0.0, _maxVolume));
+      streams.volume.listen((v) {
+        if (mounted) setState(() => _volume = v.clamp(0.0, _maxVolume));
       }),
     );
     _subscriptions.add(
-      widget.player.stream.tracks.listen((tracks) {
+      streams.tracks.listen((tracks) {
         if (mounted) {
           setState(() {
             _audioTracks = tracks.audio;
@@ -279,17 +283,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       }),
     );
     _subscriptions.add(
-      widget.player.stream.track.listen((track) {
-        if (mounted) {
-          setState(() {
-            _currentAudioTrack = track.audio;
-            _currentSubtitleTrack = track.subtitle;
-          });
-        }
+      streams.selectedTracks.listen((selected) {
+        if (mounted) setState(() => _applySelectedTracks(selected));
       }),
     );
     _subscriptions.add(
-      widget.player.stream.rate.listen((rate) {
+      streams.rate.listen((rate) {
         if (mounted) setState(() => _playbackSpeed = rate);
       }),
     );
@@ -298,11 +297,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _startSpeedPolling() {
     _speedTimer?.cancel();
     _speedTimer = Timer.periodic(const Duration(milliseconds: 1000), (_) async {
-      final platform = widget.player.platform;
-      if (platform is! NativePlayer || !mounted) return;
+      final Object engine = widget.engine;
+      if (engine is! NetworkThroughputProvider || !mounted) return;
       try {
-        final raw = await platform.getProperty('cache-speed');
-        final bytes = double.tryParse(raw) ?? 0;
+        final bytes = await engine.currentDownloadBytesPerSecond() ?? 0;
         if (!mounted) return;
         setState(() {
           _speedText = bytes > 0 ? _formatSpeed(bytes) : null;
@@ -355,7 +353,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _manualSeekPendingTimer?.cancel();
     // 确保长按倍速状态被重置
     if (_isLongPressSpeed) {
-      widget.player.setRate(_originalSpeed);
+      widget.engine.setRate(_originalSpeed);
     }
     _focusNode.dispose();
     for (final sub in _subscriptions) {
@@ -482,7 +480,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         _panDirection = 'horizontal';
         // 初始化进度拖动
         _wasPlayingBeforeSeek = _playing;
-        if (_playing) widget.player.pause();
+        if (_playing) widget.engine.pause();
         setState(() {
           _seekStartPosition = _position.value;
           _seekPosition = _position.value;
@@ -582,7 +580,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (key == LogicalKeyboardKey.space) {
-      widget.player.playOrPause();
+      widget.engine.playOrPause();
       _showControlsTemporarily();
       return KeyEventResult.handled;
     } else if (key == LogicalKeyboardKey.arrowLeft) {
@@ -906,10 +904,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       if (onSeekRequested != null) {
         await onSeekRequested(target);
       } else {
-        await Future<void>.sync(() => widget.player.seek(target));
+        await Future<void>.sync(() => widget.engine.seek(target));
       }
       if (resumeAfterSeek && seekRequestVersion == _seekRequestVersion) {
-        await Future<void>.sync(() => widget.player.play());
+        await Future<void>.sync(() => widget.engine.play());
       }
     } finally {
       if (mounted) {
@@ -957,7 +955,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     final volume = value.clamp(0.0, _maxVolume);
     setState(() => _volume = volume);
     widget.onVolumeChanged?.call(volume);
-    widget.player.setVolume(volume * 100);
+    widget.engine.setVolume(volume);
   }
 
   void _showVolumeOverlayTemporarily() {
@@ -971,13 +969,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _startLongPressSpeed() {
     if (_isLongPressSpeed) return;
     _originalSpeed = _playbackSpeed;
-    widget.player.setRate(widget.longPressSpeed);
+    widget.engine.setRate(widget.longPressSpeed);
     setState(() => _isLongPressSpeed = true);
   }
 
   void _endLongPressSpeed() {
     if (!_isLongPressSpeed) return;
-    widget.player.setRate(_originalSpeed);
+    widget.engine.setRate(_originalSpeed);
     setState(() => _isLongPressSpeed = false);
   }
 
@@ -994,80 +992,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   void _toggleDoubleSpeedLock() {
     if (_isDoubleSpeedLocked) {
-      widget.player.setRate(_speedBeforeDoubleLock);
+      widget.engine.setRate(_speedBeforeDoubleLock);
       setState(() => _isDoubleSpeedLocked = false);
     } else {
       _speedBeforeDoubleLock = _playbackSpeed;
-      widget.player.setRate(2.0);
+      widget.engine.setRate(2.0);
       setState(() => _isDoubleSpeedLocked = true);
     }
   }
 
   Future<void> _fetchMediaInfo() async {
-    final platform = widget.player.platform;
-    if (platform is! NativePlayer) return;
-
+    final Object engine = widget.engine;
     try {
-      final info = <String, String>{};
-
-      // 视频参数
-      final videoCodec = await platform.getProperty('video-codec');
-      final videoWidth = await platform.getProperty('video-params/w');
-      final videoHeight = await platform.getProperty('video-params/h');
-      final fps = await platform.getProperty('container-fps');
-      final videoBitrate = await platform.getProperty('video-bitrate');
-      final hwdec = await platform.getProperty('hwdec-current');
-      final outputFps = await platform.getProperty('estimated-vf-fps');
-      final decoderDrops = await platform.getProperty(
-        'decoder-frame-drop-count',
-      );
-      final outputDrops = await platform.getProperty('frame-drop-count');
-
-      if (videoCodec.isNotEmpty) info['视频编码'] = videoCodec;
-      if (videoWidth.isNotEmpty && videoHeight.isNotEmpty) {
-        info['分辨率'] = '${videoWidth}x$videoHeight';
-      }
-      if (fps.isNotEmpty) {
-        final fpsVal = double.tryParse(fps);
-        info['帧率'] = fpsVal != null ? '${fpsVal.toStringAsFixed(2)} fps' : fps;
-      }
-      if (videoBitrate.isNotEmpty) {
-        final br = int.tryParse(videoBitrate);
-        if (br != null && br > 0) {
-          info['视频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
-        }
-      }
-      if (hwdec.isNotEmpty && hwdec != 'no') info['硬解'] = hwdec;
-      final outputFpsVal = double.tryParse(outputFps);
-      if (outputFpsVal != null) {
-        info['输出帧率'] = '${outputFpsVal.toStringAsFixed(2)} fps';
-      }
-      info['丢帧(解码/输出)'] =
-          '${decoderDrops.isEmpty ? '0' : decoderDrops} / '
-          '${outputDrops.isEmpty ? '0' : outputDrops}';
-
-      // 音频参数
-      final audioCodec = await platform.getProperty('audio-codec-name');
-      final channels = await platform.getProperty('audio-params/channel-count');
-      final sampleRate = await platform.getProperty('audio-params/samplerate');
-      final audioBitrate = await platform.getProperty('audio-bitrate');
-
-      if (audioCodec.isNotEmpty) info['音频编码'] = audioCodec;
-      if (channels.isNotEmpty) {
-        final ch = int.tryParse(channels);
-        info['声道'] = ch == 2 ? '立体声' : (ch == 1 ? '单声道' : '$ch 声道');
-      }
-      if (sampleRate.isNotEmpty) {
-        final sr = int.tryParse(sampleRate);
-        info['采样率'] =
-            sr != null ? '${(sr / 1000).toStringAsFixed(1)} kHz' : sampleRate;
-      }
-      if (audioBitrate.isNotEmpty) {
-        final br = int.tryParse(audioBitrate);
-        if (br != null && br > 0) {
-          info['音频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
-        }
-      }
+      final info = <String, String>{
+        if (engine is MediaDiagnosticsProvider)
+          ...await engine.fetchDiagnostics(),
+      };
 
       // 播放信息
       if (!mounted) return;
@@ -1238,7 +1178,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               child: GestureDetector(
                 onTap: () {
                   if (WindowControls.isDesktop) {
-                    widget.player.playOrPause();
+                    widget.engine.playOrPause();
                     _showControlsTemporarily();
                   } else {
                     _toggleVisibility();
@@ -1261,9 +1201,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 onPanEnd:
                     WindowControls.isDesktop || _isLocked ? null : _onPanEnd,
                 behavior: HitTestBehavior.translucent,
-                child: Video(
-                  controller: widget.controller,
-                  controls: NoVideoControls,
+                child: widget.engine.buildVideoView(
+                  context,
                   fit: _isFillMode ? BoxFit.cover : BoxFit.contain,
                 ),
               ),
@@ -1622,7 +1561,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                       : null,
               child: Text('${s}x'),
               onPressed: (_) {
-                widget.player.setRate(s);
+                widget.engine.setRate(s);
                 widget.onSpeedChanged?.call(s);
                 _showSpeedChangeHint(s);
                 _startHideTimer();
@@ -1676,7 +1615,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   void _showAudioTrackMenu(BuildContext context) {
-    final tracks = _audioTracks.where((t) => t.id != 'no').toList();
+    final tracks = _audioTracks;
     final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
     final padding = MediaQuery.of(context).padding;
     final screenHeight = MediaQuery.of(context).size.height;
@@ -1722,7 +1661,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                       : null,
               child: Text(t.title ?? t.language ?? t.id),
               onPressed: (_) {
-                widget.player.setAudioTrack(t);
+                widget.engine.selectAudioTrack(t);
                 _startHideTimer();
               },
             ),
@@ -1774,7 +1713,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   void _showSubtitleMenu(BuildContext context) {
-    final embeddedTracks = _subtitleTracks.where((t) => t.id != 'no').toList();
+    final embeddedTracks = _subtitleTracks;
     final externalSubs = widget.externalSubtitles;
     final currentId = _currentSubtitleTrack?.id;
     final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
@@ -1800,7 +1739,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 dropdownContext,
               ).colorScheme.copyWith(accent: () => Colors.transparent),
         );
-        final closeSelected = currentId == 'no' || currentId == null;
+        final closeSelected = _subtitleOff;
         final children = <shadcn.MenuItem>[
           shadcn.MenuButton(
             trailing:
@@ -1809,7 +1748,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                     : null,
             child: const Text('关闭'),
             onPressed: (_) {
-              widget.player.setSubtitleTrack(SubtitleTrack.no());
+              widget.engine.selectSubtitleTrack(null);
               _startHideTimer();
             },
           ),
@@ -1828,7 +1767,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                         : null,
                 child: Text(t.title ?? t.language ?? t.id),
                 onPressed: (_) {
-                  widget.player.setSubtitleTrack(t);
+                  widget.engine.selectSubtitleTrack(t);
                   _startHideTimer();
                 },
               ),
@@ -1948,7 +1887,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 color: Colors.white,
                 size: 32,
               ),
-              onPressed: () => widget.player.playOrPause(),
+              onPressed: () => widget.engine.playOrPause(),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 48),
             ),
