@@ -1,27 +1,22 @@
 import 'dart:async';
-import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
-import '../../core/utils/http_utils.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import 'widgets/player_top_bar.dart';
 import 'widgets/ripple_loading_indicator.dart';
 import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
-import '../../data/models/storage.dart';
-import '../../data/models/subtitle_info.dart';
-import '../../data/services/download_service.dart';
 import '../../data/services/log_service.dart';
-import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
-import '../../playback/domain/playback_domain.dart';
 import '../../playback/playback_providers.dart';
-import '../../playback/selection/engine_selection_rule.dart';
+import '../../playback/session/playback_item.dart';
+import '../../playback/session/playback_session.dart';
+import '../../playback/session/playback_source_resolver.dart';
+import '../../playback/session/riverpod_playback_gateway.dart';
 import 'widgets/custom_video_controls.dart';
 
 /// 视频播放器页面
@@ -50,56 +45,27 @@ class PlayerScreen extends ConsumerStatefulWidget {
 }
 
 class _PlayerScreenState extends ConsumerState<PlayerScreen> {
-  late final PlaybackEngine _engine;
-  late final Dio _dio;
-  bool _isLoading = true;
-  String? _error;
-  String? _currentStreamUrl; // 当前播放地址，用于错误显示
-  String? _currentFilePath; // 当前文件的存储源路径
+  late final PlaybackSession _session;
+  late final StreamSubscription<String> _noticeSubscription;
   bool _isFullscreen = false;
   bool _isDisposing = false;
   bool _isExiting = false;
   int _currentEpisodeIndex = 0;
-  Timer? _progressTimer;
-  Duration _lastSavedPosition = Duration.zero;
-  MediaService? _mediaService;
-  bool _hasSeekToInitialPosition = false;
-  List<SubtitleInfo> _externalSubtitles = [];
-  bool _hasAutoSelectedSubtitle = false;
-  bool _externalSubtitleAutoLoaded = false;
   List<Episode>? _episodes;
-  double? _sessionPlaybackSpeed;
-  double? _sessionVolume;
-  int? _pendingSeekPosition;
   int? _routeInitialPosition;
-  bool _hasAppliedPlaybackSettings = false;
   bool _initialLoadStarted = false;
-  Future<void>? _activeSeekOperation;
-  int _seekRequestVersion = 0;
-  DateTime? _lastNetworkPlaybackErrorAt;
-  Duration? _networkErrorPosition;
-  Duration _lastTrustedPlaybackPosition = Duration.zero;
-  bool _lastPositionWasSuspiciousEnd = false;
-  DateTime? _lastControlledSeekAt;
-  Duration? _lastControlledSeekTarget;
-  final List<StreamSubscription> _subscriptions = [];
-  late final Future<void> _playerNetworkConfigured;
 
   @override
   void initState() {
     super.initState();
     _episodes = widget.episodes;
-    _dio = Dio(
-      BaseOptions(
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ),
-    );
-    _engine = _createEngine();
+    _session = _createSession();
+    _session.addListener(_onSessionChanged);
+    _noticeSubscription = _session.notices.listen((message) {
+      if (mounted) DialogUtils.showToast(context: context, message: message);
+    });
     _routeInitialPosition = widget.initialPosition;
     _initEpisodeIndex();
-    _playerNetworkConfigured = _engine.initialize();
-    _setupPlayerListeners();
     _prepareInitialPlayback();
     // 移动端默认进入全屏模式
     if (!WindowControls.isDesktop) {
@@ -107,20 +73,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  PlaybackEngine _createEngine() {
-    final decision = ref
-        .read(engineSelectorProvider)
-        .select(
-          EngineSelectionContext(
-            environment: ref.read(platformEnvironmentProvider),
-          ),
-        );
-    final kind = decision.candidates.first;
-    LogService.instance.info(
-      'PlayerScreen',
-      'Playback engine: ${kind.label} (${decision.reason})',
+  PlaybackSession _createSession() {
+    final gateway = RiverpodPlaybackGateway(ref);
+    return PlaybackSession(
+      selector: ref.read(engineSelectorProvider),
+      factory: ref.read(playbackEngineFactoryProvider),
+      environment: ref.read(platformEnvironmentProvider),
+      resolver: PlaybackSourceResolver(gateway),
+      sourceGateway: gateway,
+      progressGateway: gateway,
+      defaultRate: () => ref.read(playbackSettingsProvider).playbackSpeed,
     );
-    return ref.read(playbackEngineFactoryProvider).create(kind);
+  }
+
+  void _onSessionChanged() {
+    if (mounted && !_isDisposing) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _isDisposing = true;
+    _noticeSubscription.cancel();
+    _session.removeListener(_onSessionChanged);
+    // 会话销毁时会同步保存最后一次进度
+    _session.dispose();
+    if (_isFullscreen) {
+      _exitFullscreen();
+    }
+    super.dispose();
   }
 
   void _initEpisodeIndex() {
@@ -151,27 +131,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  void _applyPlaybackSettings() {
-    final speed =
-        _sessionPlaybackSpeed ??
-        ref.read(playbackSettingsProvider).playbackSpeed;
-    _engine.setRate(speed);
-  }
-
-  void _onSpeedChanged(double speed) {
-    _sessionPlaybackSpeed = speed;
-  }
-
-  void _onVolumeChanged(double volume) {
-    _sessionVolume = volume;
-  }
-
-  Future<void> _restoreSessionVolumeIfNeeded() async {
-    final volume = _sessionVolume;
-    if (volume == null) return;
-    await _engine.setVolume(volume);
-  }
-
   int? _normalizeSeekPosition(int? position) {
     if (position == null || position <= 0) return null;
     return position;
@@ -183,21 +142,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Future<int?> _loadEpisodeProgress() async {
-    _pendingSeekPosition = null;
     if (widget.type != 'episode' || widget.tvShowId == null) return null;
     final episodeId = _currentEpisode?.id;
     if (episodeId == null) return null;
 
     try {
-      _mediaService ??= ref.read(mediaServiceProvider);
-      final response = await _mediaService!.getEpisodeProgress(
+      final service = ref.read(mediaServiceProvider);
+      if (service == null) return null;
+      final response = await service.getEpisodeProgress(
         tvShowId: widget.tvShowId!,
         episodeId: episodeId,
       );
       if (response.success && response.data != null) {
-        final seekPosition = _extractResumePosition(response.data);
-        _pendingSeekPosition = seekPosition;
-        return seekPosition;
+        return _extractResumePosition(response.data);
       }
     } catch (e) {
       LogService.instance.warn(
@@ -211,20 +168,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _prepareInitialPlayback() async {
     if (_initialLoadStarted) return;
     _initialLoadStarted = true;
-    try {
-      await _playerNetworkConfigured;
-    } catch (e) {
-      LogService.instance.warn(
-        'PlayerScreen',
-        'Failed to configure player network: $e',
-      );
-    }
+    await _session.initialize();
     if (!mounted || _isDisposing) return;
 
-    // 非剧集场景直接走原加载逻辑
+    // 非剧集场景直接加载
     if (widget.type != 'episode') {
-      _pendingSeekPosition = null;
-      await _loadVideo();
+      await _loadCurrent(startAtSeconds: _routeInitialPosition);
       return;
     }
 
@@ -237,8 +186,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (widget.type != 'episode' || widget.tvShowId == null) return null;
     try {
       // 通过 MediaService 拉取指定剧集的观看历史
-      _mediaService ??= ref.read(mediaServiceProvider);
-      final response = await _mediaService!.getEpisodeProgress(
+      final service = ref.read(mediaServiceProvider);
+      if (service == null) return null;
+      final response = await service.getEpisodeProgress(
         tvShowId: widget.tvShowId!,
         episodeId: episodeId,
       );
@@ -272,22 +222,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   Future<void> _prepareEpisodePlayback({int? episodeIndex}) async {
     // 统一处理“播放当前/下一集”前的进度判断与确认逻辑
-    await _awaitActiveSeekOperation();
+    await _session.awaitActiveSeek();
     if (episodeIndex != null) {
       // 切换剧集触发确认弹窗前先暂停当前播放，避免继续播放干扰选择
-      await _engine.pause();
+      await _session.engine.pause();
     }
     await _loadEpisodesIfNeeded();
     if (!mounted || _isDisposing) return;
 
     if (widget.type != 'episode') {
-      await _loadVideo();
+      await _loadCurrent(startAtSeconds: _routeInitialPosition);
       return;
     }
 
     if (_episodes == null || _episodes!.isEmpty) {
       // 剧集列表为空时直接按默认逻辑播放
-      await _loadVideo();
+      await _loadCurrent(startAtSeconds: _routeInitialPosition);
       return;
     }
 
@@ -295,7 +245,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     var targetIndex = episodeIndex ?? _currentEpisodeIndex;
     if (targetIndex < 0 || targetIndex >= _episodes!.length) {
       // 目标下标非法，回退到默认加载
-      await _loadVideo();
+      await _loadCurrent(startAtSeconds: _routeInitialPosition);
       return;
     }
 
@@ -304,7 +254,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final episode = _episodeAtIndex(targetIndex);
       if (episode == null) {
         // 下标无法解析到剧集，回退到默认加载
-        await _loadVideo();
+        await _loadCurrent(startAtSeconds: _routeInitialPosition);
         return;
       }
 
@@ -315,7 +265,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           targetIndex == originalIndex &&
           _normalizeSeekPosition(_routeInitialPosition) != null;
       final resumePosition = _extractResumePosition(progressItem);
-      _pendingSeekPosition = hasRouteInitialPosition ? null : resumePosition;
+      final startAtSeconds =
+          hasRouteInitialPosition ? _routeInitialPosition : resumePosition;
 
       // 仅当存在下一集且当前集进度>90%时才提示
       final shouldPrompt =
@@ -336,460 +287,61 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         );
         if (!mounted || _isDisposing) return;
         if (goNext == true) {
-          // 用户确认跳下一集：清理待 seek 信息并继续判断下一集
-          _pendingSeekPosition = null;
+          // 用户确认跳下一集：清理路由起播位置并继续判断下一集
           _routeInitialPosition = null;
           targetIndex += 1;
           continue;
-        }
-        // 用户选择继续本集：使用历史进度继续播放
-        if (!hasRouteInitialPosition && resumePosition != null) {
-          _pendingSeekPosition = resumePosition;
         }
       }
 
       // 未触发提示或用户选择继续本集，开始加载目标剧集
       if (episodeIndex == null && targetIndex == originalIndex) {
-        await _loadVideo(preserveSeekTarget: true);
+        await _loadCurrent(startAtSeconds: startAtSeconds);
       } else {
-        await _loadVideo(episodeIndex: targetIndex);
+        await _switchEpisode(targetIndex);
       }
       return;
     }
   }
 
-  void _setupPlayerListeners() {
-    // 监听播放器错误
-    _subscriptions.add(
-      _engine.streams.errors.listen((error) {
-        if (!mounted || _isDisposing) return;
-        LogService.instance.error(
-          'PlayerScreen',
-          '${_engine.kind.label} error: $error, url: $_currentStreamUrl',
-        );
-        // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
-        if (error.kind == PlaybackErrorKind.audioOutput) return;
-        if (error.recoverable) {
-          _markNetworkPlaybackError();
-          return;
-        }
-        setState(() {
-          _error =
-              '${_engine.kind.label} 错误: $error\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
-          _isLoading = false;
-        });
-      }),
-    );
-
-    _subscriptions.add(
-      _engine.streams.position.listen((position) {
-        if (!mounted || _isDisposing) return;
-        final duration = _engine.state.duration;
-        if (_isSuspiciousEndPosition(position, duration)) {
-          _lastPositionWasSuspiciousEnd = true;
-          return;
-        }
-        _lastPositionWasSuspiciousEnd = false;
-        if (position >= Duration.zero) {
-          _lastTrustedPlaybackPosition = position;
-        }
-      }),
-    );
-
-    // 监听缓冲状态
-    _subscriptions.add(
-      _engine.streams.buffering.listen((buffering) {
-        if (!mounted || _isDisposing) return;
-        // 可选：显示缓冲状态
-      }),
-    );
-
-    // 监听视频时长，准备好后 seek 到初始位置并设置倍速
-    _subscriptions.add(
-      _engine.streams.duration.listen((duration) {
-        if (!mounted || _isDisposing) return;
-        if (duration.inSeconds <= 0) return;
-
-        // 设置倍速（每次视频加载完成后都需要重新设置）
-        if (!_hasAppliedPlaybackSettings) {
-          _hasAppliedPlaybackSettings = true;
-          _applyPlaybackSettings();
-        }
-
-        // 优先使用 _pendingSeekPosition（切换视频时设置），否则使用初始位置
-        final targetPosition =
-            _pendingSeekPosition ??
-            _normalizeSeekPosition(_routeInitialPosition);
-        LogService.instance.debug(
-          'PlayerScreen',
-          'duration=${duration.inSeconds}s, pendingSeek=$_pendingSeekPosition, routeInitial=$_routeInitialPosition, hasSeek=$_hasSeekToInitialPosition',
-        );
-        if (!_hasSeekToInitialPosition &&
-            targetPosition != null &&
-            targetPosition > 0) {
-          _hasSeekToInitialPosition = true;
-          _pendingSeekPosition = null;
-          _routeInitialPosition = null;
-          LogService.instance.debug(
-            'PlayerScreen',
-            'Seeking to $targetPosition seconds',
-          );
-          final seekTarget = Duration(seconds: targetPosition);
-          _markControlledSeek(seekTarget);
-          _engine.seek(seekTarget);
-        }
-      }),
-    );
-
-    // 监听播放完成
-    _subscriptions.add(
-      _engine.streams.completed.listen((completed) {
-        if (!mounted || _isDisposing) return;
-        if (completed) {
-          if (_isSuspiciousPlaybackCompletion()) {
-            LogService.instance.warn(
-              'PlayerScreen',
-              'Ignored suspicious completed after network error',
-            );
-            return;
-          }
-          unawaited(_saveProgress(fromCompleted: true)); // 播放完成时保存进度
-        }
-      }),
-    );
-
-    // 监听内嵌字幕轨道加载（用于自动选择简体中文字幕）
-    _subscriptions.add(
-      _engine.streams.tracks.listen((tracks) {
-        if (!mounted || _isDisposing) return;
-        if (tracks.subtitle.isNotEmpty) {
-          _tryAutoSelectEmbeddedSubtitle();
-        }
-      }),
-    );
-  }
-
-  void _startProgressTimer() {
-    _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      unawaited(_saveProgress());
-    });
-  }
-
-  Future<void> _waitForPlayerPosition(
-    Duration target,
-    int seekRequestVersion,
-  ) async {
-    const toleranceMs = 1000;
-    for (var i = 0; i < 10; i++) {
-      if (seekRequestVersion != _seekRequestVersion) return;
-      final current = _engine.state.position;
-      if ((current.inMilliseconds - target.inMilliseconds).abs() <=
-          toleranceMs) {
-        return;
-      }
-      await Future<void>.delayed(const Duration(milliseconds: 150));
+  PlaybackItem? get _currentItem {
+    if (widget.type == 'movie') return MoviePlaybackItem(widget.id);
+    if (widget.type == 'episode' &&
+        widget.tvShowId != null &&
+        widget.seasonId != null) {
+      return EpisodePlaybackItem(
+        tvShowId: widget.tvShowId!,
+        seasonId: widget.seasonId!,
+        episodeId: _currentEpisode?.id ?? widget.id,
+      );
     }
+    return null;
   }
 
-  Future<void> _performUserSeek(
-    Duration position,
-    int seekRequestVersion,
-    Future<void> seekFuture,
-  ) async {
-    try {
-      await seekFuture;
-      if (seekRequestVersion != _seekRequestVersion) return;
-      await _waitForPlayerPosition(position, seekRequestVersion);
-      if (seekRequestVersion != _seekRequestVersion) return;
-      await _saveProgress(force: true);
-    } catch (e) {
-      LogService.instance.warn('PlayerScreen', 'User seek failed: $e');
-    }
-  }
-
-  Future<void> _handleUserSeek(Duration position) {
-    final seekRequestVersion = ++_seekRequestVersion;
-    _pendingSeekPosition = null;
-    _routeInitialPosition = null;
-    _hasSeekToInitialPosition = true;
-    _markControlledSeek(position);
-
-    final seekFuture = Future<void>.sync(() => _engine.seek(position));
-    final operation = _performUserSeek(
-      position,
-      seekRequestVersion,
-      seekFuture,
-    );
-    _activeSeekOperation = operation;
-    unawaited(
-      operation.whenComplete(() {
-        if (identical(_activeSeekOperation, operation)) {
-          _activeSeekOperation = null;
-        }
-      }),
-    );
-    return seekFuture.catchError((_) {});
-  }
-
-  Future<void> _awaitActiveSeekOperation() async {
-    final operation = _activeSeekOperation;
-    if (operation == null) return;
-    try {
-      await operation;
-    } catch (_) {}
-  }
-
-  void _markNetworkPlaybackError() {
-    _lastNetworkPlaybackErrorAt = DateTime.now();
-    _networkErrorPosition = _lastTrustedPlaybackPosition;
-  }
-
-  bool _hasRecentNetworkPlaybackError() {
-    final lastErrorAt = _lastNetworkPlaybackErrorAt;
-    if (lastErrorAt == null) return false;
-    return DateTime.now().difference(lastErrorAt) <=
-        const Duration(seconds: 45);
-  }
-
-  void _markControlledSeek(Duration target) {
-    _lastControlledSeekAt = DateTime.now();
-    _lastControlledSeekTarget = target;
-    _lastTrustedPlaybackPosition = target;
-    _lastPositionWasSuspiciousEnd = false;
-  }
-
-  bool _isRecentControlledSeekPosition(Duration position) {
-    final target = _lastControlledSeekTarget;
-    final seekAt = _lastControlledSeekAt;
-    if (target == null || seekAt == null) return false;
-    if (DateTime.now().difference(seekAt) > const Duration(seconds: 20)) {
-      return false;
-    }
-    return (position.inMilliseconds - target.inMilliseconds).abs() <= 1500;
-  }
-
-  bool _isNearPlaybackEnd(Duration position, Duration duration) {
-    if (duration.inSeconds <= 180) return false;
-    return position >= duration - const Duration(seconds: 60);
-  }
-
-  bool _isSuspiciousEndPosition(Duration position, Duration duration) {
-    if (!_hasRecentNetworkPlaybackError()) return false;
-    if (!_isNearPlaybackEnd(position, duration)) return false;
-    if (_isRecentControlledSeekPosition(position)) return false;
-    final trusted = _networkErrorPosition ?? _lastTrustedPlaybackPosition;
-    if (trusted <= Duration.zero) return false;
-    if (_isNearPlaybackEnd(trusted, duration)) return false;
-    return position - trusted >= const Duration(seconds: 30);
-  }
-
-  bool _isSuspiciousPlaybackCompletion() {
-    final position = _engine.state.position;
-    final duration = _engine.state.duration;
-    return _lastPositionWasSuspiciousEnd ||
-        _isSuspiciousEndPosition(position, duration);
-  }
-
-  bool _shouldSkipProgressSave(
-    Duration position,
-    Duration duration, {
-    required bool force,
-    required bool fromCompleted,
-  }) {
-    if (force && _isRecentControlledSeekPosition(position)) return false;
-    if (fromCompleted && !_isSuspiciousPlaybackCompletion()) return false;
-    return _lastPositionWasSuspiciousEnd ||
-        _isSuspiciousEndPosition(position, duration);
-  }
-
-  void _resetPlaybackErrorTracking() {
-    _lastNetworkPlaybackErrorAt = null;
-    _networkErrorPosition = null;
-    _lastTrustedPlaybackPosition = Duration.zero;
-    _lastPositionWasSuspiciousEnd = false;
-    _lastControlledSeekAt = null;
-    _lastControlledSeekTarget = null;
-  }
-
-  Future<void> _saveProgress({
-    bool force = false,
-    bool fromCompleted = false,
-  }) async {
-    try {
-      if (!force && _activeSeekOperation != null) return;
-      final position = _engine.state.position;
-      final duration = _engine.state.duration;
-
-      // 跳过无效数据或位置未变化
-      if (duration.inSeconds <= 0) return;
-      if (_shouldSkipProgressSave(
-        position,
-        duration,
-        force: force,
-        fromCompleted: fromCompleted,
-      )) {
-        LogService.instance.warn(
-          'PlayerScreen',
-          'Skipped suspicious progress save: ${position.inSeconds}/${duration.inSeconds}',
-        );
-        return;
-      }
-      if (!force && position == _lastSavedPosition) return;
-
-      final service = _mediaService;
-      if (service == null) return;
-
-      if (widget.type == 'movie') {
-        await service.updateWatchProgress(
-          mediaType: 'movie',
-          mediaId: widget.id,
-          position: position.inSeconds,
-          duration: duration.inSeconds,
-        );
-        _publishWatchProgress(position, duration);
-      } else if (widget.type == 'episode' && widget.tvShowId != null) {
-        final episodeId = _currentEpisode?.id ?? widget.id;
-        await service.updateWatchProgress(
-          mediaType: 'tv',
-          mediaId: widget.tvShowId!,
-          episodeId: episodeId,
-          position: position.inSeconds,
-          duration: duration.inSeconds,
-        );
-        _publishWatchProgress(position, duration, episodeId: episodeId);
-      }
-      _lastSavedPosition = position;
-    } catch (e) {
-      LogService.instance.warn('PlayerScreen', 'Failed to save progress: $e');
-    }
-  }
-
-  void _publishWatchProgress(
-    Duration position,
-    Duration duration, {
-    int? episodeId,
-  }) {
-    if (duration.inSeconds <= 0) return;
-    if (widget.type == 'movie') {
-      ref
-          .read(watchProgressProvider.notifier)
-          .upsertFromPlayback(
-            mediaType: 'movie',
-            mediaId: widget.id,
-            position: position.inSeconds,
-            duration: duration.inSeconds,
-          );
+  Future<void> _loadCurrent({int? startAtSeconds}) async {
+    final item = _currentItem;
+    if (item == null) {
+      _session.fail('无法获取播放地址');
       return;
     }
-    if (widget.type == 'episode' && widget.tvShowId != null) {
-      ref
-          .read(watchProgressProvider.notifier)
-          .upsertFromPlayback(
-            mediaType: 'tv',
-            mediaId: widget.tvShowId!,
-            episodeId: episodeId ?? _currentEpisode?.id ?? widget.id,
-            seasonId: widget.seasonId,
-            position: position.inSeconds,
-            duration: duration.inSeconds,
-          );
-    }
-  }
-
-  /// 等待下载管理器加载完成（使用 listener 模式，最多等待 5 秒）
-  Future<DownloadManagerState> _waitForDownloadManagerReady() async {
-    final completer = Completer<DownloadManagerState>();
-    const timeout = Duration(seconds: 5);
-
-    // 使用 listenManual 监听状态变化
-    final subscription = ref.listenManual<DownloadManagerState>(
-      downloadManagerProvider,
-      (previous, next) {
-        if (!next.isLoading && !completer.isCompleted) {
-          completer.complete(next);
-        }
-      },
-      fireImmediately: true,
+    await _session.load(
+      item,
+      startAt:
+          startAtSeconds == null ? null : Duration(seconds: startAtSeconds),
     );
+  }
 
-    // 设置超时
-    final timer = Timer(timeout, () {
-      if (!completer.isCompleted) {
-        completer.complete(ref.read(downloadManagerProvider));
-      }
+  /// 切换到指定剧集，从该集的历史进度开始播放
+  Future<void> _switchEpisode(int index) async {
+    await _session.prepareSwitch();
+    if (!mounted || _isDisposing) return;
+    setState(() {
+      _currentEpisodeIndex = index;
+      _routeInitialPosition = null;
     });
-
-    try {
-      final result = await completer.future;
-      return result;
-    } finally {
-      timer.cancel();
-      subscription.close();
-    }
-  }
-
-  @override
-  void dispose() {
-    _isDisposing = true;
-    _progressTimer?.cancel();
-    for (final sub in _subscriptions) {
-      sub.cancel();
-    }
-
-    // 同步保存进度（最后一次尝试，不阻塞dispose）
-    _saveProgressSync();
-    if (_isFullscreen) {
-      _exitFullscreen();
-    }
-    _dio.close();
-    _engine.dispose();
-    super.dispose();
-  }
-
-  /// 同步版本的进度保存，用于 dispose 时的最后尝试
-  void _saveProgressSync() {
-    try {
-      final position = _engine.state.position;
-      final duration = _engine.state.duration;
-      if (duration.inSeconds <= 0 || position == _lastSavedPosition) return;
-      if (_shouldSkipProgressSave(
-        position,
-        duration,
-        force: false,
-        fromCompleted: false,
-      )) {
-        return;
-      }
-
-      final service = _mediaService;
-      if (service == null) return;
-      _publishWatchProgress(position, duration);
-
-      // dispose 阶段不 await：用 ignore() 明确表示“故意不等待”的 Future。
-      if (widget.type == 'movie') {
-        service
-            .updateWatchProgress(
-              mediaType: 'movie',
-              mediaId: widget.id,
-              position: position.inSeconds,
-              duration: duration.inSeconds,
-            )
-            .ignore();
-      } else if (widget.type == 'episode' && widget.tvShowId != null) {
-        final episodeId = _currentEpisode?.id ?? widget.id;
-        service
-            .updateWatchProgress(
-              mediaType: 'tv',
-              mediaId: widget.tvShowId!,
-              episodeId: episodeId,
-              position: position.inSeconds,
-              duration: duration.inSeconds,
-            )
-            .ignore();
-      }
-    } catch (_) {
-      // 静默失败，不阻塞 dispose
-    }
+    final resumePosition = await _loadEpisodeProgress();
+    if (!mounted || _isDisposing) return;
+    await _loadCurrent(startAtSeconds: resumePosition);
   }
 
   void _enterFullscreen() {
@@ -829,396 +381,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
-  Future<void> _loadVideo({
-    int? episodeIndex,
-    bool preserveSeekTarget = false,
-  }) async {
-    if (!mounted) return;
-    await _awaitActiveSeekOperation();
-    if (episodeIndex != null) {
-      await _engine.pause();
-      await _saveProgress();
-    }
-    setState(() {
-      _isLoading = true;
-      _error = null;
-      _currentStreamUrl = null;
-      _currentFilePath = null;
-      _externalSubtitles = [];
-      // 无条件重置，确保重试时也能正确 seek 和设置倍速
-      _hasSeekToInitialPosition = false;
-      _hasAppliedPlaybackSettings = false;
-      _hasAutoSelectedSubtitle = false;
-      _externalSubtitleAutoLoaded = false;
-      _resetPlaybackErrorTracking();
-      if (episodeIndex != null) {
-        _currentEpisodeIndex = episodeIndex;
-        _pendingSeekPosition = null;
-        _routeInitialPosition = null;
-      } else {
-        // 重试场景：清除待 seek 位置，避免使用失败前残留的错误位置
-        if (!preserveSeekTarget) {
-          _pendingSeekPosition = null;
-        }
-      }
-    });
-
-    // 切换视频时获取历史进度
-    if (episodeIndex != null) {
-      await _loadEpisodeProgress();
-    }
-
-    try {
-      // 等待下载任务加载完成后再检查本地缓存
-      var downloadState = ref.read(downloadManagerProvider);
-      if (downloadState.isLoading) {
-        downloadState = await _waitForDownloadManagerReady();
-      }
-
-      // 检查是否有本地缓存
-      String? localPath;
-
-      if (widget.type == 'movie') {
-        if (downloadState.isMovieDownloaded(widget.id)) {
-          final task = downloadState.getTaskByMovieId(widget.id);
-          if (task != null && await File(task.localPath).exists()) {
-            localPath = task.localPath;
-          }
-        }
-      } else if (widget.type == 'episode') {
-        final episodeId = _currentEpisode?.id ?? widget.id;
-        if (downloadState.isEpisodeDownloaded(episodeId)) {
-          final task = downloadState.getTaskByEpisodeId(episodeId);
-          if (task != null && await File(task.localPath).exists()) {
-            localPath = task.localPath;
-          }
-        }
-      }
-
-      if (!mounted) return;
-
-      // 使用本地缓存播放
-      if (localPath != null) {
-        _currentStreamUrl = localPath;
-        await _engine.open(PlaybackSource.localFile(localPath));
-
-        if (!mounted) return;
-        await _restoreSessionVolumeIfNeeded();
-        if (!mounted) return;
-
-        _mediaService ??= ref.read(mediaServiceProvider);
-        _startProgressTimer();
-        DialogUtils.showToast(context: context, message: '正在使用本地缓存播放');
-
-        setState(() {
-          _isLoading = false;
-        });
-        return;
-      }
-
-      String? streamUrl;
-      int? storageId;
-      String? filePath;
-
-      if (widget.type == 'movie') {
-        final response = await ref.read(movieStreamProvider(widget.id).future);
-        streamUrl = response?.url;
-        storageId = response?.storageId;
-        filePath = response?.filePath;
-      } else if (widget.type == 'episode' &&
-          widget.tvShowId != null &&
-          widget.seasonId != null) {
-        final episodeId = _currentEpisode?.id ?? widget.id;
-        final providerKey = (
-          tvShowId: widget.tvShowId!,
-          seasonId: widget.seasonId!,
-          episodeId: episodeId,
-        );
-        ref.invalidate(episodeStreamProvider(providerKey));
-        final response = await ref.read(
-          episodeStreamProvider(providerKey).future,
-        );
-        streamUrl = response?.url;
-        storageId = response?.storageId;
-        filePath = response?.filePath;
-      }
-
-      if (!mounted) return;
-
-      if (streamUrl == null || streamUrl.isEmpty) {
-        setState(() {
-          _error = '无法获取播放地址';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // 获取服务器地址
-      final serverUrl = ref.read(serverUrlProvider);
-      final fullUrl =
-          streamUrl.startsWith('http') ? streamUrl : '$serverUrl$streamUrl';
-      final authHeaders = await _buildAuthHeadersForPlayUrl(
-        fullUrl,
-        storageId: storageId,
-      );
-      final resolvedUrl = await _resolveRedirectTarget(
-        fullUrl,
-        authHeaders: authHeaders,
-      );
-      final playUrl = resolvedUrl ?? fullUrl;
-      // 重定向后 URL 可能变更 origin，需要重新判断 auth
-      final playHeaders =
-          (resolvedUrl != null && resolvedUrl != fullUrl)
-              ? await _buildAuthHeadersForPlayUrl(playUrl, storageId: storageId)
-              : authHeaders;
-      final headers = <String, String>{
-        'User-Agent': DownloadService.aria2UserAgent,
-        ...?playHeaders,
-      };
-
-      _currentStreamUrl = playUrl;
-      _currentFilePath = filePath;
-      await _engine.open(PlaybackSource.network(playUrl, httpHeaders: headers));
-
-      if (!mounted) return;
-      await _restoreSessionVolumeIfNeeded();
-      if (!mounted) return;
-
-      _mediaService ??= ref.read(mediaServiceProvider); // 确保 service 已缓存
-      _startProgressTimer(); // 视频加载成功后启动进度保存定时器
-
-      // 加载外挂字幕
-      _loadExternalSubtitles(storageId, filePath);
-
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = '加载失败: $e\n\n播放地址: ${_currentStreamUrl ?? "未知"}';
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<String?> _resolveRedirectTarget(
-    String url, {
-    Map<String, String>? authHeaders,
-  }) async {
-    try {
-      final response = await _dio.head(
-        url,
-        options: Options(
-          followRedirects: false,
-          validateStatus:
-              (status) => status != null && status >= 200 && status < 400,
-          headers: {
-            'User-Agent': DownloadService.aria2UserAgent,
-            ...?authHeaders,
-          },
-        ),
-      );
-
-      final code = response.statusCode ?? 0;
-      if (code >= 300 && code < 400) {
-        final loc = response.headers.value('location');
-        if (loc != null && loc.trim().isNotEmpty) {
-          return Uri.parse(url).resolve(loc.trim()).toString();
-        }
-      }
-    } catch (e) {
-      LogService.instance.warn(
-        'PlayerScreen',
-        'Failed to resolve redirect: $e',
-      );
-    }
-    return null;
-  }
-
-  Future<Storage?> _getStorageById(int storageId) async {
-    final current = ref.read(storagesProvider).value;
-    if (current != null) {
-      final found = current.where((s) => s.id == storageId).firstOrNull;
-      if (found != null) return found;
-    }
-
-    await ref.read(storagesProvider.notifier).loadStorages();
-    final loaded = ref.read(storagesProvider).value;
-    if (loaded == null) return null;
-    return loaded.where((s) => s.id == storageId).firstOrNull;
-  }
-
-  Future<Map<String, String>?> _buildAuthHeadersForPlayUrl(
-    String playUrl, {
-    required int? storageId,
-  }) async {
-    // WebDAV 存储：使用 BasicAuth
-    if (storageId != null) {
-      final storage = await _getStorageById(storageId);
-      if (storage != null && storage.type.toLowerCase() == 'webdav') {
-        final settings = storage.settings;
-        if (settings != null) {
-          final webdavUrl = settings['url'];
-          final username = settings['username'];
-          final password = settings['password'];
-          if (webdavUrl != null &&
-              username != null &&
-              password != null &&
-              username.isNotEmpty) {
-            final webdavUri = Uri.tryParse(webdavUrl);
-            final playUri = Uri.tryParse(playUrl);
-            if (HttpUtils.sameOrigin(webdavUri, playUri)) {
-              return {
-                'Authorization': HttpUtils.basicAuthHeader(username, password),
-              };
-            }
-          }
-        }
-      }
-    }
-
-    // 非 WebDAV：如果 URL 与服务器同源，附带 Bearer Token
-    final serverUrl = ref.read(serverUrlProvider);
-    final token = ref.read(authProvider).tokens?.accessToken;
-    if (serverUrl != null && token != null) {
-      final serverUri = Uri.tryParse(serverUrl);
-      final playUri = Uri.tryParse(playUrl);
-      if (HttpUtils.sameOrigin(serverUri, playUri)) {
-        return {'Authorization': 'Bearer $token'};
-      }
-    }
-    return null;
-  }
-
-  Future<void> _loadExternalSubtitles(int? storageId, String? filePath) async {
-    if (storageId == null || filePath == null) return;
-
-    final service = _mediaService ?? ref.read(mediaServiceProvider);
-    if (service == null) return;
-
-    try {
-      final response = await service.getSubtitles(
-        storageId: storageId,
-        filePath: filePath,
-      );
-      if (!mounted) return;
-
-      final subtitles = response.data ?? [];
-      setState(() {
-        _externalSubtitles = subtitles;
-      });
-
-      // 自动加载最佳匹配字幕（score >= 85）
-      if (subtitles.isNotEmpty) {
-        // 找到最高分的字幕
-        final bestSub = subtitles.reduce((a, b) => a.score >= b.score ? a : b);
-        if (bestSub.score >= 85) {
-          await _loadExternalSubtitleTrack(bestSub);
-
-          // 显示提示
-          if (mounted) {
-            DialogUtils.showToast(
-              context: context,
-              message: '已自动加载字幕: ${bestSub.displayName}',
-            );
-            _externalSubtitleAutoLoaded = true;
-            _hasAutoSelectedSubtitle = true;
-          }
-        }
-      }
-    } catch (e) {
-      LogService.instance.warn(
-        'PlayerScreen',
-        'Failed to load external subtitles: $e',
-      );
-    }
-  }
-
-  Future<void> _loadExternalSubtitleTrack(SubtitleInfo sub) async {
-    final serverUrl = ref.read(serverUrlProvider);
-    final token = ref.read(authProvider).tokens?.accessToken;
-    final subUrl =
-        sub.url.startsWith('http') ? sub.url : '$serverUrl${sub.url}';
-    try {
-      final response = await _dio.get<String>(
-        subUrl,
-        options: Options(
-          headers: token != null ? {'Authorization': 'Bearer $token'} : null,
-          responseType: ResponseType.plain,
-        ),
-      );
-      if (response.data != null) {
-        await _engine.addExternalSubtitle(
-          ExternalSubtitle.data(response.data!, title: sub.displayName),
-        );
-      }
-    } catch (e) {
-      LogService.instance.warn('PlayerScreen', 'Failed to load subtitle: $e');
-    }
-  }
-
-  SubtitleTrackInfo? _findChineseSubtitleTrack(List<SubtitleTrackInfo> tracks) {
-    final validTracks = tracks;
-    if (validTracks.isEmpty) return null;
-
-    const chineseLanguages = [
-      'zh',
-      'chi',
-      'zho',
-      'zh-cn',
-      'zh-hans',
-      'chs',
-      'sc',
-    ];
-    const chineseTitleKeywords = [
-      '简体',
-      '简中',
-      'chs',
-      'sc',
-      'simplified',
-      '中文',
-      'chinese',
-    ];
-
-    for (final track in validTracks) {
-      final lang = track.language?.toLowerCase() ?? '';
-      if (chineseLanguages.contains(lang)) return track;
-    }
-
-    for (final track in validTracks) {
-      final title = track.title?.toLowerCase() ?? '';
-      for (final keyword in chineseTitleKeywords) {
-        if (title.contains(keyword.toLowerCase())) return track;
-      }
-    }
-
-    for (final track in validTracks) {
-      final lang = track.language?.toLowerCase() ?? '';
-      if (lang.startsWith('zh')) return track;
-    }
-
-    return null;
-  }
-
-  void _tryAutoSelectEmbeddedSubtitle() {
-    if (_hasAutoSelectedSubtitle || _externalSubtitleAutoLoaded) return;
-
-    final tracks = _engine.state.tracks.subtitle;
-    final chineseTrack = _findChineseSubtitleTrack(tracks);
-
-    if (chineseTrack != null) {
-      _hasAutoSelectedSubtitle = true;
-      _engine.selectSubtitleTrack(chineseTrack);
-      final displayName =
-          chineseTrack.title ?? chineseTrack.language ?? chineseTrack.id;
-      DialogUtils.showToast(
-        context: context,
-        message: '已自动选择内嵌字幕: $displayName',
-      );
-    }
-  }
-
   Episode? get _currentEpisode {
     if (_episodes == null || _episodes!.isEmpty) return null;
     if (_currentEpisodeIndex < 0 || _currentEpisodeIndex >= _episodes!.length) {
@@ -1232,7 +394,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _episodes != null && _currentEpisodeIndex < _episodes!.length - 1;
 
   void _playPrevious() {
-    if (_hasPrevious) _loadVideo(episodeIndex: _currentEpisodeIndex - 1);
+    if (_hasPrevious) _switchEpisode(_currentEpisodeIndex - 1);
   }
 
   void _playNext() {
@@ -1256,13 +418,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final theme = Theme.of(context);
     final playbackSettings = ref.watch(playbackSettingsProvider);
 
-    if (_isLoading) {
+    final status = _session.status;
+    if (status is PlaybackSessionLoading) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
           children: [
             RippleLoadingIndicator(
-              hintText: _currentStreamUrl == null ? '正在获取播放地址' : '正在加载视频',
+              hintText: status.resolvingSource ? '正在获取播放地址' : '正在加载视频',
             ),
             PlayerTopBar(
               title: _displayTitle.isNotEmpty ? _displayTitle : '加载中...',
@@ -1275,7 +438,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       );
     }
 
-    if (_error != null) {
+    if (status is PlaybackSessionFailed) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
@@ -1303,7 +466,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         child: Scrollbar(
                           child: SingleChildScrollView(
                             child: SelectableText(
-                              _error!,
+                              status.message,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 13,
@@ -1317,7 +480,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           shadcn.PrimaryButton(
-                            onPressed: _loadVideo,
+                            onPressed: _session.reload,
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1330,7 +493,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                           const SizedBox(width: 12),
                           shadcn.OutlineButton(
                             onPressed: () {
-                              Clipboard.setData(ClipboardData(text: _error!));
+                              Clipboard.setData(
+                                ClipboardData(text: status.message),
+                              );
                               DialogUtils.showToast(
                                 context: context,
                                 message: '已复制错误信息',
@@ -1368,14 +533,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       body: Stack(
         children: [
           CustomVideoControls(
-            engine: _engine,
+            engine: _session.engine,
             title: _displayTitle,
             onBack: () async {
               if (_isExiting) return;
               setState(() => _isExiting = true);
-              await _awaitActiveSeekOperation();
-              await _engine.pause();
-              await _saveProgress();
+              await _session.prepareExit();
               if (context.mounted) Navigator.of(context).pop();
             },
             onPrevious: _hasPrevious ? _playPrevious : null,
@@ -1386,16 +549,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             isFullscreen: _isFullscreen,
             episodes: _episodes,
             currentEpisodeIndex: _currentEpisodeIndex,
-            onSelectEpisode: (index) => _loadVideo(episodeIndex: index),
-            externalSubtitles: _externalSubtitles,
+            onSelectEpisode: _switchEpisode,
+            externalSubtitles: _session.externalSubtitles,
             serverUrl: ref.read(serverUrlProvider),
-            onSpeedChanged: _onSpeedChanged,
-            initialVolume: _sessionVolume,
-            onVolumeChanged: _onVolumeChanged,
-            sourcePath: _currentFilePath,
-            onSelectExternalSubtitle: _loadExternalSubtitleTrack,
-            onSeekRequested: _handleUserSeek,
-            isPlaybackErrorRecoveryActive: _hasRecentNetworkPlaybackError,
+            onSpeedChanged: _session.rememberRate,
+            initialVolume: _session.sessionVolume,
+            onVolumeChanged: _session.rememberVolume,
+            sourcePath: _session.filePath,
+            onSelectExternalSubtitle: _session.selectExternalSubtitle,
+            onSeekRequested: _session.seek,
+            isPlaybackErrorRecoveryActive:
+                () => _session.isRecoveringFromNetworkError,
             seekDuration: playbackSettings.seekDuration,
             longPressSpeed: playbackSettings.longPressSpeed,
           ),

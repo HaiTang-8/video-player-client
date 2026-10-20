@@ -66,6 +66,16 @@ class PlaybackStateHub {
     );
   }
 
+  /// 打开新媒体前调用，清掉属于上一个媒体的状态，保证新媒体的同值事件仍会广播。
+  /// 选中的轨道不重置：mpv 的轨道选择（如关闭字幕）会延续到下一个文件
+  void resetForNewMedia() => update(
+    position: Duration.zero,
+    duration: Duration.zero,
+    completed: false,
+    tracks: const MediaTracks(),
+    videoInfo: const VideoInfo(),
+  );
+
   void addError(PlaybackError error) {
     if (!_closed) _errors.add(error);
   }

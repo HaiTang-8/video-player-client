@@ -56,6 +56,7 @@ abstract class MpvEngineBase
 
   @override
   Future<void> open(PlaybackSource source, {bool autoPlay = true}) {
+    _hub.resetForNewMedia();
     final media =
         source.isLocalFile
             ? Media(source.url)

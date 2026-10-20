@@ -1,0 +1,354 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../../data/models/subtitle_info.dart';
+import '../../data/services/log_service.dart';
+import '../domain/playback_domain.dart';
+import '../engines/playback_engine_factory.dart';
+import '../selection/engine_selection_rule.dart';
+import '../selection/engine_selector.dart';
+import '../selection/platform_environment.dart';
+import 'playback_gateways.dart';
+import 'playback_item.dart';
+import 'playback_progress_tracker.dart';
+import 'playback_source_resolver.dart';
+import 'seek_coordinator.dart';
+import 'subtitle_auto_selector.dart';
+
+sealed class PlaybackSessionStatus {
+  const PlaybackSessionStatus();
+}
+
+final class PlaybackSessionLoading extends PlaybackSessionStatus {
+  /// true 表示仍在获取播放地址，false 表示地址已就绪、正在打开视频
+  final bool resolvingSource;
+
+  const PlaybackSessionLoading({required this.resolvingSource});
+}
+
+final class PlaybackSessionReady extends PlaybackSessionStatus {
+  const PlaybackSessionReady();
+}
+
+final class PlaybackSessionFailed extends PlaybackSessionStatus {
+  final String message;
+
+  const PlaybackSessionFailed(this.message);
+}
+
+/// 播放会话门面：管理引擎生命周期与加载流程，UI 只与它和 [engine] 交互
+class PlaybackSession extends ChangeNotifier {
+  PlaybackSession({
+    required EngineSelector selector,
+    required PlaybackEngineFactory factory,
+    required PlatformEnvironment environment,
+    required PlaybackSourceResolver resolver,
+    required PlaybackSourceGateway sourceGateway,
+    required WatchProgressGateway progressGateway,
+    required double Function() defaultRate,
+  }) : _resolver = resolver,
+       _sourceGateway = sourceGateway,
+       _defaultRate = defaultRate {
+    final decision = selector.select(
+      EngineSelectionContext(environment: environment),
+    );
+    final kind = decision.candidates.first;
+    LogService.instance.info(
+      'PlaybackSession',
+      'Playback engine: ${kind.label} (${decision.reason})',
+    );
+    engine = factory.create(kind);
+    _tracker = PlaybackProgressTracker(
+      engine: engine,
+      gateway: progressGateway,
+      isSeeking: () => _seek.isActive,
+    );
+    _seek = SeekCoordinator(
+      engine: engine,
+      onSeekStarted: _tracker.markControlledSeek,
+      onSeekSettled: () => _tracker.save(force: true),
+    );
+    _bindEngine();
+  }
+
+  late final PlaybackEngine engine;
+  final PlaybackSourceResolver _resolver;
+  final PlaybackSourceGateway _sourceGateway;
+  final double Function() _defaultRate;
+  late final PlaybackProgressTracker _tracker;
+  late final SeekCoordinator _seek;
+  final SubtitleAutoSelector _subtitleSelector = SubtitleAutoSelector();
+  final List<StreamSubscription> _subscriptions = [];
+  final StreamController<String> _notices = StreamController.broadcast();
+
+  PlaybackSessionStatus _status = const PlaybackSessionLoading(
+    resolvingSource: true,
+  );
+  PlaybackItem? _item;
+  Duration? _startAt;
+  bool _rateApplied = false;
+  int _loadGeneration = 0;
+  String? _currentUrl;
+  String? _filePath;
+  List<SubtitleInfo> _externalSubtitles = const [];
+  double? _sessionRate;
+  double? _sessionVolume;
+  bool _disposed = false;
+
+  PlaybackSessionStatus get status => _status;
+
+  /// 当前播放地址（本地路径或网络 URL），用于错误提示
+  String? get currentUrl => _currentUrl;
+
+  /// 文件在存储源中的路径
+  String? get filePath => _filePath;
+
+  List<SubtitleInfo> get externalSubtitles => _externalSubtitles;
+
+  /// 用户在本次会话中调整过的音量，切换剧集时沿用
+  double? get sessionVolume => _sessionVolume;
+
+  bool get isRecoveringFromNetworkError => _tracker.hasRecentNetworkError;
+
+  /// 需要提示给用户的消息
+  Stream<String> get notices => _notices.stream;
+
+  Future<void> initialize() async {
+    try {
+      await engine.initialize();
+    } catch (e) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'Failed to initialize engine: $e',
+      );
+    }
+  }
+
+  /// 切换剧集前调用：保存当前进度并进入加载态
+  Future<void> prepareSwitch() async {
+    await _seek.awaitActive();
+    await engine.pause();
+    await _tracker.save();
+    _setStatus(const PlaybackSessionLoading(resolvingSource: true));
+  }
+
+  /// [startAt] 为加载完成后要跳转到的位置，非正数视为从头播放
+  Future<void> load(PlaybackItem item, {Duration? startAt}) async {
+    if (_disposed) return;
+    await _seek.awaitActive();
+    final generation = ++_loadGeneration;
+    _tracker
+      ..stop()
+      ..resetErrorTracking();
+    _item = item;
+    _startAt = (startAt == null || startAt <= Duration.zero) ? null : startAt;
+    _rateApplied = false;
+    _subtitleSelector.reset();
+    _currentUrl = null;
+    _filePath = null;
+    _externalSubtitles = const [];
+    _setStatus(const PlaybackSessionLoading(resolvingSource: true));
+
+    try {
+      final resolved = await _resolver.resolve(item);
+      if (_isStale(generation)) return;
+      _currentUrl = resolved.source.url;
+      _filePath = resolved.filePath;
+      _setStatus(const PlaybackSessionLoading(resolvingSource: false));
+
+      await engine.open(resolved.source);
+      if (_isStale(generation)) return;
+      final volume = _sessionVolume;
+      if (volume != null) await engine.setVolume(volume);
+      if (_isStale(generation)) return;
+
+      _tracker.start(item);
+      if (resolved.source.isLocalFile) {
+        _notify('正在使用本地缓存播放');
+      } else {
+        unawaited(_loadExternalSubtitles(resolved, generation));
+      }
+      _setStatus(const PlaybackSessionReady());
+    } on PlaybackSourceUnavailable catch (e) {
+      if (!_isStale(generation)) _setStatus(PlaybackSessionFailed('$e'));
+    } catch (e) {
+      if (_isStale(generation)) return;
+      _setStatus(
+        PlaybackSessionFailed('加载失败: $e\n\n播放地址: ${_currentUrl ?? "未知"}'),
+      );
+    }
+  }
+
+  /// 重新加载当前项目；尚未生效的起播位置会保留
+  Future<void> reload() async {
+    final item = _item;
+    if (item == null) return;
+    await load(item, startAt: _startAt);
+  }
+
+  /// 页面层的前置校验失败时调用
+  void fail(String message) => _setStatus(PlaybackSessionFailed(message));
+
+  /// 用户发起的 seek，会取消尚未生效的起播位置
+  Future<void> seek(Duration position) {
+    _startAt = null;
+    return _seek.seek(position);
+  }
+
+  Future<void> awaitActiveSeek() => _seek.awaitActive();
+
+  Future<void> selectExternalSubtitle(SubtitleInfo subtitle) async {
+    try {
+      final text = await _resolver.fetchSubtitleText(subtitle);
+      if (text == null || _disposed) return;
+      await engine.addExternalSubtitle(
+        ExternalSubtitle.data(text, title: subtitle.displayName),
+      );
+    } catch (e) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'Failed to load subtitle: $e',
+      );
+    }
+  }
+
+  void rememberRate(double rate) => _sessionRate = rate;
+
+  void rememberVolume(double volume) => _sessionVolume = volume;
+
+  /// 退出播放页前调用：等待 seek 结束、暂停并保存进度
+  Future<void> prepareExit() async {
+    await _seek.awaitActive();
+    await engine.pause();
+    await _tracker.save();
+  }
+
+  @override
+  void dispose() {
+    if (_disposed) return;
+    _disposed = true;
+    _tracker.stop();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _tracker.saveSync();
+    _resolver.dispose();
+    unawaited(engine.dispose());
+    _notices.close();
+    super.dispose();
+  }
+
+  void _bindEngine() {
+    final streams = engine.streams;
+    _subscriptions
+      ..add(streams.errors.listen(_onError))
+      ..add(
+        streams.position.listen((position) {
+          if (!_disposed) _tracker.onPosition(position);
+        }),
+      )
+      ..add(streams.duration.listen(_onDuration))
+      ..add(streams.completed.listen(_onCompleted))
+      ..add(streams.tracks.listen(_onTracks));
+  }
+
+  void _onError(PlaybackError error) {
+    if (_disposed) return;
+    LogService.instance.error(
+      'PlaybackSession',
+      '${engine.kind.label} error: $error, url: $_currentUrl',
+    );
+    // 过滤非致命的网络/IO错误，这些通常是临时性问题不影响播放
+    if (error.kind == PlaybackErrorKind.audioOutput) return;
+    if (error.recoverable) {
+      _tracker.markNetworkError();
+      return;
+    }
+    _setStatus(
+      PlaybackSessionFailed(
+        '${engine.kind.label} 错误: $error\n\n播放地址: ${_currentUrl ?? "未知"}',
+      ),
+    );
+  }
+
+  /// 时长就绪后应用倍速（每次加载都需要重新设置）并跳转到起播位置
+  void _onDuration(Duration duration) {
+    if (_disposed || duration.inSeconds <= 0) return;
+    if (!_rateApplied) {
+      _rateApplied = true;
+      engine.setRate(_sessionRate ?? _defaultRate());
+    }
+    final target = _startAt;
+    LogService.instance.debug(
+      'PlaybackSession',
+      'duration=${duration.inSeconds}s, startAt=${target?.inSeconds}',
+    );
+    if (target == null) return;
+    _startAt = null;
+    _tracker.markControlledSeek(target);
+    engine.seek(target);
+  }
+
+  void _onCompleted(bool completed) {
+    if (_disposed || !completed) return;
+    if (_tracker.isSuspiciousCompletion()) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'Ignored suspicious completed after network error',
+      );
+      return;
+    }
+    unawaited(_tracker.save(fromCompleted: true));
+  }
+
+  void _onTracks(MediaTracks tracks) {
+    if (_disposed || tracks.subtitle.isEmpty) return;
+    final track = _subtitleSelector.takeEmbedded(tracks.subtitle);
+    if (track == null) return;
+    engine.selectSubtitleTrack(track);
+    _notify('已自动选择内嵌字幕: ${track.title ?? track.language ?? track.id}');
+  }
+
+  Future<void> _loadExternalSubtitles(
+    ResolvedPlayback resolved,
+    int generation,
+  ) async {
+    final storageId = resolved.storageId;
+    final filePath = resolved.filePath;
+    if (storageId == null || filePath == null) return;
+    try {
+      final subtitles = await _sourceGateway.listSubtitles(
+        storageId: storageId,
+        filePath: filePath,
+      );
+      if (_isStale(generation)) return;
+      _externalSubtitles = subtitles;
+      notifyListeners();
+
+      final best = _subtitleSelector.bestExternal(subtitles);
+      if (best == null) return;
+      await selectExternalSubtitle(best);
+      if (_isStale(generation)) return;
+      _subtitleSelector.markDone();
+      _notify('已自动加载字幕: ${best.displayName}');
+    } catch (e) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'Failed to load external subtitles: $e',
+      );
+    }
+  }
+
+  bool _isStale(int generation) => _disposed || generation != _loadGeneration;
+
+  void _setStatus(PlaybackSessionStatus status) {
+    if (_disposed) return;
+    _status = status;
+    notifyListeners();
+  }
+
+  void _notify(String message) {
+    if (!_disposed) _notices.add(message);
+  }
+}

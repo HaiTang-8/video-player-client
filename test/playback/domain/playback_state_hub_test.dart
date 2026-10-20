@@ -37,6 +37,25 @@ void main() {
     expect(events, hasLength(1));
   });
 
+  test('reset lets the next media re-emit the same duration', () async {
+    final hub = PlaybackStateHub();
+    final durations = <Duration>[];
+    hub.streams.duration.listen(durations.add);
+    const selected = SelectedTracks(subtitleOff: true);
+
+    hub.update(duration: const Duration(minutes: 90), selectedTracks: selected);
+    hub.resetForNewMedia();
+    hub.update(duration: const Duration(minutes: 90));
+    await pumpEventQueue();
+
+    expect(durations, [
+      const Duration(minutes: 90),
+      Duration.zero,
+      const Duration(minutes: 90),
+    ]);
+    expect(hub.state.selectedTracks, selected);
+  });
+
   test('stops emitting after close', () async {
     final hub = PlaybackStateHub();
     var done = false;

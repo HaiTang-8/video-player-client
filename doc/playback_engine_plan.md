@@ -332,6 +332,19 @@ final class EngineDecision {
 
 `PlaybackSession` 的生命周期跟随 `PlayerScreen`。引擎切换（回退）时会话发出 `engineChanged`，UI 用新引擎的 `buildVideoView` 重建画面，并从原位置继续播放。
 
+**实际实现（Stage 1.5，2026-10-21）**：
+
+- `PlaybackItem`（sealed：`MoviePlaybackItem` / `EpisodePlaybackItem`）是会话层的业务对象，由页面算好后交给 `session.load(item, startAt:)`。
+- 数据访问收敛为两个接口（`session/playback_gateways.dart`）：
+  - `PlaybackSourceGateway`：服务器地址、token、下载记录、流地址、存储信息、外挂字幕列表。
+  - `WatchProgressGateway`：进度的上报和本地发布。
+  - 页面通过 `RiverpodPlaybackGateway(ref)` 实现这两个接口；测试使用 `test/playback/fakes/` 下的假实现。
+- 会话通过 `ChangeNotifier` 暴露 `status`（`PlaybackSessionLoading` / `Ready` / `Failed`）、`currentUrl`、`filePath`、`externalSubtitles`；Toast 文案走 `notices` 流。界面渲染始终由页面负责。
+- 留在页面的逻辑：剧集列表与选集、“已观看 >90% 是否播下一集”的确认弹窗、读取剧集历史进度、全屏。
+- 切换剧集的顺序：`session.prepareSwitch()`（等待 seek 结束 → 暂停 → 保存进度 → 进入加载态）→ 页面更新选集并读取该集进度 → `session.load()`。
+- 起播位置在“时长就绪”事件中生效，用户 seek 会取消它；`reload()`（重试）会保留尚未生效的起播位置。
+- 引擎在 `open()` 前调用 `PlaybackStateHub.resetForNewMedia()`。原因：hub 会对相同的值去重，如果不重置，重新打开同一个媒体（时长相同）时“时长就绪”事件会被吞掉。
+
 ### 4.6 原生跨语言契约（Pigeon，Apple 与 Android 共用）
 
 ```dart
@@ -662,6 +675,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 1.1–1.2 领域层 | 完成 | 提交 `c1f1f18`。接口相比 §4.4 草案的变化：`EngineCapabilities` 只保留 `dolbyVisionColor` 和 `maxVolume`（其余能力等接入对应引擎时再加）；`selectSubtitleTrack(null)` 表示关闭字幕；`addExternalSubtitle` 会加载并选中字幕；暂不定义 `VideoTrackInfo` / `MediaHints` |
 | 2026-10-21 | Stage 1.3–1.4 mpv 引擎与选择层 | 完成 | 提交 `72697ec`。`SelectedTracks` 新增 `subtitleOff`，用来区分 mpv 的“自动选择”和“关闭”；以文本加载的外挂字幕使用 `external:<标题>` 作为稳定 id |
 | 2026-10-21 | Stage 1.6 控制层切换 | 完成，待真机回归 | `CustomVideoControls` 和 `PlayerScreen` 不再依赖 media_kit，`PlayerScreen` 暂时直接持有引擎。可见变化：音轨、字幕菜单不再显示 mpv 的 “auto” 伪轨道；错误页标题由 “MPV错误” 改为 “mpv 错误” |
+| 2026-10-21 | Stage 1.5 会话层拆分 | 完成，待真机回归 | `PlayerScreen` 从 1413 行减到 577 行，逻辑迁入 `lib/playback/session/`；全量 66 个测试通过。用户要求继续推进，1.6 与 1.5 合并到 Stage 1 结束后统一做真机回归。相对原逻辑的差异：① 重试会保留尚未生效的起播位置（原来剧集续播加载失败后，重试会从头播放）；② 地址解析完成后，加载提示会正确切换为“正在加载视频”；③ 加载期间暂停进度定时保存，避免把上一集的位置记到新一集上 |
 
 ---
 
