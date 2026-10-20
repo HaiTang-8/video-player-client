@@ -1,0 +1,58 @@
+import 'media_track.dart';
+import 'playback_error.dart';
+import 'video_info.dart';
+
+/// 引擎状态快照；音量 1.0 = 100%
+class PlaybackSnapshot {
+  final Duration position;
+  final Duration duration;
+  final bool playing;
+  final bool buffering;
+  final bool completed;
+  final double rate;
+  final double volume;
+  final MediaTracks tracks;
+  final SelectedTracks selectedTracks;
+  final VideoInfo videoInfo;
+
+  const PlaybackSnapshot({
+    this.position = Duration.zero,
+    this.duration = Duration.zero,
+    this.playing = false,
+    this.buffering = false,
+    this.completed = false,
+    this.rate = 1.0,
+    this.volume = 1.0,
+    this.tracks = const MediaTracks(),
+    this.selectedTracks = const SelectedTracks(),
+    this.videoInfo = const VideoInfo(),
+  });
+}
+
+class PlaybackStreams {
+  final Stream<Duration> position;
+  final Stream<Duration> duration;
+  final Stream<bool> playing;
+  final Stream<bool> buffering;
+  final Stream<bool> completed;
+  final Stream<double> rate;
+  final Stream<double> volume;
+  final Stream<MediaTracks> tracks;
+  final Stream<SelectedTracks> selectedTracks;
+  final Stream<VideoInfo> videoInfo;
+  final Stream<PlaybackError> errors;
+
+  const PlaybackStreams({
+    required this.position,
+    required this.duration,
+    required this.playing,
+    required this.buffering,
+    required this.completed,
+    required this.rate,
+    required this.volume,
+    required this.tracks,
+    required this.selectedTracks,
+    required this.videoInfo,
+    required this.errors,
+  });
+}
