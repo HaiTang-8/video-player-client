@@ -56,20 +56,22 @@ class MediaTracks {
       Object.hash(Object.hashAll(audio), Object.hashAll(subtitle));
 }
 
-/// 当前选中的轨道；subtitle 为 null 表示字幕关闭
+/// 当前选中的轨道；subtitle 为 null 且 [subtitleOff] 为 false 时表示由引擎自动选择
 @immutable
 class SelectedTracks {
   final AudioTrackInfo? audio;
   final SubtitleTrackInfo? subtitle;
+  final bool subtitleOff;
 
-  const SelectedTracks({this.audio, this.subtitle});
+  const SelectedTracks({this.audio, this.subtitle, this.subtitleOff = false});
 
   @override
   bool operator ==(Object other) =>
       other is SelectedTracks &&
       other.audio == audio &&
-      other.subtitle == subtitle;
+      other.subtitle == subtitle &&
+      other.subtitleOff == subtitleOff;
 
   @override
-  int get hashCode => Object.hash(audio, subtitle);
+  int get hashCode => Object.hash(audio, subtitle, subtitleOff);
 }

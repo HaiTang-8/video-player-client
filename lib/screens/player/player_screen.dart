@@ -21,7 +21,7 @@ import '../../data/services/download_service.dart';
 import '../../data/services/log_service.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
-import 'speed_frame_limiter.dart';
+import '../../playback/engines/mpv/speed_frame_limiter.dart';
 import 'widgets/custom_video_controls.dart';
 
 /// 视频播放器页面

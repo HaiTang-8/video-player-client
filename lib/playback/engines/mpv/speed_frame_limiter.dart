@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:media_kit/media_kit.dart';
 
-import '../../data/services/log_service.dart';
+import '../../../data/services/log_service.dart';
 
 /// 倍速播放时均匀抽帧，使输出帧率不超过刷新率（高刷屏为刷新率的一半），
 /// 让每帧占用固定数量的 vsync，避免出帧时钟与屏幕 vsync 不同步导致的顿挫。

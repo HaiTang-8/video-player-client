@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:media_player/screens/player/speed_frame_limiter.dart';
+import 'package:media_player/playback/engines/mpv/speed_frame_limiter.dart';
 
 double? target(double fps, double rate, double refresh) =>
     SpeedFrameLimiter.targetSourceFps(
