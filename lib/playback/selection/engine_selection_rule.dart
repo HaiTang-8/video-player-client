@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../domain/playback_domain.dart';
 import 'platform_environment.dart';
 
@@ -24,6 +26,22 @@ class EngineDecision {
 abstract interface class EngineSelectionRule {
   /// 返回 null 表示交给下一条规则
   EngineDecision? evaluate(EngineSelectionContext context);
+}
+
+/// iOS / macOS 只打包 AetherEngine（两套 FFmpeg 不能共存），没有 mpv 兜底
+class AppleAetherRule implements EngineSelectionRule {
+  const AppleAetherRule();
+
+  @override
+  EngineDecision? evaluate(EngineSelectionContext context) {
+    final platform = context.environment.platform;
+    if (platform != TargetPlatform.iOS && platform != TargetPlatform.macOS) {
+      return null;
+    }
+    return const EngineDecision([
+      PlaybackEngineKind.aether,
+    ], 'Apple 平台使用 AetherEngine');
+  }
 }
 
 class DefaultMpvTextureRule implements EngineSelectionRule {

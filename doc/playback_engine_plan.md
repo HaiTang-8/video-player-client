@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1、Stage 3 已完成（Stage 1 待真机回归）；下一步 Stage 4（需要 Xcode 26.2+），Stage 2（Windows）推后**
+> 状态：**Stage 1、Stage 3 完成；Stage 4 第一批（4.1–4.4、4.6、4.8）完成，待真机验证；下一步第二批 4.5 字幕，之后 4.7 / 4.9；Stage 2（Windows）推后**
 > 最后更新：2026-10-13
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -549,8 +549,8 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 3；**D1 必须先决策**。
 
-- [ ] 4.0 前置：本机和发布 CI 都切换到 **Xcode 26.2 及以上**（本机已装 `/Applications/Xcode-26.3.app`，用法见 §3.2）。AetherEngine 自 2026-05 起调用了 iOS 26.2 SDK 的 API，并要求 Swift 6.2；作者 CI 只在 Xcode 27 上测试（7.38.1 才修复了 Xcode 26 下 Release 编译失败）。
-- [ ] 4.0 Spike：
+- [ ] 4.0 前置（本机已完成，发布 CI 待 4.9）：本机和发布 CI 都切换到 **Xcode 26.2 及以上**（本机已装 `/Applications/Xcode-26.3.app`，用法见 §3.2）。AetherEngine 自 2026-05 起调用了 iOS 26.2 SDK 的 API，并要求 Swift 6.2；作者 CI 只在 Xcode 27 上测试（7.38.1 才修复了 Xcode 26 下 Release 编译失败）。
+- [x] 4.0 Spike（结论见 §12，锁定 AetherEngine 7.22.2）：
   - (a) 在项目固定的 Flutter 版本（`.fvmrc`）上让插件通过 SPM 引入 AetherEngine（需要开启 Flutter 的 SPM 支持；如果当前版本不支持，评估是否升级 FVM 版本）。
   - (b) 确认与 media_kit libmpv 的 FFmpeg 冲突，确定 Apple 端去掉 libmpv 的方式。
   - (c) 在 iPhone 16 Pro Max 和一台 Mac 上验证 DV P5 / P8.1 / HDR10。
@@ -561,7 +561,7 @@ abstract class NativePlayerEventApi {
 - [ ] 4.5 字幕渲染（按 D7）：AetherEngine 只发布 `subtitleCues`，绘制由宿主负责，要覆盖文本 cue（样式与 `placement`）、PGS 图片 cue、外挂 ASS / SRT；选 B 时开启 `preserveASSMarkup` 并接入 libass 渲染器，字体使用 `fontAttachments`。
 - [x] 4.6 HDR / DV：iOS 自动开启 EDR。macOS 上不声明 `panelPresentsDolbyVision`，Profile 5 颜色也是正确的（作者在 16 寸 XDR 上实测），只是标签会显示为 HDR10，所以媒体信息里的动态范围以探测结果为准。
 - [ ] 4.7 平台行为：iOS 全屏和横竖屏沿用现有方向通道；macOS 窗口和全屏沿用 `WindowControls`；确认 Flutter 控制层在 PlatformView 上方的手势正常。
-- [ ] 4.8 选择规则加入第 2 条。
+- [x] 4.8 选择规则加入第 2 条。
 
 **验收**：在 iPhone 16 Pro Max 上 DV P5 / P7 / P8.1 颜色正确且以 HDR 显示，HDR10 为真 HDR；macOS 同理；§10 全部通过。
 
@@ -697,6 +697,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | 决策：Apple 内核 | 完成 | 用户确认使用 **AetherEngine 7.22.2**（临时锁定，正式发布前升级 macOS 26 + Xcode 27 并换成最新版）；第一批先做 4.1–4.4、4.6、4.8（目标颜色正确，Apple 端暂不显示字幕），第二批做 4.5 字幕。最低系统版本 iOS 18 / macOS 15 |
 | 2026-10-21 | Stage 4.1 依赖调整 | 完成 | `media_kit_libs_video` 换成按平台引入的 android / windows / linux 包，iOS / macOS 的 `media_kit_video` 自动改用 stub；`main.dart` 在 iOS / macOS 跳过 `MediaKit.ensureInitialized()`；App 最低系统版本提到 iOS 18 / macOS 15（灵动岛扩展保持 16.2）；插件锁定 AetherEngine 7.22.2（libass 推迟到 4.5 再加）；提交 Xcode 生成的 `Package.resolved`。清理构建目录后，iOS / macOS 包内只剩 AetherEngine 一套 FFmpeg |
 | 2026-10-21 | Stage 4.2–4.4、4.6 AetherEngine 后端 | 完成 | `AetherPlayerBackend.swift`：`load(url:options:)` 透传请求头和 autoplay；状态通过 Combine 转成事件（位置 250ms 节流；buffering = `isBuffering` 或 loading；打开期间的错误只由 open 回调返回，不重复发事件）；轨道 id 为 `TrackInfo.id`；外挂字幕写临时文件后 `addExternalSubtitleTrack` 并选中，销毁时清理；`videoGravity` 实现铺满 / 保持比例；`VideoInfo` 按片源格式（`sourceVideoFormat` + `sourceDVProfile`）上报，实际输出格式放在媒体信息“输出格式”；错误按 `PlaybackErrorInfo.kind` 映射。宿主、后端协议、PlatformView 工厂限定在主线程（`@MainActor` + `@preconcurrency` 协议遵循）。`NativeVideoView` 包了 `IgnorePointer`，手势全部交给 Flutter 控制层。HDR：iOS 由 AVPlayerLayer 自动开启 EDR，没有额外代码。集成测试改为真实播放：用 `--dart-define=NATIVE_PLAYER_SAMPLE=<本地文件>` 传入样片；在 iOS 26.3 模拟器上用 ffmpeg 生成的 HDR10 HEVC MKV（AAC 音轨 + SRT 字幕）通过（时长、播放、进度、HDR10 识别、轨道、seek、倍速截断到 2.0、音量） |
+| 2026-10-21 | Stage 4.8 内核选择 | 完成（第一批结束），待真机验证 | 新增 `AppleAetherRule`：iOS / macOS → `[aether]`，没有 mpv 兜底；其他平台仍走 `DefaultMpvTextureRule`。新增端到端集成测试 `integration_test/playback_session_native_test.dart`（真实选择器 + 工厂 + 会话，本地样片）：起播位置、倍速截断、HDR10 识别、内嵌中文字幕自动选择、本地缓存提示、退出保存进度全部通过（iOS 26.3 模拟器）；模拟器截图确认画面正常渲染在 PlatformView 中。macOS 本轮未跑集成测试（用户开着调试版 App）。**第一批已知限制**：Apple 端字幕不显示（4.5）；起播位置通过“时长就绪后 seek”实现，开头会先从 0 播一瞬间，以后可在契约里加 startPosition 交给 `load(startPosition:)` |
 
 ---
 

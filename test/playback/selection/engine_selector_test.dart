@@ -50,6 +50,27 @@ void main() {
     expect(decision.candidates, [PlaybackEngineKind.mpvTexture]);
   });
 
+  test('Apple platforms use AetherEngine without mpv fallback', () {
+    const appSelector = EngineSelector([
+      AppleAetherRule(),
+      DefaultMpvTextureRule(),
+    ]);
+    for (final platform in [TargetPlatform.iOS, TargetPlatform.macOS]) {
+      expect(appSelector.select(context(platform)).candidates, [
+        PlaybackEngineKind.aether,
+      ]);
+    }
+    for (final platform in [
+      TargetPlatform.android,
+      TargetPlatform.windows,
+      TargetPlatform.linux,
+    ]) {
+      expect(appSelector.select(context(platform)).candidates, [
+        PlaybackEngineKind.mpvTexture,
+      ]);
+    }
+  });
+
   test('returns empty decision when every candidate failed', () {
     final decision = selector.select(
       context(TargetPlatform.windows, failed: {PlaybackEngineKind.mpvTexture}),

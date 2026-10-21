@@ -13,7 +13,7 @@ final platformEnvironmentProvider = Provider<PlatformEnvironment>(
 );
 
 final engineSelectorProvider = Provider<EngineSelector>(
-  (ref) => const EngineSelector([DefaultMpvTextureRule()]),
+  (ref) => const EngineSelector([AppleAetherRule(), DefaultMpvTextureRule()]),
 );
 
 final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
