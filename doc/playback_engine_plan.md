@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1 已完成，待真机回归**（Stage 0.1 设备基线已跳过；下一步按主力平台选择 Stage 2 或 Stage 3+4）
+> 状态：**Stage 1 已完成，待真机回归；下一步 Stage 3 + 4（Apple 优先），Stage 2（Windows）推后**
 > 最后更新：2026-10-13
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -548,6 +548,7 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 3；**D1 必须先决策**。
 
+- [ ] 4.0 前置：本机和发布 CI 都切换到 **Xcode 26.2 及以上**。AetherEngine 自 2026-05 起调用了 iOS 26.2 SDK 的 API，并要求 Swift 6.2；作者 CI 只在 Xcode 27 上测试（7.38.1 才修复了 Xcode 26 下 Release 编译失败）。
 - [ ] 4.0 Spike：
   - (a) 在项目固定的 Flutter 版本（`.fvmrc`）上让插件通过 SPM 引入 AetherEngine（需要开启 Flutter 的 SPM 支持；如果当前版本不支持，评估是否升级 FVM 版本）。
   - (b) 确认与 media_kit libmpv 的 FFmpeg 冲突，确定 Apple 端去掉 libmpv 的方式。
@@ -597,7 +598,7 @@ abstract class NativePlayerEventApi {
 | ID | 问题 | 选项 | 建议 | 影响阶段 | 结论 |
 |---|---|---|---|---|---|
 | D1 | Apple 最低系统版本：AetherEngine 自 2026-09-16（提交 `852b6a0`）起要求 iOS 18 / macOS 15，项目目前是 iOS 13.4 / macOS 10.15 | A. 提升到 iOS 18 / macOS 15，Apple 上只用 AetherEngine；B. 保留低版本，低版本继续用 media_kit（需要先验证两套 FFmpeg 能否共存，风险高） | A | 4 | **A（2026-10-13 用户确认）**。在 Stage 4.1 提升版本，之前保持现状；锁定 AetherEngine 最新的精确版本。后果：Apple 上没有 mpv 兜底，AetherEngine 打不开的片源直接报错 |
-| D2 | 原生代码放在哪里 | A. 本地插件 `packages/native_player`；B. 直接写在各平台 Runner 里 | A（封装好、边界清晰）；SPM 或窗口消息受阻时，单个平台可以退回 B | 2, 3 | 待定。注意：AetherEngine 只支持 SPM，Apple 端选 A 时需要为整个项目开启 Flutter 的 SPM 集成（会改变所有插件在 iOS / macOS 上的集成方式，由 4.0 Spike 验证）；选 B 时可以在 Runner 的 Xcode 工程里直接添加 SPM 包，和 CocoaPods 共存 |
+| D2 | 原生代码放在哪里 | A. 本地插件 `packages/native_player`；B. 直接写在各平台 Runner 里 | A（封装好、边界清晰）；SPM 或窗口消息受阻时，单个平台可以退回 B | 2, 3 | **以插件为主（2026-10-21 用户确认）**：Pigeon 契约、Dart 侧、Android、Windows 放本地插件 `packages/native_player`；Apple 端先在 Stage 4.0 Spike 开启 Flutter SPM 并完整构建 iOS / macOS（重点确认不支持 SPM 的 `open_filex`、`auto_updater`、`screen_brightness_macos` 能否回退到 CocoaPods），通过则放进插件，不通过则 Apple 原生代码改放 Runner |
 | D3 | Android 音频扩展 | A. 自行构建 LGPL 版 Media3 FFmpeg 扩展；B. 使用现成的 GPL 构建（会传染 GPL，不建议）；C. 不支持的音频回退到 mpv | A，C 作为兜底 | 5 | 待定 |
 | D4 | 是否做 Stage 6 | 做 / 不做 | 看无 DV 解码器机型的用户占比再定 | 6 | 待定 |
 | D5 | 后端是否新增媒体技术信息探测（ffprobe：动态范围、DV profile、音频编码） | 做（独立后端任务）/ 不做 | 暂不做；先靠客户端运行时检测和回退。以后用于提前选择引擎和在详情页展示 HDR 标识 | — | 待定 |
@@ -656,6 +657,8 @@ abstract class NativePlayerEventApi {
 | 会话层重构引入回归 | Stage 1 小步提交，每步跑 §10；先补测试再迁移逻辑 |
 | Apple 上两套 FFmpeg 符号冲突导致崩溃 | 按 D1 在 Apple 上完全去掉 libmpv；4.0 先做 Spike |
 | AetherEngine 单人维护、发版频繁 | 锁定精确版本；升级前看 CHANGELOG；契约层隔离，必要时可以替换 |
+| AetherEngine 要求 Xcode 26.2+，作者 CI 只跑 Xcode 27 | 本机并行安装 Xcode 26.x；锁定版本前先在本机用 Release 配置编译一次 |
+| 参考实现 Moonfin 是 GPL-2.0 | 只参考思路，不复制代码；字幕叠加层、桥接代码全部自行实现 |
 | Windows DWM 透明合成与驱动、系统版本的兼容性 | 保留子窗口在上方的备选摆法；失败时回退到纹理引擎 |
 | Android Hybrid Composition 的性能和手势问题 | 5.2 专项验证；问题严重时允许用户切兼容模式 |
 | 各引擎字幕样式不一致 | 记为已知限制；后续可以统一字幕样式配置 |
@@ -680,6 +683,10 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 1.5 会话层拆分 | 完成，待真机回归 | `PlayerScreen` 从 1413 行减到 577 行，逻辑迁入 `lib/playback/session/`；全量 66 个测试通过。用户要求继续推进，1.6 与 1.5 合并到 Stage 1 结束后统一做真机回归。相对原逻辑的差异：① 重试会保留尚未生效的起播位置（原来剧集续播加载失败后，重试会从头播放）；② 地址解析完成后，加载提示会正确切换为“正在加载视频”；③ 加载期间暂停进度定时保存，避免把上一集的位置记到新一集上 |
 | 2026-10-21 | Stage 1.8 杜比视界提示 | 完成，待真机回归 | mpv 日志级别改为 `v`；`DolbyVisionLogDetector` 加上解码器色彩参数推断填充 `VideoInfo`；识别到 P5 时在顶部提示 6 秒（每次加载一次）；媒体信息新增“动态范围”“播放内核”。注意：推断 P5 依赖 `video-dec-params`，信号 A（容器配置记录）仍缺少规范样片验证 |
 | 2026-10-21 | Stage 1 收尾 | 完成 | §6 第 3 条的两条依赖自查为空；全量 72 个测试通过；`flutter analyze` 无问题。待用户按 §10 做真机回归 |
+| 2026-10-21 | 决策 D2 | 完成 | 以插件为主，Apple 端视 Stage 4.0 Spike 结果决定；下一步做 Stage 2（Windows） |
+| 2026-10-21 | 优先级调整 | 完成 | 用户决定 Windows 推后测试，先做 iOS / macOS（Stage 3 + 4）。检索发现：本机 Xcode 16.3 无法编译 AetherEngine（需 Xcode 26.2+ / Swift 6.2）；Flutter 3.38 可以用 pubspec 的 `flutter: config: enable-swift-package-manager: true` 只对本项目开启 SPM；视频倍速上限 2.0（现有菜单有 3.0） |
+| 2026-10-21 | 决策 | 完成 | 用户同意：并行安装 Xcode 26.x；Apple 端倍速上限 2.0（隐藏 3.0 档，长按倍速设置为 3.0 时按 2.0 执行）；libass 使用 `mpvkit/libass-build` 的 SPM 包并锁定精确版本 |
+| 2026-10-21 | Stage 3.1 开启 SPM | 完成 | pubspec 中设置 `enable-swift-package-manager: true`（只对本项目生效）。Xcode 16.3 下 macOS 和 iOS 模拟器版都编译通过；支持 SPM 的插件改走 SPM，`open_filex`、`auto_updater`、`screen_brightness_macos` 和 media_kit 各包继续走 CocoaPods；模拟器冒烟测试 20 秒无崩溃、无插件缺失。D2 的 Apple 端 Spike 前半段通过 |
 
 ---
 

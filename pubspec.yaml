@@ -119,6 +119,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # AetherEngine 只支持 Swift Package Manager，本项目单独开启
+  config:
+    enable-swift-package-manager: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
