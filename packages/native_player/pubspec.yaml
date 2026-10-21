@@ -1,0 +1,28 @@
+name: native_player
+description: 播放内核的原生实现（AetherEngine / Media3 / Windows 原生视频窗口），以 Pigeon 契约与 Dart 交互。
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  pigeon: 27.3.0
+
+flutter:
+  plugin:
+    platforms:
+      ios:
+        pluginClass: NativePlayerPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: NativePlayerPlugin
+        sharedDarwinSource: true

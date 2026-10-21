@@ -55,6 +55,10 @@ dependencies:
   media_kit_video: ^2.0.1
   media_kit_libs_video: ^1.0.7
 
+  # 播放内核的原生实现
+  native_player:
+    path: packages/native_player
+
   # 图片缓存
   cached_network_image: ^3.3.1
 
