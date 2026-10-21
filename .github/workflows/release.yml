@@ -40,7 +40,11 @@ jobs:
           flutter doctor -v
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-      - run: flutter pub get
+      # lockfile 在本地用镜像 pub.flutter-io.cn 生成；换回 pub.dev 后才会严格按 lockfile 安装（包内容和 sha256 一致）
+      - name: Use pub.dev in lockfile
+        shell: bash
+        run: sed -i.bak 's#https://pub.flutter-io.cn#https://pub.dev#g' pubspec.lock && rm pubspec.lock.bak
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build windows --release --build-name=${{ needs.version.outputs.value }}
       - name: Install Inno Setup
         run: choco install innosetup -y
@@ -77,7 +81,11 @@ jobs:
         with:
           flutter-version-file: .fvmrc
           channel: 'stable'
-      - run: flutter pub get
+      # lockfile 在本地用镜像 pub.flutter-io.cn 生成；换回 pub.dev 后才会严格按 lockfile 安装（包内容和 sha256 一致）
+      - name: Use pub.dev in lockfile
+        shell: bash
+        run: sed -i.bak 's#https://pub.flutter-io.cn#https://pub.dev#g' pubspec.lock && rm pubspec.lock.bak
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build macos --release --build-name=${{ needs.version.outputs.value }}
       - name: Create DMG
         run: |
@@ -157,7 +165,11 @@ jobs:
           restore-keys: |
             media-kit-android-
 
-      - run: flutter pub get
+      # lockfile 在本地用镜像 pub.flutter-io.cn 生成；换回 pub.dev 后才会严格按 lockfile 安装（包内容和 sha256 一致）
+      - name: Use pub.dev in lockfile
+        shell: bash
+        run: sed -i.bak 's#https://pub.flutter-io.cn#https://pub.dev#g' pubspec.lock && rm pubspec.lock.bak
+      - run: flutter pub get --enforce-lockfile
 
       - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-name=${{ needs.version.outputs.value }}
 
@@ -186,7 +198,11 @@ jobs:
         with:
           flutter-version-file: .fvmrc
           channel: 'stable'
-      - run: flutter pub get
+      # lockfile 在本地用镜像 pub.flutter-io.cn 生成；换回 pub.dev 后才会严格按 lockfile 安装（包内容和 sha256 一致）
+      - name: Use pub.dev in lockfile
+        shell: bash
+        run: sed -i.bak 's#https://pub.flutter-io.cn#https://pub.dev#g' pubspec.lock && rm pubspec.lock.bak
+      - run: flutter pub get --enforce-lockfile
       - run: flutter build ios --release --no-codesign --build-name=${{ needs.version.outputs.value }}
       - name: Create IPA
         run: |
