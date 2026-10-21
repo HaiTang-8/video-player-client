@@ -9,7 +9,7 @@ class AppDelegate: FlutterAppDelegate {
     )
     if runningApps.count > 1 {
       for app in runningApps where app != NSRunningApplication.current {
-        app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+        app.activate(from: .current, options: [.activateAllWindows])
       }
       NSApp.terminate(nil)
     }

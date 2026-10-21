@@ -3,6 +3,10 @@ import AetherEngine
 import Combine
 import Foundation
 
+#if os(iOS)
+import UIKit
+#endif
+
 extension PlayerBackendFactory {
   /// 视频播放倍速上限 2.0（AetherEngine `maxSupportedRate`），音量上限 100%
   static let aether = PlayerBackendFactory(
@@ -20,6 +24,13 @@ final class AetherPlayerBackend: PlayerBackend {
   private let subtitles: SubtitleOverlayView
   private let events: PlayerEventSink
   private var subscriptions: Set<AnyCancellable> = []
+  private var lifecycleObservers: [NSObjectProtocol] = []
+  private var hasSource = false
+  private var backgrounded = false
+  private var lastPositionMs: Int64 = 0
+  /// 后台拆除和重建后引擎时钟会归零（软解路径暂停时一直为 0），恢复播放前沿用进入后台时的位置，
+  /// 避免界面显示 0、进度被保存为 0；用户 seek 或打开新片源时放弃
+  private var heldPositionMs: Int64?
   private var subtitleFiles: [URL] = []
   /// 打开期间的错误由 open 的回调返回，不再重复发事件
   private var opening = false
@@ -35,6 +46,11 @@ final class AetherPlayerBackend: PlayerBackend {
     container.embedFilling(playerView)
     container.embedFilling(subtitles)
     bindEngine()
+    #if os(iOS)
+    // App 没有后台音频，退到后台即停播
+    engine.backgroundPlaybackEnabled = false
+    bindLifecycle()
+    #endif
   }
 
   func open(_ source: NativeSource, autoPlay: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
@@ -48,13 +64,16 @@ final class AetherPlayerBackend: PlayerBackend {
     // ASS 由 libass 渲染，需要原始事件行
     options.preserveASSMarkup = true
     opening = true
+    hasSource = false
+    heldPositionMs = nil
     Task { @MainActor in
       defer { self.opening = false }
       do {
         _ = try await self.engine.load(url: url, options: options)
+        self.hasSource = true
         completion(.success(()))
       } catch {
-        let message = self.engine.errorInfo?.message ?? error.localizedDescription
+        let message = self.failureMessage(error.localizedDescription)
         completion(.failure(PigeonError(code: "open_failed", message: message, details: nil)))
       }
     }
@@ -67,6 +86,7 @@ final class AetherPlayerBackend: PlayerBackend {
   func playOrPause() { engine.togglePlayPause() }
 
   func seek(toMs positionMs: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
+    heldPositionMs = nil
     Task { @MainActor in
       await self.engine.seek(to: Double(positionMs) / 1000)
       completion(.success(()))
@@ -142,6 +162,8 @@ final class AetherPlayerBackend: PlayerBackend {
 
   func dispose() {
     subscriptions.removeAll()
+    for observer in lifecycleObservers { NotificationCenter.default.removeObserver(observer) }
+    lifecycleObservers.removeAll()
     subtitles.stop()
     engine.stop()
     engine.unbind(view: playerView)
@@ -153,7 +175,9 @@ final class AetherPlayerBackend: PlayerBackend {
     // AetherEngine 在主线程发布状态，这里的回调都在主线程
     engine.clock.$currentTime
       .throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)
-      .sink { [events] in events.position(ms: Self.milliseconds($0)) }
+      .sink { [weak self] time in
+        MainActor.assumeIsolated { self?.reportPosition(Self.milliseconds(time)) }
+      }
       .store(in: &subscriptions)
     engine.$duration
       .removeDuplicates()
@@ -200,7 +224,12 @@ final class AetherPlayerBackend: PlayerBackend {
       .sink { [weak self] cues in MainActor.assumeIsolated { self?.subtitles.update(cues: cues) } }
       .store(in: &subscriptions)
     engine.clock.$sourceTime
-      .sink { [weak self] time in MainActor.assumeIsolated { self?.subtitles.update(time: time) } }
+      .sink { [weak self] time in
+        MainActor.assumeIsolated {
+          guard let self, self.heldPositionMs == nil else { return }
+          self.subtitles.update(time: time)
+        }
+      }
       .store(in: &subscriptions)
     engine.$activeSubtitleTrackIndex
       .combineLatest(engine.$subtitleTracks, engine.$sidecarASSHeader)
@@ -226,12 +255,61 @@ final class AetherPlayerBackend: PlayerBackend {
       .store(in: &subscriptions)
   }
 
+  #if os(iOS)
+  private func bindLifecycle() {
+    let center = NotificationCenter.default
+    lifecycleObservers = [
+      center.addObserver(
+        forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.backgrounded = true
+          self.heldPositionMs = self.lastPositionMs
+        }
+      },
+      center.addObserver(
+        forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.resumeFromBackground() }
+      },
+    ]
+  }
+
+  /// 后台时 AetherEngine 会拆掉视频管线（播放中立即拆，暂停时宽限 15 秒），回到前台由宿主重建；
+  /// 重建后保持暂停，位置和音轨、字幕选择由引擎恢复
+  private func resumeFromBackground() {
+    guard backgrounded else { return }
+    backgrounded = false
+    guard hasSource, engine.state == .paused, !engine.isSessionReady else { return }
+    opening = true
+    Task { @MainActor in
+      defer { self.opening = false }
+      do {
+        try await self.engine.reloadAtCurrentPosition { $0.autoplay = false }
+      } catch {
+        let message = self.failureMessage(error.localizedDescription)
+        self.events.error(Self.error(message: message, info: self.engine.errorInfo))
+      }
+    }
+  }
+  #endif
+
+  private func reportPosition(_ positionMs: Int64) {
+    if heldPositionMs != nil {
+      guard !backgrounded, positionMs > 0, engine.state == .playing else { return }
+      heldPositionMs = nil
+    }
+    lastPositionMs = positionMs
+    events.position(ms: positionMs)
+  }
+
   private func handle(_ state: PlaybackState) {
     subtitles.playing = state == .playing
     events.playing(state == .playing)
     events.completed(state == .ended)
     guard case .error(let message) = state, !opening else { return }
-    events.error(Self.error(message: message, info: engine.errorInfo))
+    events.error(Self.error(message: failureMessage(message), info: engine.errorInfo))
   }
 
   private static func milliseconds(_ seconds: Double) -> Int64 {
@@ -260,6 +338,24 @@ final class AetherPlayerBackend: PlayerBackend {
     case .hlg: "HLG"
     case .dolbyVision: "杜比视界"
     }
+  }
+
+  /// 引擎的错误说明；杜比视界片源解码失败（模拟器、不支持杜比视界的旧 Mac）时换成中文提示
+  private func failureMessage(_ fallback: String) -> String {
+    let info = engine.errorInfo
+    let message = info?.message ?? fallback
+    guard let info,
+      info.kind == .dolbyVisionRequiresHardware
+        || engine.sourceVideoFormat == .dolbyVision && Self.isDecodeFailure(info)
+    else { return message }
+    let profile = engine.sourceDVProfile.map { " Profile \($0) " } ?? ""
+    return "此设备无法解码杜比视界\(profile)视频，请在支持杜比视界的 iPhone、iPad 或 Mac 上播放"
+  }
+
+  private static func isDecodeFailure(_ info: PlaybackErrorInfo) -> Bool {
+    let decodeCodes = [AVError.Code.decoderNotFound.rawValue, AVError.Code.decodeFailed.rawValue]
+    return info.kind == .nativeItemFailed && info.underlyingDomain == AVFoundationErrorDomain
+      && info.underlyingCode.map(decodeCodes.contains) == true
   }
 
   private static func error(message: String, info: PlaybackErrorInfo?) -> NativeError {
