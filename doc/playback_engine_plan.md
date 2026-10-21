@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1 已完成，待真机回归；下一步 Stage 3 + 4（Apple 优先），Stage 2（Windows）推后**
+> 状态：**Stage 1、Stage 3 已完成（Stage 1 待真机回归）；下一步 Stage 4（需要 Xcode 26.2+），Stage 2（Windows）推后**
 > 最后更新：2026-10-13
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -690,7 +690,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 3.2 插件骨架 | 完成 | `packages/native_player`：iOS / macOS 共用源码目录（`darwin/native_player/Package.swift`，Flutter 3.38 在共用源码时按这个路径查找清单）；暂时只声明 iOS 和 macOS；pigeon 固定为 27.3.0（29.x 需要 Dart 3.11，Flutter 3.38.5 自带 Dart 3.10.4）；macOS、iOS 模拟器均编译通过 |
 | 2026-10-21 | Stage 3.3 Pigeon 契约 | 完成 | `pigeons/native_player_api.dart`。相对 §4.6 草案的变化：事件改用 `@FlutterApi`（每类事件一个方法，带 playerId），没有用 `@EventChannelApi`；新增 `setVideoFit`、`diagnostics`；能力通过 `capabilities()` 查询（含 `maxRate`）；外挂字幕传文本加扩展名，由原生侧写临时文件。插件 Dart 侧提供 `NativePlayerEventDispatcher`（按 playerId 分发）和 `NativeVideoView`（`UiKitView` / `AppKitView`） |
 | 2026-10-21 | Stage 3.4 Dart 原生引擎 | 完成 | `lib/playback/engines/native/native_playback_engine.dart`，已在工厂中注册 `aether`，选择规则未改，Apple 仍走 mpv。领域层变化：`EngineCapabilities.maxRate`（mpv 为 100）、`VideoDynamicRange.hdr10Plus`、`ExternalSubtitleData.formatHint`（会话按字幕路径扩展名填充）。控制层的倍速菜单按 `maxRate` 过滤，长按倍速按上限截断；会话设置倍速时同样截断。全量 81 个测试通过 |
-| 2026-10-21 | Stage 3.5 原生桩实现 | 完成（macOS 运行时验证待补） | Swift 侧：`PlayerBackend` 协议（Stage 4 由 AetherEngine 实现）、`NativePlayerHost`（按 playerId 管理实例）、`PlayerEventSink`、`NativeVideoViewFactory`（viewType `native_player/video`）；当前注册 `PlayerBackendFactory.unsupported`。新增集成测试 `integration_test/native_player_channel_test.dart`（dev 依赖 `integration_test`），iOS 模拟器通过；macOS 因为用户已经开着一个调试版 App，而 `AppDelegate` 的单实例逻辑会让新实例退出，暂未运行 |
+| 2026-10-21 | Stage 3.5 原生桩实现 | 完成 | Swift 侧：`PlayerBackend` 协议（Stage 4 由 AetherEngine 实现）、`NativePlayerHost`（按 playerId 管理实例）、`PlayerEventSink`、`NativeVideoViewFactory`（viewType `native_player/video`）；当前注册 `PlayerBackendFactory.unsupported`。新增集成测试 `integration_test/native_player_channel_test.dart`（dev 依赖 `integration_test`），iOS 模拟器和 macOS 均通过。注意：macOS 上运行集成测试前，必须先关掉已经打开的 App，否则 `AppDelegate` 的单实例逻辑会让测试实例直接退出（表现为 “Connection closed before test suite loaded”） |
 
 ---
 
