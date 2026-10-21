@@ -688,6 +688,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | 决策 | 完成 | 用户同意：并行安装 Xcode 26.x；Apple 端倍速上限 2.0（隐藏 3.0 档，长按倍速设置为 3.0 时按 2.0 执行）；libass 使用 `mpvkit/libass-build` 的 SPM 包并锁定精确版本 |
 | 2026-10-21 | Stage 3.1 开启 SPM | 完成 | pubspec 中设置 `enable-swift-package-manager: true`（只对本项目生效）。Xcode 16.3 下 macOS 和 iOS 模拟器版都编译通过；支持 SPM 的插件改走 SPM，`open_filex`、`auto_updater`、`screen_brightness_macos` 和 media_kit 各包继续走 CocoaPods；模拟器冒烟测试 20 秒无崩溃、无插件缺失。D2 的 Apple 端 Spike 前半段通过 |
 | 2026-10-21 | Stage 3.2 插件骨架 | 完成 | `packages/native_player`：iOS / macOS 共用源码目录（`darwin/native_player/Package.swift`，Flutter 3.38 在共用源码时按这个路径查找清单）；暂时只声明 iOS 和 macOS；pigeon 固定为 27.3.0（29.x 需要 Dart 3.11，Flutter 3.38.5 自带 Dart 3.10.4）；macOS、iOS 模拟器均编译通过 |
+| 2026-10-21 | Stage 3.3 Pigeon 契约 | 完成 | `pigeons/native_player_api.dart`。相对 §4.6 草案的变化：事件改用 `@FlutterApi`（每类事件一个方法，带 playerId），没有用 `@EventChannelApi`；新增 `setVideoFit`、`diagnostics`；能力通过 `capabilities()` 查询（含 `maxRate`）；外挂字幕传文本加扩展名，由原生侧写临时文件。插件 Dart 侧提供 `NativePlayerEventDispatcher`（按 playerId 分发）和 `NativeVideoView`（`UiKitView` / `AppKitView`） |
 
 ---
 
