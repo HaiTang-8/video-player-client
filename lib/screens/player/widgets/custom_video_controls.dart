@@ -133,8 +133,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   bool _manualSeekPending = false;
   Duration? _manualSeekTarget;
   Timer? _manualSeekPendingTimer;
-  bool _playing = true; // 初始为 true，视频加载后自动播放
-  bool _buffering = true; // 初始为 true，显示加载指示器
+  bool _playing = false;
+  bool _buffering = false;
   double _volume = 1.0;
   List<AudioTrackInfo> _audioTracks = [];
   List<SubtitleTrackInfo> _subtitleTracks = [];
@@ -192,8 +192,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     WidgetsBinding.instance.addObserver(this);
     _applyInitialVolume();
     _initBrightness();
-    _initCurrentTracks();
+    _syncFromEngineState();
     _setupListeners();
+    if (_buffering) _startSpeedPolling();
     _startHideTimer();
 
     // 首帧后刷新一次刘海方向（避免 initState 时 MediaQuery 还没就绪）。
@@ -231,8 +232,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     }
   }
 
-  void _initCurrentTracks() {
+  void _syncFromEngineState() {
     final state = widget.engine.state;
+    _position.value = state.position;
+    _lastTrustedPosition = state.position;
+    _duration = state.duration;
+    _playing = state.playing;
+    _buffering = state.buffering;
+    _playbackSpeed = state.rate;
     _videoInfo = state.videoInfo;
     _applySelectedTracks(state.selectedTracks);
     _audioTracks = state.tracks.audio;
