@@ -43,8 +43,11 @@ abstract class MpvEngineBase
   bool _disposed = false;
 
   @override
-  EngineCapabilities get capabilities =>
-      const EngineCapabilities(dolbyVisionColor: false, maxVolume: 2.0);
+  EngineCapabilities get capabilities => const EngineCapabilities(
+    dolbyVisionColor: false,
+    maxVolume: 2.0,
+    maxRate: 100,
+  );
 
   @override
   PlaybackSnapshot get state => _hub.state;

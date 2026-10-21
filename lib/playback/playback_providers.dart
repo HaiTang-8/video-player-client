@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'domain/playback_domain.dart';
 import 'engines/mpv/mpv_texture_engine.dart';
+import 'engines/native/native_playback_engine.dart';
 import 'engines/playback_engine_factory.dart';
 import 'selection/engine_selection_rule.dart';
 import 'selection/engine_selector.dart';
@@ -16,7 +17,16 @@ final engineSelectorProvider = Provider<EngineSelector>(
 );
 
 final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
-  (ref) => const PlaybackEngineFactory({
+  (ref) => PlaybackEngineFactory({
     PlaybackEngineKind.mpvTexture: MpvTextureEngine.new,
+    PlaybackEngineKind.aether:
+        () => NativePlaybackEngine(
+          kind: PlaybackEngineKind.aether,
+          initialCapabilities: const EngineCapabilities(
+            dolbyVisionColor: true,
+            maxVolume: 1.0,
+            maxRate: 2.0,
+          ),
+        ),
   }),
 );

@@ -4,6 +4,7 @@ enum VideoDynamicRange {
   unknown('未知'),
   sdr('SDR'),
   hdr10('HDR10'),
+  hdr10Plus('HDR10+'),
   hlg('HLG'),
   dolbyVision('杜比视界');
 

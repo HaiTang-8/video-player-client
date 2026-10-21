@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/log_service.dart';
@@ -203,7 +205,11 @@ class PlaybackSession extends ChangeNotifier {
       final text = await _resolver.fetchSubtitleText(subtitle);
       if (text == null || _disposed) return;
       await engine.addExternalSubtitle(
-        ExternalSubtitle.data(text, title: subtitle.displayName),
+        ExternalSubtitle.data(
+          text,
+          title: subtitle.displayName,
+          formatHint: _formatHint(subtitle.path),
+        ),
       );
     } catch (e) {
       LogService.instance.warn(
@@ -277,7 +283,9 @@ class PlaybackSession extends ChangeNotifier {
     if (_disposed || duration.inSeconds <= 0) return;
     if (!_rateApplied) {
       _rateApplied = true;
-      engine.setRate(_sessionRate ?? _defaultRate());
+      engine.setRate(
+        math.min(_sessionRate ?? _defaultRate(), engine.capabilities.maxRate),
+      );
     }
     final target = _startAt;
     LogService.instance.debug(
@@ -338,6 +346,11 @@ class PlaybackSession extends ChangeNotifier {
         'Failed to load external subtitles: $e',
       );
     }
+  }
+
+  static String? _formatHint(String path) {
+    final extension = p.extension(path).replaceFirst('.', '').toLowerCase();
+    return extension.isEmpty ? null : extension;
   }
 
   bool _isStale(int generation) => _disposed || generation != _loadGeneration;

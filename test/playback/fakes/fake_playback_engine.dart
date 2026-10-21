@@ -18,8 +18,11 @@ class FakePlaybackEngine implements PlaybackEngine {
   PlaybackEngineKind get kind => PlaybackEngineKind.mpvTexture;
 
   @override
-  EngineCapabilities get capabilities =>
-      const EngineCapabilities(dolbyVisionColor: false, maxVolume: 2.0);
+  EngineCapabilities capabilities = const EngineCapabilities(
+    dolbyVisionColor: false,
+    maxVolume: 2.0,
+    maxRate: 100,
+  );
 
   @override
   PlaybackSnapshot get state => hub.state;
@@ -76,9 +79,14 @@ class FakePlaybackEngine implements PlaybackEngine {
   Future<void> selectSubtitleTrack(SubtitleTrackInfo? track) async =>
       calls.add('subtitle ${track?.id}');
 
+  String? lastExternalFormatHint;
+
   @override
-  Future<void> addExternalSubtitle(ExternalSubtitle subtitle) async =>
-      calls.add('external ${(subtitle as ExternalSubtitleData).title}');
+  Future<void> addExternalSubtitle(ExternalSubtitle subtitle) async {
+    final data = subtitle as ExternalSubtitleData;
+    lastExternalFormatHint = data.formatHint;
+    calls.add('external ${data.title}');
+  }
 
   @override
   Widget buildVideoView(BuildContext context, {required BoxFit fit}) =>

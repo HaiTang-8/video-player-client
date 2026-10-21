@@ -14,13 +14,19 @@ class PlaybackSource {
 sealed class ExternalSubtitle {
   const ExternalSubtitle();
 
-  const factory ExternalSubtitle.data(String text, {required String title}) =
-      ExternalSubtitleData;
+  const factory ExternalSubtitle.data(
+    String text, {
+    required String title,
+    String? formatHint,
+  }) = ExternalSubtitleData;
 }
 
 final class ExternalSubtitleData extends ExternalSubtitle {
   final String text;
   final String title;
 
-  const ExternalSubtitleData(this.text, {required this.title});
+  /// 字幕文件扩展名（如 srt、ass），供需要按格式解析的引擎使用
+  final String? formatHint;
+
+  const ExternalSubtitleData(this.text, {required this.title, this.formatHint});
 }

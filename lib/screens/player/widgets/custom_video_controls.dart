@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -211,6 +212,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   double get _maxVolume => widget.engine.capabilities.maxVolume;
+
+  double get _longPressSpeed =>
+      math.min(widget.longPressSpeed, widget.engine.capabilities.maxRate);
 
   void _applyInitialVolume() {
     final initialVolume = widget.initialVolume;
@@ -662,7 +666,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   List<_PlayerHelpEntry> _desktopHelpEntries() {
     final seekDuration = widget.seekDuration;
-    final longPressSpeed = _formatPlaybackSpeed(widget.longPressSpeed);
+    final longPressSpeed = _formatPlaybackSpeed(_longPressSpeed);
     return [
       _PlayerHelpEntry('播放 / 暂停', ['Space']),
       _PlayerHelpEntry('后退 $seekDuration 秒', ['←']),
@@ -682,7 +686,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   List<_PlayerHelpEntry> _mobileHelpEntries() {
-    final longPressSpeed = _formatPlaybackSpeed(widget.longPressSpeed);
+    final longPressSpeed = _formatPlaybackSpeed(_longPressSpeed);
     return [
       const _PlayerHelpEntry('显示 / 隐藏控制栏', ['点击屏幕']),
       const _PlayerHelpEntry('拖动播放进度', ['横向滑动']),
@@ -1004,7 +1008,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   void _startLongPressSpeed() {
     if (_isLongPressSpeed) return;
     _originalSpeed = _playbackSpeed;
-    widget.engine.setRate(widget.longPressSpeed);
+    widget.engine.setRate(_longPressSpeed);
     setState(() => _isLongPressSpeed = true);
   }
 
@@ -1271,7 +1275,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               ),
             if (_isLongPressSpeed)
               PlayerOverlayNotice(
-                text: '倍速中 ${_formatPlaybackSpeed(widget.longPressSpeed)}',
+                text: '倍速中 ${_formatPlaybackSpeed(_longPressSpeed)}',
                 position: PlayerOverlayNoticePosition.top,
                 safePadding: MediaQuery.of(context).padding,
               ),
@@ -1542,7 +1546,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   Widget _buildSpeedButton() {
-    const speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+    final maxRate = widget.engine.capabilities.maxRate;
+    final speeds = [
+      0.5,
+      0.75,
+      1.0,
+      1.25,
+      1.5,
+      2.0,
+      3.0,
+    ].where((s) => s <= maxRate).toList();
     final isDesktop = WindowControls.isDesktop;
     return Builder(
       builder:

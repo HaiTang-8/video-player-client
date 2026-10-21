@@ -109,6 +109,24 @@ void main() {
     expect(engine.calls.last, 'rate 2.0');
   });
 
+  test('rate is clamped to the engine maximum', () async {
+    engine.capabilities = const EngineCapabilities(
+      dolbyVisionColor: true,
+      maxVolume: 1.0,
+      maxRate: 2.0,
+    );
+    session.rememberRate(3.0);
+    await session.load(movie);
+    engine.hub.update(duration: hour);
+    await pumpEventQueue();
+    expect(engine.calls.last, 'rate 2.0');
+  });
+
+  test('external subtitle carries its file extension', () async {
+    await session.selectExternalSubtitle(subtitleInfo('movie.chs.ASS', 90));
+    expect(engine.lastExternalFormatHint, 'ass');
+  });
+
   test('user seek cancels the pending start position', () async {
     await session.load(movie, startAt: const Duration(seconds: 120));
     await session.seek(const Duration(seconds: 5));
