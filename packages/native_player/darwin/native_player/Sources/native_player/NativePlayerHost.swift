@@ -1,0 +1,78 @@
+import Foundation
+
+/// Pigeon 宿主接口的实现：按 playerId 管理播放器实例并转发调用
+final class NativePlayerHost: NativePlayerHostApi {
+  private let factory: PlayerBackendFactory
+  private let events: NativePlayerEventsApiProtocol
+  private var nextId: Int64 = 1
+  private var players: [Int64: PlayerBackend] = [:]
+
+  init(factory: PlayerBackendFactory, events: NativePlayerEventsApiProtocol) {
+    self.factory = factory
+    self.events = events
+  }
+
+  func backend(for playerId: Int64) -> PlayerBackend? { players[playerId] }
+
+  func capabilities() throws -> NativeCapabilities { factory.capabilities }
+
+  func create() throws -> Int64 {
+    let id = nextId
+    nextId += 1
+    players[id] = factory.make(PlayerEventSink(playerId: id, api: events))
+    return id
+  }
+
+  func open(
+    playerId: Int64, source: NativeSource, autoPlay: Bool,
+    completion: @escaping (Result<Void, Error>) -> Void
+  ) {
+    guard let player = players[playerId] else { return completion(.failure(Self.unknown(playerId))) }
+    player.open(source, autoPlay: autoPlay, completion: completion)
+  }
+
+  func play(playerId: Int64) throws { try player(playerId).play() }
+  func pause(playerId: Int64) throws { try player(playerId).pause() }
+  func playOrPause(playerId: Int64) throws { try player(playerId).playOrPause() }
+
+  func seek(playerId: Int64, positionMs: Int64, completion: @escaping (Result<Void, Error>) -> Void) {
+    guard let player = players[playerId] else { return completion(.failure(Self.unknown(playerId))) }
+    player.seek(toMs: positionMs, completion: completion)
+  }
+
+  func setRate(playerId: Int64, rate: Double) throws { try player(playerId).setRate(rate) }
+  func setVolume(playerId: Int64, volume: Double) throws { try player(playerId).setVolume(volume) }
+
+  func selectAudioTrack(playerId: Int64, trackId: String) throws {
+    try player(playerId).selectAudioTrack(id: trackId)
+  }
+
+  func selectSubtitleTrack(playerId: Int64, trackId: String?) throws {
+    try player(playerId).selectSubtitleTrack(id: trackId)
+  }
+
+  func addExternalSubtitle(
+    playerId: Int64, text: String, title: String, formatHint: String?,
+    completion: @escaping (Result<Void, Error>) -> Void
+  ) {
+    guard let player = players[playerId] else { return completion(.failure(Self.unknown(playerId))) }
+    player.addExternalSubtitle(text: text, title: title, formatHint: formatHint, completion: completion)
+  }
+
+  func setVideoFit(playerId: Int64, fit: NativeVideoFit) throws { try player(playerId).setVideoFit(fit) }
+
+  func diagnostics(playerId: Int64) throws -> [String: String] { try player(playerId).diagnostics() }
+
+  func dispose(playerId: Int64) throws {
+    players.removeValue(forKey: playerId)?.dispose()
+  }
+
+  private func player(_ playerId: Int64) throws -> PlayerBackend {
+    guard let player = players[playerId] else { throw Self.unknown(playerId) }
+    return player
+  }
+
+  private static func unknown(_ playerId: Int64) -> PigeonError {
+    PigeonError(code: "unknown_player", message: "播放器实例不存在: \(playerId)", details: nil)
+  }
+}

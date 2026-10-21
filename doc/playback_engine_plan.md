@@ -536,11 +536,11 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 1；D2 已决策。
 
-- [ ] 3.1 创建 `client/packages/native_player`（平台：android、ios、macos、windows；Apple 使用 `sharedDarwinSource: true`），在 `client/pubspec.yaml` 中以 path 依赖引入。
-- [ ] 3.2 编写 Pigeon 契约（§4.6）并生成 Dart、Swift、Kotlin 代码；把生成命令写进插件 README。
-- [ ] 3.3 Dart `NativePlaybackEngine`：基于 Pigeon 实现 `PlaybackEngine`；`kind` 由构造参数决定（`aether` / `media3`）；把事件映射到 `PlaybackStateHub`。
-- [ ] 3.4 `NativeVideoView`：iOS 用 `UiKitView`，macOS 用 `AppKitView`，Android 用 `PlatformViewLink` + `initExpensiveAndroidView`（Hybrid Composition，保证 SurfaceView 能输出 HDR）。
-- [ ] 3.5 原生侧先放桩实现，全部返回“不支持”；用 Dart 假 host 测试契约。
+- [x] 3.1 创建 `client/packages/native_player`（平台：android、ios、macos、windows；Apple 使用 `sharedDarwinSource: true`），在 `client/pubspec.yaml` 中以 path 依赖引入。（本阶段只完成 iOS / macOS；Android、Windows 部分随 Stage 5 / Stage 2 补齐）
+- [x] 3.2 编写 Pigeon 契约（§4.6）并生成 Dart、Swift、Kotlin 代码；把生成命令写进插件 README。（本阶段只完成 iOS / macOS；Android、Windows 部分随 Stage 5 / Stage 2 补齐）
+- [x] 3.3 Dart `NativePlaybackEngine`：基于 Pigeon 实现 `PlaybackEngine`；`kind` 由构造参数决定（`aether` / `media3`）；把事件映射到 `PlaybackStateHub`。
+- [x] 3.4 `NativeVideoView`：iOS 用 `UiKitView`，macOS 用 `AppKitView`，Android 用 `PlatformViewLink` + `initExpensiveAndroidView`（Hybrid Composition，保证 SurfaceView 能输出 HDR）。（本阶段只完成 iOS / macOS；Android、Windows 部分随 Stage 5 / Stage 2 补齐）
+- [x] 3.5 原生侧先放桩实现，全部返回“不支持”；用 Dart 假 host 测试契约。
 
 **验收**：插件在各平台都能编译；挂上桩实现后 App 行为不变（选择器仍然回退到 mpv）。
 
@@ -690,6 +690,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 3.2 插件骨架 | 完成 | `packages/native_player`：iOS / macOS 共用源码目录（`darwin/native_player/Package.swift`，Flutter 3.38 在共用源码时按这个路径查找清单）；暂时只声明 iOS 和 macOS；pigeon 固定为 27.3.0（29.x 需要 Dart 3.11，Flutter 3.38.5 自带 Dart 3.10.4）；macOS、iOS 模拟器均编译通过 |
 | 2026-10-21 | Stage 3.3 Pigeon 契约 | 完成 | `pigeons/native_player_api.dart`。相对 §4.6 草案的变化：事件改用 `@FlutterApi`（每类事件一个方法，带 playerId），没有用 `@EventChannelApi`；新增 `setVideoFit`、`diagnostics`；能力通过 `capabilities()` 查询（含 `maxRate`）；外挂字幕传文本加扩展名，由原生侧写临时文件。插件 Dart 侧提供 `NativePlayerEventDispatcher`（按 playerId 分发）和 `NativeVideoView`（`UiKitView` / `AppKitView`） |
 | 2026-10-21 | Stage 3.4 Dart 原生引擎 | 完成 | `lib/playback/engines/native/native_playback_engine.dart`，已在工厂中注册 `aether`，选择规则未改，Apple 仍走 mpv。领域层变化：`EngineCapabilities.maxRate`（mpv 为 100）、`VideoDynamicRange.hdr10Plus`、`ExternalSubtitleData.formatHint`（会话按字幕路径扩展名填充）。控制层的倍速菜单按 `maxRate` 过滤，长按倍速按上限截断；会话设置倍速时同样截断。全量 81 个测试通过 |
+| 2026-10-21 | Stage 3.5 原生桩实现 | 完成（macOS 运行时验证待补） | Swift 侧：`PlayerBackend` 协议（Stage 4 由 AetherEngine 实现）、`NativePlayerHost`（按 playerId 管理实例）、`PlayerEventSink`、`NativeVideoViewFactory`（viewType `native_player/video`）；当前注册 `PlayerBackendFactory.unsupported`。新增集成测试 `integration_test/native_player_channel_test.dart`（dev 依赖 `integration_test`），iOS 模拟器通过；macOS 因为用户已经开着一个调试版 App，而 `AppDelegate` 的单实例逻辑会让新实例退出，暂未运行 |
 
 ---
 
