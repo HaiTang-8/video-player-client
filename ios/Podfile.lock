@@ -1,7 +1,5 @@
 PODS:
   - Flutter (1.0.0)
-  - media_kit_libs_ios_video (1.0.4):
-    - Flutter
   - media_kit_video (0.0.1):
     - Flutter
   - open_filex (0.0.2):
@@ -9,15 +7,12 @@ PODS:
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
-  - media_kit_libs_ios_video (from `.symlinks/plugins/media_kit_libs_ios_video/ios`)
   - media_kit_video (from `.symlinks/plugins/media_kit_video/ios`)
   - open_filex (from `.symlinks/plugins/open_filex/ios`)
 
 EXTERNAL SOURCES:
   Flutter:
     :path: Flutter
-  media_kit_libs_ios_video:
-    :path: ".symlinks/plugins/media_kit_libs_ios_video/ios"
   media_kit_video:
     :path: ".symlinks/plugins/media_kit_video/ios"
   open_filex:
@@ -25,10 +20,9 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  media_kit_libs_ios_video: a5fe24bc7875ccd6378a0978c13185e1344651c1
-  media_kit_video: 5da63f157170e5bf303bf85453b7ef6971218a2e
+  media_kit_video: 26c5b265a4094a2df3e8d41e6724d9b964c13151
   open_filex: 6e26e659846ec990262224a12ef1c528bb4edbe4
 
-PODFILE CHECKSUM: c828a38c253d5f47218258786de668d23a9f4505
+PODFILE CHECKSUM: ba0d7af98d1a0db7cbf744edd0331fd4de934cd6
 
 COCOAPODS: 1.15.2

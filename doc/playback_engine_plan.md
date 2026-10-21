@@ -114,6 +114,7 @@
 - Flutter 版本：项目通过 FVM 固定为 **3.38.5**（`client/.fvmrc`，2026-10-20 从 3.35.7 升级）。本机全局 SDK `/Users/zhouquan/application/flutter` 也是 3.38.5，可以直接用；`fvm` 在 `~/.pub-cache/bin/fvm`（不在 PATH）。被 gitignore 的本地缓存 `client/.fvm/flutter_sdk` 在执行 `fvm use 3.38.5` 之前仍然指向 3.35.7，**不要用它**。
 - **pub 镜像**：命令行执行 `pub get` 前必须先 `export PUB_HOSTED_URL=https://pub.flutter-io.cn FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`（用户在 `~/.zshrc` 里配置了，但 agent 的 shell 不一定会加载）。漏掉的话，pub 会把所有依赖重新解析到 pub.dev，大面积改写 `pubspec.lock` 和生成的插件注册文件。
 - `client/vendor/media_kit_libs_macos_video` **没有被 pubspec 引用**，不要依赖它。
+- **Xcode**：系统默认仍是 `/Applications/Xcode.app`（16.3），另装了 `/Applications/Xcode-26.3.app`（Swift 6.2.4，iOS / macOS 26.2 SDK）。macOS 15.7.2 最高只能装 Xcode 26.3，26.4 及以后需要 macOS 26.2。**Stage 4 起所有 Apple 构建都要加上** `export DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer`，不要改 `xcode-select`。iOS 26.2 平台组件已用 `xcodebuild -downloadPlatform iOS -architectureVariant arm64` 安装。
 - 后端**没有**媒体技术信息探测（无 ffprobe），客户端拿不到预先探测好的 HDR / DV 信息。
 
 ---
@@ -548,12 +549,12 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 3；**D1 必须先决策**。
 
-- [ ] 4.0 前置：本机和发布 CI 都切换到 **Xcode 26.2 及以上**。AetherEngine 自 2026-05 起调用了 iOS 26.2 SDK 的 API，并要求 Swift 6.2；作者 CI 只在 Xcode 27 上测试（7.38.1 才修复了 Xcode 26 下 Release 编译失败）。
+- [ ] 4.0 前置：本机和发布 CI 都切换到 **Xcode 26.2 及以上**（本机已装 `/Applications/Xcode-26.3.app`，用法见 §3.2）。AetherEngine 自 2026-05 起调用了 iOS 26.2 SDK 的 API，并要求 Swift 6.2；作者 CI 只在 Xcode 27 上测试（7.38.1 才修复了 Xcode 26 下 Release 编译失败）。
 - [ ] 4.0 Spike：
   - (a) 在项目固定的 Flutter 版本（`.fvmrc`）上让插件通过 SPM 引入 AetherEngine（需要开启 Flutter 的 SPM 支持；如果当前版本不支持，评估是否升级 FVM 版本）。
   - (b) 确认与 media_kit libmpv 的 FFmpeg 冲突，确定 Apple 端去掉 libmpv 的方式。
   - (c) 在 iPhone 16 Pro Max 和一台 Mac 上验证 DV P5 / P8.1 / HDR10。
-- [ ] 4.1 依赖调整：把 `media_kit_libs_video` 换成按平台引入的 `media_kit_libs_android_video`、`media_kit_libs_windows_video`、`media_kit_libs_linux`（Apple 不打包 libmpv，做法参考 Moonfin 的 pubspec 注释）；按 D1 提升部署版本；Apple 上 `MediaKit.ensureInitialized()` 要么条件化，要么确认无害。
+- [x] 4.1 依赖调整：把 `media_kit_libs_video` 换成按平台引入的 `media_kit_libs_android_video`、`media_kit_libs_windows_video`、`media_kit_libs_linux`（Apple 不打包 libmpv，做法参考 Moonfin 的 pubspec 注释）；按 D1 提升部署版本；Apple 上 `MediaKit.ensureInitialized()` 要么条件化，要么确认无害。
 - [ ] 4.2 Swift `AetherPlayerHost`：`playerId → 引擎包装` 注册表；实现 HostApi；把引擎发布的属性映射为事件（position 节流）。
 - [ ] 4.3 PlatformView 工厂：iOS（UIView）和 macOS（NSView）分别承载 AetherPlayerView 和字幕层；视图跟随页面生命周期，引擎包装跟随 playerId 生命周期（参考 Moonfin 的分层）。
 - [ ] 4.4 功能映射：请求头与 302、本地文件（下载缓存）、倍速、音量（`maxVolume = 1.0`，见 D8）、音轨、内嵌字幕、外挂字幕（优先用 URL + headers，`externalSubtitleUrl = true`）、缓冲、完成、错误映射。
@@ -691,6 +692,10 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 3.3 Pigeon 契约 | 完成 | `pigeons/native_player_api.dart`。相对 §4.6 草案的变化：事件改用 `@FlutterApi`（每类事件一个方法，带 playerId），没有用 `@EventChannelApi`；新增 `setVideoFit`、`diagnostics`；能力通过 `capabilities()` 查询（含 `maxRate`）；外挂字幕传文本加扩展名，由原生侧写临时文件。插件 Dart 侧提供 `NativePlayerEventDispatcher`（按 playerId 分发）和 `NativeVideoView`（`UiKitView` / `AppKitView`） |
 | 2026-10-21 | Stage 3.4 Dart 原生引擎 | 完成 | `lib/playback/engines/native/native_playback_engine.dart`，已在工厂中注册 `aether`，选择规则未改，Apple 仍走 mpv。领域层变化：`EngineCapabilities.maxRate`（mpv 为 100）、`VideoDynamicRange.hdr10Plus`、`ExternalSubtitleData.formatHint`（会话按字幕路径扩展名填充）。控制层的倍速菜单按 `maxRate` 过滤，长按倍速按上限截断；会话设置倍速时同样截断。全量 81 个测试通过 |
 | 2026-10-21 | Stage 3.5 原生桩实现 | 完成 | Swift 侧：`PlayerBackend` 协议（Stage 4 由 AetherEngine 实现）、`NativePlayerHost`（按 playerId 管理实例）、`PlayerEventSink`、`NativeVideoViewFactory`（viewType `native_player/video`）；当前注册 `PlayerBackendFactory.unsupported`。新增集成测试 `integration_test/native_player_channel_test.dart`（dev 依赖 `integration_test`），iOS 模拟器和 macOS 均通过。注意：macOS 上运行集成测试前，必须先关掉已经打开的 App，否则 `AppDelegate` 的单实例逻辑会让测试实例直接退出（表现为 “Connection closed before test suite loaded”） |
+| 2026-10-21 | Xcode 26.3 安装 | 完成 | 用户从开发者网站下载 xip（签名已校验），解压到 `/Applications/Xcode-26.3.app`，用户执行了许可协议和首次运行组件安装；`-downloadPlatform iOS -architectureVariant arm64` 实际安装的是 iOS 26.3.1 模拟器运行时，可以正常使用 |
+| 2026-10-21 | Stage 4.0 Spike | 完成，待决策 | ① **AetherEngine 7.44.0 无法用 Xcode 26.3 编译**：`AetherEngine.swift:5300` 报 `sending 'codecpar' risks causing data races`（Swift 6.2 与 6.4 的并发检查规则不同）。作者 CI 自 2026-09-30 起只测 Xcode 27（README 也写明要求 Xcode 27），而 Xcode 27 需要 macOS 26.6。② **7.22.2（CI 切换前最后一个版本）可以编译**：macOS Release、iOS 真机 Release（不签名）、iOS 模拟器全部通过；解析出的依赖为 FFmpegBuild 3.6.0、LibDovi 2.1.0、SMBClient 0.3.1、libass-build 0.17.5。③ 已把 App 最低系统版本临时提到 iOS 18 / macOS 15（D1）；App 内同时打包了两套 FFmpeg，按计划在 4.1 移除 media_kit。④ 备选方案调研：MPVKit（LGPL，mpv + libplacebo + MoltenVK，iOS 15 / macOS 12 起支持，示例使用 `vo=gpu-next` + `wid` 指向 CAMetalLayer + `target-colorspace-hint` 开 EDR；Metal 支持是 mpv 未合并的补丁）、KSPlayer（免费版 GPL-3.0，MKV / 杜比视界在付费 LGPL 版）、fvp（Flutter 用户免费，但只有 SDR）。用户选择锁定 AetherEngine 7.22.2 |
+| 2026-10-21 | 决策：Apple 内核 | 完成 | 用户确认使用 **AetherEngine 7.22.2**（临时锁定，正式发布前升级 macOS 26 + Xcode 27 并换成最新版）；第一批先做 4.1–4.4、4.6、4.8（目标颜色正确，Apple 端暂不显示字幕），第二批做 4.5 字幕。最低系统版本 iOS 18 / macOS 15 |
+| 2026-10-21 | Stage 4.1 依赖调整 | 完成 | `media_kit_libs_video` 换成按平台引入的 android / windows / linux 包，iOS / macOS 的 `media_kit_video` 自动改用 stub；`main.dart` 在 iOS / macOS 跳过 `MediaKit.ensureInitialized()`；App 最低系统版本提到 iOS 18 / macOS 15（灵动岛扩展保持 16.2）；插件锁定 AetherEngine 7.22.2（libass 推迟到 4.5 再加）；提交 Xcode 生成的 `Package.resolved`。清理构建目录后，iOS / macOS 包内只剩 AetherEngine 一套 FFmpeg |
 
 ---
 

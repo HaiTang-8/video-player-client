@@ -3,8 +3,6 @@ PODS:
     - FlutterMacOS
     - Sparkle
   - FlutterMacOS (1.0.0)
-  - media_kit_libs_macos_video (1.0.4):
-    - FlutterMacOS
   - media_kit_video (0.0.1):
     - FlutterMacOS
   - screen_brightness_macos (0.1.0):
@@ -14,7 +12,6 @@ PODS:
 DEPENDENCIES:
   - auto_updater (from `Flutter/ephemeral/.symlinks/plugins/auto_updater/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
-  - media_kit_libs_macos_video (from `Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos`)
   - media_kit_video (from `Flutter/ephemeral/.symlinks/plugins/media_kit_video/macos`)
   - screen_brightness_macos (from `Flutter/ephemeral/.symlinks/plugins/screen_brightness_macos/macos`)
 
@@ -27,8 +24,6 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/auto_updater/macos
   FlutterMacOS:
     :path: Flutter/ephemeral
-  media_kit_libs_macos_video:
-    :path: Flutter/ephemeral/.symlinks/plugins/media_kit_libs_macos_video/macos
   media_kit_video:
     :path: Flutter/ephemeral/.symlinks/plugins/media_kit_video/macos
   screen_brightness_macos:
@@ -37,11 +32,10 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   auto_updater: d3c03e9e5f2a00ec78572d9f7473cb8c9a6c0273
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  media_kit_libs_macos_video: b3e2bbec2eef97c285f2b1baa7963c67c753fb82
-  media_kit_video: c75b07f14d59706c775778e4dd47dd027de8d1e5
+  media_kit_video: f5bdcbfaef003c02251e50d44bb741aa96fb8a1e
   screen_brightness_macos: 2d6d3af2165592d9a55ffcd95b7550970e41ebda
   Sparkle: a346a4341537c625955751ed3ae4b340b68551fa
 
-PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+PODFILE CHECKSUM: 26ee6f5033708847cf1376fbc9a71d19413c5b16
 
 COCOAPODS: 1.15.2

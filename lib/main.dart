@@ -32,8 +32,10 @@ void main() {
       // 初始化日志服务
       await LogService.instance.init();
 
-      // 初始化 MediaKit
-      MediaKit.ensureInitialized();
+      // iOS / macOS 使用 AetherEngine，不打包 libmpv
+      if (!Platform.isIOS && !Platform.isMacOS) {
+        MediaKit.ensureInitialized();
+      }
 
       // 移动端默认锁定竖屏（播放器场景除外）
       if (Platform.isIOS || Platform.isAndroid) {

@@ -53,7 +53,10 @@ dependencies:
   # 视频播放器
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
-  media_kit_libs_video: ^1.0.7
+  # 按平台引入 libmpv：iOS / macOS 使用 AetherEngine，不能再打包第二套 FFmpeg
+  media_kit_libs_android_video: ^1.3.8
+  media_kit_libs_windows_video: ^1.0.11
+  media_kit_libs_linux: ^1.2.1
 
   # 播放内核的原生实现
   native_player:
