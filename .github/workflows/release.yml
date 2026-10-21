@@ -4,20 +4,36 @@ on:
   push:
     tags:
       - 'v*'
+  # 手动触发只构建四个平台，不发布 Release，用于验证流水线
+  workflow_dispatch:
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      value: ${{ steps.version.outputs.VERSION }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: version
+        run: |
+          # tag 触发用 tag 的版本，手动触发用 pubspec.yaml 的版本
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(sed -n 's/^version: *\([^+]*\).*/\1/p' pubspec.yaml)"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
   build-windows:
+    needs: version
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'
+          flutter-version-file: .fvmrc
           channel: 'stable'
-      - name: Get version from tag
-        id: version
-        shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Diagnose Windows toolchain
         shell: pwsh
         run: |
@@ -25,7 +41,7 @@ jobs:
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationVersion
           & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
       - run: flutter pub get
-      - run: flutter build windows --release --build-name=${{ steps.version.outputs.VERSION }}
+      - run: flutter build windows --release --build-name=${{ needs.version.outputs.value }}
       - name: Install Inno Setup
         run: choco install innosetup -y
       - name: Download Chinese language file for Inno Setup
@@ -33,34 +49,36 @@ jobs:
       - name: Build EXE Installer
         shell: pwsh
         run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
+          $version = "${{ needs.version.outputs.value }}"
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DAppVersion=$version windows\inno_setup.iss
       - name: Rename installer
         shell: pwsh
         run: |
-          Move-Item -Path "dist\guanying-windows-setup.exe" -Destination "guanying-windows-${{ steps.version.outputs.VERSION }}-setup.exe"
+          Move-Item -Path "dist\guanying-windows-setup.exe" -Destination "guanying-windows-${{ needs.version.outputs.value }}-setup.exe"
       - name: Create ZIP (backup)
         run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath guanying-windows.zip
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
           path: |
-            guanying-windows-${{ steps.version.outputs.VERSION }}-setup.exe
+            guanying-windows-${{ needs.version.outputs.value }}-setup.exe
             guanying-windows.zip
 
   build-macos:
-    runs-on: macos-latest
+    needs: version
+    runs-on: macos-26
+    env:
+      # AetherEngine 7.22.2 需要 Xcode 26.2+，目前只验证过 26.3（镜像默认是 26.6）
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - run: xcodebuild -version
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'
+          flutter-version-file: .fvmrc
           channel: 'stable'
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      - run: flutter build macos --release --build-name=${{ steps.version.outputs.VERSION }}
+      - run: flutter build macos --release --build-name=${{ needs.version.outputs.value }}
       - name: Create DMG
         run: |
           brew install create-dmg
@@ -71,22 +89,23 @@ jobs:
             --icon "观影.app" 150 200 \
             --app-drop-link 450 200 \
             --no-internet-enable \
-            "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" \
+            "guanying-macos-${{ needs.version.outputs.value }}.dmg" \
             "build/macos/Build/Products/Release/观影.app"
       - name: Sign DMG with Sparkle EdDSA
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          echo "$SPARKLE_PRIVATE_KEY" | macos/Pods/Sparkle/bin/sign_update "guanying-macos-${{ steps.version.outputs.VERSION }}.dmg" -f - > sparkle_signature.txt
+          echo "$SPARKLE_PRIVATE_KEY" | macos/Pods/Sparkle/bin/sign_update "guanying-macos-${{ needs.version.outputs.value }}.dmg" -f - > sparkle_signature.txt
           cat sparkle_signature.txt
       - uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: |
-            guanying-macos-${{ steps.version.outputs.VERSION }}.dmg
+            guanying-macos-${{ needs.version.outputs.value }}.dmg
             sparkle_signature.txt
 
   build-android:
+    needs: version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +133,7 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'
+          flutter-version-file: .fvmrc
           channel: 'stable'
           cache: true
 
@@ -138,13 +157,9 @@ jobs:
           restore-keys: |
             media-kit-android-
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - run: flutter pub get
 
-      - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-name=${{ steps.version.outputs.VERSION }}
+      - run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64 --build-name=${{ needs.version.outputs.value }}
 
       - name: Rename artifacts
         run: |
@@ -159,18 +174,20 @@ jobs:
             guanying-android-arm64-v8a.apk
 
   build-ios:
-    runs-on: macos-latest
+    needs: version
+    runs-on: macos-26
+    env:
+      # AetherEngine 7.22.2 需要 Xcode 26.2+，目前只验证过 26.3（镜像默认是 26.6）
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
+      - run: xcodebuild -version
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.35.7'
+          flutter-version-file: .fvmrc
           channel: 'stable'
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign --build-name=${{ steps.version.outputs.VERSION }}
+      - run: flutter build ios --release --no-codesign --build-name=${{ needs.version.outputs.value }}
       - name: Create IPA
         run: |
           mkdir -p Payload
@@ -182,7 +199,8 @@ jobs:
           path: media_player-ios.ipa
 
   release:
-    needs: [build-windows, build-macos, build-android, build-ios]
+    needs: [version, build-windows, build-macos, build-android, build-ios]
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -194,9 +212,6 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       - name: Build Changelog
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v4
@@ -207,7 +222,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate appcast.xml
         run: |
-          VERSION="${{ steps.version.outputs.VERSION }}"
+          VERSION="${{ needs.version.outputs.value }}"
           REPO="HaiTang-8/video-player-client"
 
           # Windows EXE info
