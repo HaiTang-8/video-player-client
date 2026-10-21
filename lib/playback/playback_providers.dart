@@ -8,6 +8,12 @@ import 'selection/engine_selection_rule.dart';
 import 'selection/engine_selector.dart';
 import 'selection/platform_environment.dart';
 
+/// 原生引擎渲染字幕用的字体，与全局界面字体保持一致
+const subtitleFontAssets = [
+  'assets/fonts/HarmonyOS_Sans_SC_Regular.ttf',
+  'assets/fonts/HarmonyOS_Sans_SC_Bold.ttf',
+];
+
 final platformEnvironmentProvider = Provider<PlatformEnvironment>(
   (ref) => PlatformEnvironment.current(),
 );
@@ -27,6 +33,7 @@ final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
             maxVolume: 1.0,
             maxRate: 2.0,
           ),
+          subtitleFontAssets: subtitleFontAssets,
         ),
   }),
 );

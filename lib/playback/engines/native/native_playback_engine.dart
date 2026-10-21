@@ -10,6 +10,7 @@ class NativePlaybackEngine
   NativePlaybackEngine({
     required this.kind,
     required EngineCapabilities initialCapabilities,
+    this.subtitleFontAssets = const [],
     NativePlayerHostApi? api,
     NativePlayerEventRegistry? events,
   }) : _capabilities = initialCapabilities,
@@ -18,6 +19,9 @@ class NativePlaybackEngine
 
   @override
   final PlaybackEngineKind kind;
+
+  /// 字幕渲染字体（Flutter 资源名），第一个为默认字体
+  final List<String> subtitleFontAssets;
   EngineCapabilities _capabilities;
   final NativePlayerHostApi _api;
   final NativePlayerEventRegistry _events;
@@ -51,6 +55,9 @@ class NativePlaybackEngine
       maxVolume: caps.maxVolume,
       maxRate: caps.maxRate,
     );
+    if (subtitleFontAssets.isNotEmpty) {
+      await _api.configureSubtitleFonts(subtitleFontAssets);
+    }
     final id = await _api.create();
     if (_disposed) {
       await _api.dispose(id);

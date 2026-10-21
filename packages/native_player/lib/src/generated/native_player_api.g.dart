@@ -482,6 +482,28 @@ class NativePlayerHostApi {
     return pigeonVar_replyValue! as NativeCapabilities;
   }
 
+  /// 字幕渲染使用的字体（Flutter 资源名），在 [create] 之前调用；
+  /// 第一个作为默认字体，ASS 请求的字体找不到时回退到它
+  Future<void> configureSubtitleFonts(List<String> assetKeys) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.native_player.NativePlayerHostApi.configureSubtitleFonts$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[assetKeys],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
   Future<int> create() async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.native_player.NativePlayerHostApi.create$pigeonVar_messageChannelSuffix';

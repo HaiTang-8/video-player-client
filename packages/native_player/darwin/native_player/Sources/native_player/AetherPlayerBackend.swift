@@ -7,7 +7,7 @@ extension PlayerBackendFactory {
   /// 视频播放倍速上限 2.0（AetherEngine `maxSupportedRate`），音量上限 100%
   static let aether = PlayerBackendFactory(
     capabilities: NativeCapabilities(dolbyVisionColor: true, maxVolume: 1, maxRate: 2),
-    make: { events in try AetherPlayerBackend(events: events) }
+    make: { events, fonts in try AetherPlayerBackend(events: events, subtitleFonts: fonts) }
   )
 }
 
@@ -15,20 +15,25 @@ extension PlayerBackendFactory {
 @MainActor
 final class AetherPlayerBackend: PlayerBackend {
   private let engine: AetherEngine
+  private let container: PassthroughView = .blackBackground()
   private let playerView: AetherPlayerView
+  private let subtitles: SubtitleOverlayView
   private let events: PlayerEventSink
   private var subscriptions: Set<AnyCancellable> = []
   private var subtitleFiles: [URL] = []
   /// 打开期间的错误由 open 的回调返回，不再重复发事件
   private var opening = false
 
-  var renderView: PlatformView { playerView }
+  var renderView: PlatformView { container }
 
-  init(events: PlayerEventSink) throws {
+  init(events: PlayerEventSink, subtitleFonts: [URL]) throws {
     self.events = events
+    subtitles = SubtitleOverlayView(fontFiles: subtitleFonts)
     engine = try AetherEngine()
     playerView = AetherPlayerView(frame: .zero)
     engine.bind(view: playerView)
+    container.embedFilling(playerView)
+    container.embedFilling(subtitles)
     bindEngine()
   }
 
@@ -40,6 +45,8 @@ final class AetherPlayerBackend: PlayerBackend {
     var options = LoadOptions()
     options.httpHeaders = source.httpHeaders
     options.autoplay = autoPlay
+    // ASS 由 libass 渲染，需要原始事件行
+    options.preserveASSMarkup = true
     opening = true
     Task { @MainActor in
       defer { self.opening = false }
@@ -68,7 +75,9 @@ final class AetherPlayerBackend: PlayerBackend {
 
   func setRate(_ rate: Double) {
     engine.setRate(Float(rate))
-    events.rate(min(rate, Double(engine.maxSupportedRate)))
+    let applied = min(rate, Double(engine.maxSupportedRate))
+    subtitles.rate = applied
+    events.rate(applied)
   }
 
   func setVolume(_ volume: Double) {
@@ -111,6 +120,7 @@ final class AetherPlayerBackend: PlayerBackend {
 
   func setVideoFit(_ fit: NativeVideoFit) {
     engine.videoGravity = fit == .cover ? .resizeAspectFill : .resizeAspect
+    subtitles.fill = fit == .cover
   }
 
   func diagnostics() -> [String: String] {
@@ -125,12 +135,14 @@ final class AetherPlayerBackend: PlayerBackend {
     if let decoder = engine.activeAudioDecoder { info["音频解码"] = decoder }
     info["输出格式"] = Self.label(engine.videoFormat)
     if engine.dolbyVisionConversion == .profile7ToProfile81 { info["杜比视界转换"] = "Profile 7 → 8.1" }
+    info["字幕"] = subtitles.summary
     info["播放路径"] = engine.videoRoute.rawValue
     return info
   }
 
   func dispose() {
     subscriptions.removeAll()
+    subtitles.stop()
     engine.stop()
     engine.unbind(view: playerView)
     for file in subtitleFiles { try? FileManager.default.removeItem(at: file) }
@@ -180,9 +192,42 @@ final class AetherPlayerBackend: PlayerBackend {
             dolbyVisionProfile: format == .dolbyVision ? profile.map(Int64.init) : nil))
       }
       .store(in: &subscriptions)
+    bindSubtitles()
+  }
+
+  private func bindSubtitles() {
+    engine.$subtitleCues
+      .sink { [weak self] cues in MainActor.assumeIsolated { self?.subtitles.update(cues: cues) } }
+      .store(in: &subscriptions)
+    engine.clock.$sourceTime
+      .sink { [weak self] time in MainActor.assumeIsolated { self?.subtitles.update(time: time) } }
+      .store(in: &subscriptions)
+    engine.$activeSubtitleTrackIndex
+      .combineLatest(engine.$subtitleTracks, engine.$sidecarASSHeader)
+      .sink { [weak self] index, tracks, header in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          let track = index.flatMap { index in tracks.first { $0.id == index } }
+          self.subtitles.configure(
+            track: track, sidecarHeader: header, fonts: self.engine.fontAttachments)
+        }
+      }
+      .store(in: &subscriptions)
+    engine.$sourceVideoWidth
+      .combineLatest(engine.$sourceVideoHeight)
+      .sink { [weak self] width, height in
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          let aspect = self.engine.sourceVideoPixelAspectRatio
+          self.subtitles.setVideoSize(
+            CGSize(width: Double(width) * (aspect > 0 ? aspect : 1), height: Double(height)))
+        }
+      }
+      .store(in: &subscriptions)
   }
 
   private func handle(_ state: PlaybackState) {
+    subtitles.playing = state == .playing
     events.playing(state == .playing)
     events.completed(state == .ended)
     guard case .error(let message) = state, !opening else { return }

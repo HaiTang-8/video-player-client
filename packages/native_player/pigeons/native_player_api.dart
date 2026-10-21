@@ -74,6 +74,10 @@ class NativeError {
 abstract class NativePlayerHostApi {
   NativeCapabilities capabilities();
 
+  /// 字幕渲染使用的字体（Flutter 资源名），在 [create] 之前调用；
+  /// 第一个作为默认字体，ASS 请求的字体找不到时回退到它
+  void configureSubtitleFonts(List<String> assetKeys);
+
   int create();
 
   @async

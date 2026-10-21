@@ -26,12 +26,13 @@ protocol PlayerBackend: AnyObject {
 /// 内核的能力声明和实例构造
 struct PlayerBackendFactory {
   let capabilities: NativeCapabilities
-  let make: @MainActor (PlayerEventSink) throws -> PlayerBackend
+  /// 第二个参数是字幕字体文件，第一个为默认字体
+  let make: @MainActor (PlayerEventSink, [URL]) throws -> PlayerBackend
 
   /// 当前平台尚未接入内核时使用：可以创建实例，但打开媒体会失败
   static let unsupported = PlayerBackendFactory(
     capabilities: NativeCapabilities(dolbyVisionColor: false, maxVolume: 1, maxRate: 1),
-    make: { _ in UnsupportedPlayerBackend() }
+    make: { _, _ in UnsupportedPlayerBackend() }
   )
 }
 

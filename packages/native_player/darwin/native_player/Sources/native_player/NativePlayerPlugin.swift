@@ -15,10 +15,20 @@ public final class NativePlayerPlugin: NSObject, FlutterPlugin {
     MainActor.assumeIsolated {
       let host = NativePlayerHost(
         factory: .aether,
-        events: NativePlayerEventsApi(binaryMessenger: messenger)
+        events: NativePlayerEventsApi(binaryMessenger: messenger),
+        assetResolver: { key in Self.assetURL(registrar.lookupKey(forAsset: key)) }
       )
       NativePlayerHostApiSetup.setUp(binaryMessenger: messenger, api: host)
       registrar.register(NativeVideoViewFactory(host: host), withId: NativeVideoViewFactory.viewType)
     }
+  }
+
+  /// lookupKey 返回的是相对 App 主包的路径
+  private static func assetURL(_ key: String) -> URL? {
+    let candidates = [
+      Bundle.main.url(forResource: key, withExtension: nil),
+      Bundle.main.bundleURL.appendingPathComponent(key),
+    ]
+    return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
   }
 }

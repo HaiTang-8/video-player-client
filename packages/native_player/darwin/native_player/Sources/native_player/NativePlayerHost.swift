@@ -5,23 +5,33 @@ import Foundation
 final class NativePlayerHost: @preconcurrency NativePlayerHostApi {
   private let factory: PlayerBackendFactory
   private let events: NativePlayerEventsApiProtocol
+  private let assetResolver: (String) -> URL?
+  private var subtitleFonts: [URL] = []
   private var nextId: Int64 = 1
   private var players: [Int64: PlayerBackend] = [:]
 
-  init(factory: PlayerBackendFactory, events: NativePlayerEventsApiProtocol) {
+  init(
+    factory: PlayerBackendFactory, events: NativePlayerEventsApiProtocol,
+    assetResolver: @escaping (String) -> URL?
+  ) {
     self.factory = factory
     self.events = events
+    self.assetResolver = assetResolver
   }
 
   func backend(for playerId: Int64) -> PlayerBackend? { players[playerId] }
 
   func capabilities() throws -> NativeCapabilities { factory.capabilities }
 
+  func configureSubtitleFonts(assetKeys: [String]) throws {
+    subtitleFonts = assetKeys.compactMap(assetResolver)
+  }
+
   func create() throws -> Int64 {
     let id = nextId
     nextId += 1
     do {
-      players[id] = try factory.make(PlayerEventSink(playerId: id, api: events))
+      players[id] = try factory.make(PlayerEventSink(playerId: id, api: events), subtitleFonts)
     } catch {
       throw PigeonError(code: "create_failed", message: "创建播放器失败: \(error)", details: nil)
     }

@@ -25,8 +25,8 @@ extension PlatformView {
     addSubview(child)
   }
 
-  static func blackBackground() -> PlatformView {
-    let view = PlatformView()
+  static func blackBackground() -> Self {
+    let view = Self()
     #if os(iOS)
     view.backgroundColor = .black
     #elseif os(macOS)
@@ -35,4 +35,24 @@ extension PlatformView {
     #endif
     return view
   }
+}
+
+/// 不接收任何触摸 / 鼠标事件的容器，事件交给下方的 Flutter 视图
+/// 子视图始终铺满（不依赖 autoresizing：容器从零尺寸开始时子视图可能不跟随）
+final class PassthroughView: PlatformView {
+  #if os(iOS)
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    for child in subviews { child.frame = bounds }
+  }
+  #elseif os(macOS)
+  override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+  override func layout() {
+    super.layout()
+    for child in subviews { child.frame = bounds }
+  }
+  #endif
 }

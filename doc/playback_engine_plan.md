@@ -1,7 +1,7 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1、Stage 3 完成；Stage 4 第一批（4.1–4.4、4.6、4.8）完成，待真机验证；下一步第二批 4.5 字幕，之后 4.7 / 4.9；Stage 2（Windows）推后**
-> 最后更新：2026-10-13
+> 状态：**Stage 1、Stage 3 完成；Stage 4 的 4.1–4.6、4.8 完成，待真机验证；下一步 4.7 / 4.9；Stage 2（Windows）推后**
+> 最后更新：2026-10-21
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
 > **后续会话必读顺序**：§0 → §1 → §4 → §6 → §12（进度记录）→ 当前要做的阶段（§7）。
@@ -365,6 +365,7 @@ abstract class NativePlayerHostApi {
   void selectAudioTrack(int playerId, String trackId);
   void selectSubtitleTrack(int playerId, String? trackId);
   @async void addExternalSubtitle(int playerId, NativeExternalSubtitle subtitle);
+  void configureSubtitleFonts(List<String> assetKeys); // 字幕渲染字体（Flutter 资源名，第一个为默认字体），在 create 之前调用
   void dispose(int playerId);
 }
 
@@ -558,7 +559,7 @@ abstract class NativePlayerEventApi {
 - [x] 4.2 Swift `AetherPlayerHost`：`playerId → 引擎包装` 注册表；实现 HostApi；把引擎发布的属性映射为事件（position 节流）。
 - [x] 4.3 PlatformView 工厂：iOS（UIView）和 macOS（NSView）分别承载 AetherPlayerView 和字幕层；视图跟随页面生命周期，引擎包装跟随 playerId 生命周期（参考 Moonfin 的分层）。
 - [x] 4.4 功能映射：请求头与 302、本地文件（下载缓存）、倍速、音量（`maxVolume = 1.0`，见 D8）、音轨、内嵌字幕、外挂字幕（优先用 URL + headers，`externalSubtitleUrl = true`）、缓冲、完成、错误映射。
-- [ ] 4.5 字幕渲染（按 D7）：AetherEngine 只发布 `subtitleCues`，绘制由宿主负责，要覆盖文本 cue（样式与 `placement`）、PGS 图片 cue、外挂 ASS / SRT；选 B 时开启 `preserveASSMarkup` 并接入 libass 渲染器，字体使用 `fontAttachments`。
+- [x] 4.5 字幕渲染（按 D7）：AetherEngine 只发布 `subtitleCues`，绘制由宿主负责，要覆盖文本 cue（样式与 `placement`）、PGS 图片 cue、外挂 ASS / SRT；选 B 时开启 `preserveASSMarkup` 并接入 libass 渲染器，字体使用 `fontAttachments`。
 - [x] 4.6 HDR / DV：iOS 自动开启 EDR。macOS 上不声明 `panelPresentsDolbyVision`，Profile 5 颜色也是正确的（作者在 16 寸 XDR 上实测），只是标签会显示为 HDR10，所以媒体信息里的动态范围以探测结果为准。
 - [ ] 4.7 平台行为：iOS 全屏和横竖屏沿用现有方向通道；macOS 窗口和全屏沿用 `WindowControls`；确认 Flutter 控制层在 PlatformView 上方的手势正常。
 - [x] 4.8 选择规则加入第 2 条。
@@ -698,6 +699,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 4.1 依赖调整 | 完成 | `media_kit_libs_video` 换成按平台引入的 android / windows / linux 包，iOS / macOS 的 `media_kit_video` 自动改用 stub；`main.dart` 在 iOS / macOS 跳过 `MediaKit.ensureInitialized()`；App 最低系统版本提到 iOS 18 / macOS 15（灵动岛扩展保持 16.2）；插件锁定 AetherEngine 7.22.2（libass 推迟到 4.5 再加）；提交 Xcode 生成的 `Package.resolved`。清理构建目录后，iOS / macOS 包内只剩 AetherEngine 一套 FFmpeg |
 | 2026-10-21 | Stage 4.2–4.4、4.6 AetherEngine 后端 | 完成 | `AetherPlayerBackend.swift`：`load(url:options:)` 透传请求头和 autoplay；状态通过 Combine 转成事件（位置 250ms 节流；buffering = `isBuffering` 或 loading；打开期间的错误只由 open 回调返回，不重复发事件）；轨道 id 为 `TrackInfo.id`；外挂字幕写临时文件后 `addExternalSubtitleTrack` 并选中，销毁时清理；`videoGravity` 实现铺满 / 保持比例；`VideoInfo` 按片源格式（`sourceVideoFormat` + `sourceDVProfile`）上报，实际输出格式放在媒体信息“输出格式”；错误按 `PlaybackErrorInfo.kind` 映射。宿主、后端协议、PlatformView 工厂限定在主线程（`@MainActor` + `@preconcurrency` 协议遵循）。`NativeVideoView` 包了 `IgnorePointer`，手势全部交给 Flutter 控制层。HDR：iOS 由 AVPlayerLayer 自动开启 EDR，没有额外代码。集成测试改为真实播放：用 `--dart-define=NATIVE_PLAYER_SAMPLE=<本地文件>` 传入样片；在 iOS 26.3 模拟器上用 ffmpeg 生成的 HDR10 HEVC MKV（AAC 音轨 + SRT 字幕）通过（时长、播放、进度、HDR10 识别、轨道、seek、倍速截断到 2.0、音量） |
 | 2026-10-21 | Stage 4.8 内核选择 | 完成（第一批结束），待真机验证 | 新增 `AppleAetherRule`：iOS / macOS → `[aether]`，没有 mpv 兜底；其他平台仍走 `DefaultMpvTextureRule`。新增端到端集成测试 `integration_test/playback_session_native_test.dart`（真实选择器 + 工厂 + 会话，本地样片）：起播位置、倍速截断、HDR10 识别、内嵌中文字幕自动选择、本地缓存提示、退出保存进度全部通过（iOS 26.3 模拟器）；模拟器截图确认画面正常渲染在 PlatformView 中。macOS 本轮未跑集成测试（用户开着调试版 App）。**第一批已知限制**：Apple 端字幕不显示（4.5）；起播位置通过“时长就绪后 seek”实现，开头会先从 0 播一瞬间，以后可在契约里加 startPosition 交给 `load(startPosition:)` |
+| 2026-10-21 | Stage 4.5 字幕渲染 | 完成，待真机与 macOS 运行验证 | 插件新增 `mpvkit/libass-build` 0.17.5（锁定精确版本）。`SubtitleOverlayView` 叠在 AetherPlayerView 上方（容器 `PassthroughView` 让子视图铺满且不拦截手势）：文字 cue 全部交给 libass（`LibassRenderer`），ASS 轨开启 `preserveASSMarkup` 直接送原始事件行，SRT / WebVTT / richText 由 `SubtitleCueConverter` 转成带样式和 `placement` 的 ASS 事件；PGS / VobSub / DVB 图片 cue 按画布坐标贴到视频区域；30Hz 定时器按 `sourceTime` 加播放速度插值，结果不变时不重绘。**字体**：iOS 系统中文字体位于私有目录，libass 的 FreeType 打不开，所以不用系统字体来源（`ASS_FONTPROVIDER_NONE`），改为 Flutter 通过新增的 Pigeon 方法 `configureSubtitleFonts` 传入 HarmonyOS Sans SC 资源（经 `lookupKeyForAsset` 定位）作为默认字体，再加上 MKV 内嵌字体（`fontAttachments`）；请求的字体找不到时回退到默认字体。另外需要关闭 libass 的 ReadOrder 去重（很多文件写死为 0），改为按内容去重；MKV CodecPrivate 里的 NUL 要去掉。集成测试 `native_player_channel_test.dart` 覆盖内嵌 ASS（颜色、斜体、Top 样式、卡拉 OK）、内嵌 SRT、外挂 ASS、PGS，iOS 26.3 模拟器全部通过并截图核对；模拟器无法解码 4K 杜比视界 + EAC3 样片（报 Cannot Decode），PGS 用例改用把该样片的 PGS 轨原样复制到 SDR 测试视频的样片。macOS 只做了编译验证（用户开着调试版 App，未跑集成测试）。样片通过 `--dart-define` 传入：`NATIVE_PLAYER_SUBTITLE_SAMPLE`、`NATIVE_PLAYER_EXTERNAL_ASS`、`NATIVE_PLAYER_PGS_SAMPLE`，`NATIVE_PLAYER_HOLD=true` 时在关键画面打印 `NP_HOLD` 并停留以便截图 |
 
 ---
 

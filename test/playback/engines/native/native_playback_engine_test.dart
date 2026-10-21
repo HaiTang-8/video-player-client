@@ -13,6 +13,10 @@ class _FakeHostApi extends NativePlayerHostApi {
       NativeCapabilities(dolbyVisionColor: true, maxVolume: 1.0, maxRate: 2.0);
 
   @override
+  Future<void> configureSubtitleFonts(List<String> assetKeys) async =>
+      calls.add('fonts ${assetKeys.join(',')}');
+
+  @override
   Future<int> create() async {
     calls.add('create');
     return 7;
@@ -97,6 +101,7 @@ void main() {
         maxVolume: 1.0,
         maxRate: 1.0,
       ),
+      subtitleFontAssets: const ['fonts/a.ttf', 'fonts/b.ttf'],
       api: api,
       events: registry,
     );
@@ -132,6 +137,7 @@ void main() {
     expect(api.opened!.httpHeaders, {'Authorization': 'Bearer t'});
     expect(api.opened!.isLocalFile, isFalse);
     expect(api.calls, [
+      'fonts fonts/a.ttf,fonts/b.ttf',
       'create',
       'open 7 https://media.local/a.mkv true',
       'seek 7 90000',
@@ -226,6 +232,6 @@ void main() {
     await pending;
 
     expect(registry.listeners, isEmpty);
-    expect(api.calls, ['create', 'dispose 7']);
+    expect(api.calls, ['fonts fonts/a.ttf,fonts/b.ttf', 'create', 'dispose 7']);
   });
 }

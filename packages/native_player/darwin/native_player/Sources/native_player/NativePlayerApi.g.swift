@@ -526,6 +526,9 @@ class NativePlayerApiPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendab
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol NativePlayerHostApi {
   func capabilities() throws -> NativeCapabilities
+  /// 字幕渲染使用的字体（Flutter 资源名），在 [create] 之前调用；
+  /// 第一个作为默认字体，ASS 请求的字体找不到时回退到它
+  func configureSubtitleFonts(assetKeys: [String]) throws
   func create() throws -> Int64
   func open(playerId: Int64, source: NativeSource, autoPlay: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func play(playerId: Int64) throws
@@ -564,6 +567,23 @@ class NativePlayerHostApiSetup {
       }
     } else {
       capabilitiesChannel.setMessageHandler(nil)
+    }
+    /// 字幕渲染使用的字体（Flutter 资源名），在 [create] 之前调用；
+    /// 第一个作为默认字体，ASS 请求的字体找不到时回退到它
+    let configureSubtitleFontsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.configureSubtitleFonts\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      configureSubtitleFontsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let assetKeysArg = args[0] as! [String]
+        do {
+          try api.configureSubtitleFonts(assetKeys: assetKeysArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      configureSubtitleFontsChannel.setMessageHandler(nil)
     }
     let createChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.create\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
