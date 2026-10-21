@@ -555,11 +555,11 @@ abstract class NativePlayerEventApi {
   - (b) 确认与 media_kit libmpv 的 FFmpeg 冲突，确定 Apple 端去掉 libmpv 的方式。
   - (c) 在 iPhone 16 Pro Max 和一台 Mac 上验证 DV P5 / P8.1 / HDR10。
 - [x] 4.1 依赖调整：把 `media_kit_libs_video` 换成按平台引入的 `media_kit_libs_android_video`、`media_kit_libs_windows_video`、`media_kit_libs_linux`（Apple 不打包 libmpv，做法参考 Moonfin 的 pubspec 注释）；按 D1 提升部署版本；Apple 上 `MediaKit.ensureInitialized()` 要么条件化，要么确认无害。
-- [ ] 4.2 Swift `AetherPlayerHost`：`playerId → 引擎包装` 注册表；实现 HostApi；把引擎发布的属性映射为事件（position 节流）。
-- [ ] 4.3 PlatformView 工厂：iOS（UIView）和 macOS（NSView）分别承载 AetherPlayerView 和字幕层；视图跟随页面生命周期，引擎包装跟随 playerId 生命周期（参考 Moonfin 的分层）。
-- [ ] 4.4 功能映射：请求头与 302、本地文件（下载缓存）、倍速、音量（`maxVolume = 1.0`，见 D8）、音轨、内嵌字幕、外挂字幕（优先用 URL + headers，`externalSubtitleUrl = true`）、缓冲、完成、错误映射。
+- [x] 4.2 Swift `AetherPlayerHost`：`playerId → 引擎包装` 注册表；实现 HostApi；把引擎发布的属性映射为事件（position 节流）。
+- [x] 4.3 PlatformView 工厂：iOS（UIView）和 macOS（NSView）分别承载 AetherPlayerView 和字幕层；视图跟随页面生命周期，引擎包装跟随 playerId 生命周期（参考 Moonfin 的分层）。
+- [x] 4.4 功能映射：请求头与 302、本地文件（下载缓存）、倍速、音量（`maxVolume = 1.0`，见 D8）、音轨、内嵌字幕、外挂字幕（优先用 URL + headers，`externalSubtitleUrl = true`）、缓冲、完成、错误映射。
 - [ ] 4.5 字幕渲染（按 D7）：AetherEngine 只发布 `subtitleCues`，绘制由宿主负责，要覆盖文本 cue（样式与 `placement`）、PGS 图片 cue、外挂 ASS / SRT；选 B 时开启 `preserveASSMarkup` 并接入 libass 渲染器，字体使用 `fontAttachments`。
-- [ ] 4.6 HDR / DV：iOS 自动开启 EDR。macOS 上不声明 `panelPresentsDolbyVision`，Profile 5 颜色也是正确的（作者在 16 寸 XDR 上实测），只是标签会显示为 HDR10，所以媒体信息里的动态范围以探测结果为准。
+- [x] 4.6 HDR / DV：iOS 自动开启 EDR。macOS 上不声明 `panelPresentsDolbyVision`，Profile 5 颜色也是正确的（作者在 16 寸 XDR 上实测），只是标签会显示为 HDR10，所以媒体信息里的动态范围以探测结果为准。
 - [ ] 4.7 平台行为：iOS 全屏和横竖屏沿用现有方向通道；macOS 窗口和全屏沿用 `WindowControls`；确认 Flutter 控制层在 PlatformView 上方的手势正常。
 - [ ] 4.8 选择规则加入第 2 条。
 
@@ -696,6 +696,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 4.0 Spike | 完成，待决策 | ① **AetherEngine 7.44.0 无法用 Xcode 26.3 编译**：`AetherEngine.swift:5300` 报 `sending 'codecpar' risks causing data races`（Swift 6.2 与 6.4 的并发检查规则不同）。作者 CI 自 2026-09-30 起只测 Xcode 27（README 也写明要求 Xcode 27），而 Xcode 27 需要 macOS 26.6。② **7.22.2（CI 切换前最后一个版本）可以编译**：macOS Release、iOS 真机 Release（不签名）、iOS 模拟器全部通过；解析出的依赖为 FFmpegBuild 3.6.0、LibDovi 2.1.0、SMBClient 0.3.1、libass-build 0.17.5。③ 已把 App 最低系统版本临时提到 iOS 18 / macOS 15（D1）；App 内同时打包了两套 FFmpeg，按计划在 4.1 移除 media_kit。④ 备选方案调研：MPVKit（LGPL，mpv + libplacebo + MoltenVK，iOS 15 / macOS 12 起支持，示例使用 `vo=gpu-next` + `wid` 指向 CAMetalLayer + `target-colorspace-hint` 开 EDR；Metal 支持是 mpv 未合并的补丁）、KSPlayer（免费版 GPL-3.0，MKV / 杜比视界在付费 LGPL 版）、fvp（Flutter 用户免费，但只有 SDR）。用户选择锁定 AetherEngine 7.22.2 |
 | 2026-10-21 | 决策：Apple 内核 | 完成 | 用户确认使用 **AetherEngine 7.22.2**（临时锁定，正式发布前升级 macOS 26 + Xcode 27 并换成最新版）；第一批先做 4.1–4.4、4.6、4.8（目标颜色正确，Apple 端暂不显示字幕），第二批做 4.5 字幕。最低系统版本 iOS 18 / macOS 15 |
 | 2026-10-21 | Stage 4.1 依赖调整 | 完成 | `media_kit_libs_video` 换成按平台引入的 android / windows / linux 包，iOS / macOS 的 `media_kit_video` 自动改用 stub；`main.dart` 在 iOS / macOS 跳过 `MediaKit.ensureInitialized()`；App 最低系统版本提到 iOS 18 / macOS 15（灵动岛扩展保持 16.2）；插件锁定 AetherEngine 7.22.2（libass 推迟到 4.5 再加）；提交 Xcode 生成的 `Package.resolved`。清理构建目录后，iOS / macOS 包内只剩 AetherEngine 一套 FFmpeg |
+| 2026-10-21 | Stage 4.2–4.4、4.6 AetherEngine 后端 | 完成 | `AetherPlayerBackend.swift`：`load(url:options:)` 透传请求头和 autoplay；状态通过 Combine 转成事件（位置 250ms 节流；buffering = `isBuffering` 或 loading；打开期间的错误只由 open 回调返回，不重复发事件）；轨道 id 为 `TrackInfo.id`；外挂字幕写临时文件后 `addExternalSubtitleTrack` 并选中，销毁时清理；`videoGravity` 实现铺满 / 保持比例；`VideoInfo` 按片源格式（`sourceVideoFormat` + `sourceDVProfile`）上报，实际输出格式放在媒体信息“输出格式”；错误按 `PlaybackErrorInfo.kind` 映射。宿主、后端协议、PlatformView 工厂限定在主线程（`@MainActor` + `@preconcurrency` 协议遵循）。`NativeVideoView` 包了 `IgnorePointer`，手势全部交给 Flutter 控制层。HDR：iOS 由 AVPlayerLayer 自动开启 EDR，没有额外代码。集成测试改为真实播放：用 `--dart-define=NATIVE_PLAYER_SAMPLE=<本地文件>` 传入样片；在 iOS 26.3 模拟器上用 ffmpeg 生成的 HDR10 HEVC MKV（AAC 音轨 + SRT 字幕）通过（时长、播放、进度、HDR10 识别、轨道、seek、倍速截断到 2.0、音量） |
 
 ---
 

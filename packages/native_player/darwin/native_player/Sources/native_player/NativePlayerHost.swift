@@ -1,7 +1,8 @@
 import Foundation
 
 /// Pigeon 宿主接口的实现：按 playerId 管理播放器实例并转发调用
-final class NativePlayerHost: NativePlayerHostApi {
+@MainActor
+final class NativePlayerHost: @preconcurrency NativePlayerHostApi {
   private let factory: PlayerBackendFactory
   private let events: NativePlayerEventsApiProtocol
   private var nextId: Int64 = 1
@@ -19,7 +20,11 @@ final class NativePlayerHost: NativePlayerHostApi {
   func create() throws -> Int64 {
     let id = nextId
     nextId += 1
-    players[id] = factory.make(PlayerEventSink(playerId: id, api: events))
+    do {
+      players[id] = try factory.make(PlayerEventSink(playerId: id, api: events))
+    } catch {
+      throw PigeonError(code: "create_failed", message: "创建播放器失败: \(error)", details: nil)
+    }
     return id
   }
 

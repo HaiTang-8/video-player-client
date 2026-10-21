@@ -7,7 +7,8 @@ import FlutterMacOS
 #endif
 
 /// viewType = native_player/video；把 playerId 对应实例的渲染视图挂进 Flutter 的容器
-final class NativeVideoViewFactory: NSObject, FlutterPlatformViewFactory {
+@MainActor
+final class NativeVideoViewFactory: NSObject, @preconcurrency FlutterPlatformViewFactory {
   static let viewType = "native_player/video"
 
   private let host: NativePlayerHost

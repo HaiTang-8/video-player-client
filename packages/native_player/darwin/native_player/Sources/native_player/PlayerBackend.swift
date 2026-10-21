@@ -1,6 +1,7 @@
 import Foundation
 
-/// 一个原生播放器实例。由具体内核（AetherEngine 等）实现，主线程调用
+/// 一个原生播放器实例。由具体内核（AetherEngine 等）实现；Pigeon 回调都在主线程，所以整体限定在主线程
+@MainActor
 protocol PlayerBackend: AnyObject {
   /// 承载画面的视图，由 PlatformView 挂载
   var renderView: PlatformView { get }
@@ -25,7 +26,7 @@ protocol PlayerBackend: AnyObject {
 /// 内核的能力声明和实例构造
 struct PlayerBackendFactory {
   let capabilities: NativeCapabilities
-  let make: (PlayerEventSink) -> PlayerBackend
+  let make: @MainActor (PlayerEventSink) throws -> PlayerBackend
 
   /// 当前平台尚未接入内核时使用：可以创建实例，但打开媒体会失败
   static let unsupported = PlayerBackendFactory(
@@ -34,6 +35,7 @@ struct PlayerBackendFactory {
   )
 }
 
+@MainActor
 final class UnsupportedPlayerBackend: PlayerBackend {
   let renderView: PlatformView = .blackBackground()
 

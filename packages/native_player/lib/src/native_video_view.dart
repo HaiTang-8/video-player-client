@@ -33,6 +33,11 @@ class _NativeVideoViewState extends State<NativeVideoView> {
   @override
   Widget build(BuildContext context) {
     final params = {'playerId': widget.playerId, 'fit': widget.fit.index};
+    // 画面不接收触摸，手势全部交给上层的 Flutter 控制层
+    return IgnorePointer(child: _platformView(params));
+  }
+
+  Widget _platformView(Map<String, Object> params) {
     return switch (defaultTargetPlatform) {
       TargetPlatform.iOS => UiKitView(
         viewType: NativeVideoView.viewType,
