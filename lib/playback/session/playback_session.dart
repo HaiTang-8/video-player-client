@@ -49,37 +49,30 @@ class PlaybackSession extends ChangeNotifier {
     required PlaybackSourceGateway sourceGateway,
     required WatchProgressGateway progressGateway,
     required double Function() defaultRate,
-  }) : _resolver = resolver,
+  }) : _selector = selector,
+       _factory = factory,
+       _environment = environment,
+       _progressGateway = progressGateway,
+       _resolver = resolver,
        _sourceGateway = sourceGateway,
        _defaultRate = defaultRate {
-    final decision = selector.select(
-      EngineSelectionContext(environment: environment),
-    );
-    final kind = decision.candidates.first;
-    LogService.instance.info(
-      'PlaybackSession',
-      'Playback engine: ${kind.label} (${decision.reason})',
-    );
-    engine = factory.create(kind);
-    _tracker = PlaybackProgressTracker(
-      engine: engine,
-      gateway: progressGateway,
-      isSeeking: () => _seek.isActive,
-    );
-    _seek = SeekCoordinator(
-      engine: engine,
-      onSeekStarted: _tracker.markControlledSeek,
-      onSeekSettled: () => _tracker.save(force: true),
-    );
-    _bindEngine();
+    _attach(_factory.create(_selectKind()!));
   }
 
-  late final PlaybackEngine engine;
+  final EngineSelector _selector;
+  final PlaybackEngineFactory _factory;
+  final PlatformEnvironment _environment;
+  final WatchProgressGateway _progressGateway;
   final PlaybackSourceResolver _resolver;
   final PlaybackSourceGateway _sourceGateway;
   final double Function() _defaultRate;
-  late final PlaybackProgressTracker _tracker;
-  late final SeekCoordinator _seek;
+  final Set<PlaybackEngineKind> _failedKinds = {};
+  late PlaybackEngine _engine;
+  late PlaybackProgressTracker _tracker;
+  late SeekCoordinator _seek;
+
+  /// 内核回退后会换成新实例，UI 需要随之重建
+  PlaybackEngine get engine => _engine;
   final SubtitleAutoSelector _subtitleSelector = SubtitleAutoSelector();
   final List<StreamSubscription> _subscriptions = [];
   final StreamController<String> _notices = StreamController.broadcast();
@@ -245,6 +238,65 @@ class PlaybackSession extends ChangeNotifier {
     super.dispose();
   }
 
+  PlaybackEngineKind? _selectKind() {
+    final decision = _selector.select(
+      EngineSelectionContext(
+        environment: _environment,
+        failedKinds: _failedKinds,
+      ),
+    );
+    if (decision.candidates.isEmpty) return null;
+    final kind = decision.candidates.first;
+    LogService.instance.info(
+      'PlaybackSession',
+      'Playback engine: ${kind.label} (${decision.reason})',
+    );
+    return kind;
+  }
+
+  void _attach(PlaybackEngine engine) {
+    _engine = engine;
+    _tracker = PlaybackProgressTracker(
+      engine: engine,
+      gateway: _progressGateway,
+      isSeeking: () => _seek.isActive,
+    );
+    _seek = SeekCoordinator(
+      engine: engine,
+      onSeekStarted: _tracker.markControlledSeek,
+      onSeekSettled: () => _tracker.save(force: true),
+    );
+    _bindEngine();
+  }
+
+  /// 当前内核无法播放时换下一个候选内核，从原位置重新加载；没有候选时返回 false
+  bool _tryFallback(PlaybackError error) {
+    final item = _item;
+    if (item == null) return false;
+    final failed = _engine.kind;
+    _failedKinds.add(failed);
+    final next = _selectKind();
+    if (next == null) return false;
+    final position = _startAt ?? _engine.state.position;
+    _loadGeneration++;
+    _tracker.stop();
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    final previous = _engine;
+    _attach(_factory.create(next));
+    unawaited(previous.dispose());
+    notifyListeners();
+    unawaited(() async {
+      await initialize();
+      if (_disposed) return;
+      _notify('${failed.label} 无法播放（${error.message}），已切换到 ${next.label}');
+      await load(item, startAt: position);
+    }());
+    return true;
+  }
+
   void _bindEngine() {
     final streams = engine.streams;
     _subscriptions
@@ -271,6 +323,7 @@ class PlaybackSession extends ChangeNotifier {
       _tracker.markNetworkError();
       return;
     }
+    if (error.fallbackSuggested && _tryFallback(error)) return;
     _setStatus(
       PlaybackSessionFailed(
         '${engine.kind.label} 错误: $error\n\n播放地址: ${_currentUrl ?? "未知"}',

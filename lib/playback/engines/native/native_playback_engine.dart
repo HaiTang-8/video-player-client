@@ -246,6 +246,7 @@ class NativePlaybackEngine
       message: error.message,
       httpStatus: error.httpStatus,
       recoverable: error.recoverable,
+      fallbackSuggested: error.fallbackSuggested,
     ),
   );
 }

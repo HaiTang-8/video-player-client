@@ -44,6 +44,20 @@ class AppleAetherRule implements EngineSelectionRule {
   }
 }
 
+/// Android 优先 Media3（系统解码器，支持杜比视界 / HDR），无法播放时回退到 mpv
+class AndroidMedia3Rule implements EngineSelectionRule {
+  const AndroidMedia3Rule();
+
+  @override
+  EngineDecision? evaluate(EngineSelectionContext context) {
+    if (context.environment.platform != TargetPlatform.android) return null;
+    return const EngineDecision([
+      PlaybackEngineKind.media3,
+      PlaybackEngineKind.mpvTexture,
+    ], 'Android 优先使用 Media3');
+  }
+}
+
 class DefaultMpvTextureRule implements EngineSelectionRule {
   const DefaultMpvTextureRule();
 

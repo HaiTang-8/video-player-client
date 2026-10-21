@@ -328,6 +328,7 @@ class NativeError {
     required this.message,
     this.httpStatus,
     required this.recoverable,
+    required this.fallbackSuggested,
   });
 
   NativeErrorKind kind;
@@ -338,8 +339,11 @@ class NativeError {
 
   bool recoverable;
 
+  /// 当前内核无法播放此媒体（如设备不能解码杜比视界 P5、缺少音频解码器），应换下一个候选内核
+  bool fallbackSuggested;
+
   List<Object?> _toList() {
-    return <Object?>[kind, message, httpStatus, recoverable];
+    return <Object?>[kind, message, httpStatus, recoverable, fallbackSuggested];
   }
 
   Object encode() {
@@ -353,6 +357,7 @@ class NativeError {
       message: result[1]! as String,
       httpStatus: result[2] as int?,
       recoverable: result[3]! as bool,
+      fallbackSuggested: result[4]! as bool,
     );
   }
 
@@ -368,7 +373,8 @@ class NativeError {
     return _deepEquals(kind, other.kind) &&
         _deepEquals(message, other.message) &&
         _deepEquals(httpStatus, other.httpStatus) &&
-        _deepEquals(recoverable, other.recoverable);
+        _deepEquals(recoverable, other.recoverable) &&
+        _deepEquals(fallbackSuggested, other.fallbackSuggested);
   }
 
   @override
@@ -377,7 +383,7 @@ class NativeError {
 
   @override
   String toString() {
-    return 'NativeError(kind: $kind, message: $message, httpStatus: $httpStatus, recoverable: $recoverable)';
+    return 'NativeError(kind: $kind, message: $message, httpStatus: $httpStatus, recoverable: $recoverable, fallbackSuggested: $fallbackSuggested)';
   }
 }
 

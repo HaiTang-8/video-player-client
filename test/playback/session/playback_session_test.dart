@@ -195,6 +195,69 @@ void main() {
     },
   );
 
+  test('falls back to the next engine from the same position', () async {
+    final media3 = FakePlaybackEngine(kind: PlaybackEngineKind.media3);
+    final mpv = FakePlaybackEngine();
+    final android = PlaybackSession(
+      selector: const EngineSelector([
+        AndroidMedia3Rule(),
+        DefaultMpvTextureRule(),
+      ]),
+      factory: PlaybackEngineFactory({
+        PlaybackEngineKind.media3: () => media3,
+        PlaybackEngineKind.mpvTexture: () => mpv,
+      }),
+      environment: const PlatformEnvironment(platform: TargetPlatform.android),
+      resolver: resolver,
+      sourceGateway: sourceGateway,
+      progressGateway: progressGateway,
+      defaultRate: () => 1.0,
+    );
+    addTearDown(android.dispose);
+    final androidNotices = <String>[];
+    android.notices.listen(androidNotices.add);
+
+    await android.load(movie);
+    media3.hub.update(duration: hour, position: const Duration(minutes: 5));
+    media3.hub.addError(
+      const PlaybackError(
+        kind: PlaybackErrorKind.decoder,
+        message: '无法解码杜比视界 Profile 5',
+        fallbackSuggested: true,
+      ),
+    );
+    await pumpEventQueue();
+
+    expect(android.engine, same(mpv));
+    expect(media3.disposed, isTrue);
+    expect(
+      mpv.calls,
+      containsAllInOrder(['initialize', 'open http://media.local/a.mkv']),
+    );
+    expect(androidNotices.last, contains('已切换到 mpv'));
+    expect(android.status, isA<PlaybackSessionReady>());
+
+    mpv.hub.update(duration: hour);
+    await pumpEventQueue();
+    expect(mpv.calls.last, 'seek 300');
+  });
+
+  test('fallback without another engine fails the session', () async {
+    await session.load(movie);
+    engine.hub.addError(
+      const PlaybackError(
+        kind: PlaybackErrorKind.decoder,
+        message: 'no decoder',
+        fallbackSuggested: true,
+      ),
+    );
+    await pumpEventQueue();
+    expect(
+      (session.status as PlaybackSessionFailed).message,
+      contains('no decoder'),
+    );
+  });
+
   test('auto loads best external subtitle and skips embedded pick', () async {
     sourceGateway.subtitles = [subtitleInfo('chs', 95, language: 'chs')];
     await session.load(movie);

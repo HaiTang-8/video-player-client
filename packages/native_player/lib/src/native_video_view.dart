@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -48,6 +49,25 @@ class _NativeVideoViewState extends State<NativeVideoView> {
         viewType: NativeVideoView.viewType,
         creationParams: params,
         creationParamsCodec: const StandardMessageCodec(),
+      ),
+      // Hybrid Composition：SurfaceView 直接送显，HDR 输出需要这种方式
+      TargetPlatform.android => PlatformViewLink(
+        viewType: NativeVideoView.viewType,
+        surfaceFactory: (context, controller) => AndroidViewSurface(
+          controller: controller as AndroidViewController,
+          gestureRecognizers: const {},
+          hitTestBehavior: PlatformViewHitTestBehavior.transparent,
+        ),
+        onCreatePlatformView: (creation) =>
+            PlatformViewsService.initExpensiveAndroidView(
+                id: creation.id,
+                viewType: NativeVideoView.viewType,
+                layoutDirection: TextDirection.ltr,
+                creationParams: params,
+                creationParamsCodec: const StandardMessageCodec(),
+              )
+              ..addOnPlatformViewCreatedListener(creation.onPlatformViewCreated)
+              ..create(),
       ),
       _ => const SizedBox.expand(),
     };

@@ -393,6 +393,8 @@ struct NativeError: Hashable, CustomStringConvertible {
   var message: String
   var httpStatus: Int64? = nil
   var recoverable: Bool
+  /// 当前内核无法播放此媒体（如设备不能解码杜比视界 P5、缺少音频解码器），应换下一个候选内核
+  var fallbackSuggested: Bool
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -401,12 +403,14 @@ struct NativeError: Hashable, CustomStringConvertible {
     let message = pigeonVar_list[1] as! String
     let httpStatus: Int64? = nilOrValue(pigeonVar_list[2])
     let recoverable = pigeonVar_list[3] as! Bool
+    let fallbackSuggested = pigeonVar_list[4] as! Bool
 
     return NativeError(
       kind: kind,
       message: message,
       httpStatus: httpStatus,
-      recoverable: recoverable
+      recoverable: recoverable,
+      fallbackSuggested: fallbackSuggested
     )
   }
   func toList() -> [Any?] {
@@ -415,13 +419,14 @@ struct NativeError: Hashable, CustomStringConvertible {
       message,
       httpStatus,
       recoverable,
+      fallbackSuggested,
     ]
   }
   static func == (lhs: NativeError, rhs: NativeError) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return NativePlayerApiPigeonInternal.deepEquals(lhs.kind, rhs.kind) && NativePlayerApiPigeonInternal.deepEquals(lhs.message, rhs.message) && NativePlayerApiPigeonInternal.deepEquals(lhs.httpStatus, rhs.httpStatus) && NativePlayerApiPigeonInternal.deepEquals(lhs.recoverable, rhs.recoverable)
+    return NativePlayerApiPigeonInternal.deepEquals(lhs.kind, rhs.kind) && NativePlayerApiPigeonInternal.deepEquals(lhs.message, rhs.message) && NativePlayerApiPigeonInternal.deepEquals(lhs.httpStatus, rhs.httpStatus) && NativePlayerApiPigeonInternal.deepEquals(lhs.recoverable, rhs.recoverable) && NativePlayerApiPigeonInternal.deepEquals(lhs.fallbackSuggested, rhs.fallbackSuggested)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -430,10 +435,11 @@ struct NativeError: Hashable, CustomStringConvertible {
     NativePlayerApiPigeonInternal.deepHash(value: message, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: httpStatus, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: recoverable, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: fallbackSuggested, hasher: &hasher)
   }
 
   public var description: String {
-    return "NativeError(kind: \(String(describing: kind)), message: \(String(describing: message)), httpStatus: \(String(describing: httpStatus)), recoverable: \(String(describing: recoverable)))"
+    return "NativeError(kind: \(String(describing: kind)), message: \(String(describing: message)), httpStatus: \(String(describing: httpStatus)), recoverable: \(String(describing: recoverable)), fallbackSuggested: \(String(describing: fallbackSuggested)))"
   }
 }
 

@@ -71,6 +71,32 @@ void main() {
     }
   });
 
+  test('Android prefers Media3 and falls back to mpv', () {
+    const appSelector = EngineSelector([
+      AppleAetherRule(),
+      AndroidMedia3Rule(),
+      DefaultMpvTextureRule(),
+    ]);
+    expect(appSelector.select(context(TargetPlatform.android)).candidates, [
+      PlaybackEngineKind.media3,
+      PlaybackEngineKind.mpvTexture,
+    ]);
+    expect(
+      appSelector
+          .select(
+            context(
+              TargetPlatform.android,
+              failed: {PlaybackEngineKind.media3},
+            ),
+          )
+          .candidates,
+      [PlaybackEngineKind.mpvTexture],
+    );
+    expect(appSelector.select(context(TargetPlatform.windows)).candidates, [
+      PlaybackEngineKind.mpvTexture,
+    ]);
+  });
+
   test('returns empty decision when every candidate failed', () {
     final decision = selector.select(
       context(TargetPlatform.windows, failed: {PlaybackEngineKind.mpvTexture}),

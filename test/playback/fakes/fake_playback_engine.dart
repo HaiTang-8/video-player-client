@@ -5,6 +5,8 @@ import 'package:media_player/playback/domain/playback_domain.dart';
 
 /// 记录调用、由测试驱动状态的引擎替身
 class FakePlaybackEngine implements PlaybackEngine {
+  FakePlaybackEngine({this.kind = PlaybackEngineKind.mpvTexture});
+
   final PlaybackStateHub hub = PlaybackStateHub();
   final List<String> calls = [];
   PlaybackSource? openedSource;
@@ -15,7 +17,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   bool disposed = false;
 
   @override
-  PlaybackEngineKind get kind => PlaybackEngineKind.mpvTexture;
+  final PlaybackEngineKind kind;
 
   @override
   EngineCapabilities capabilities = const EngineCapabilities(

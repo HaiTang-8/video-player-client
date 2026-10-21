@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
 import 'package:media_player/playback/domain/playback_domain.dart';
 import 'package:media_player/playback/playback_providers.dart';
@@ -13,10 +14,17 @@ import '../test/playback/fakes/fake_gateways.dart';
 
 const _samplePath = String.fromEnvironment('NATIVE_PLAYER_SAMPLE');
 
+/// Android：Media3 无法解码的样片地址（如 DTS 音频），验证会话自动回退到 mpv
+const _fallbackUrl = String.fromEnvironment('NATIVE_PLAYER_FALLBACK_URL');
+
 class _LocalResolver implements PlaybackSourceResolver {
+  _LocalResolver([this.source = const PlaybackSource.localFile(_samplePath)]);
+
+  final PlaybackSource source;
+
   @override
   Future<ResolvedPlayback> resolve(PlaybackItem item) async =>
-      const ResolvedPlayback(PlaybackSource.localFile(_samplePath));
+      ResolvedPlayback(source);
 
   @override
   Future<String?> fetchSubtitleText(SubtitleInfo subtitle) async => null;
@@ -102,5 +110,57 @@ void main() {
       session.dispose();
     },
     skip: _samplePath.isEmpty,
+  );
+
+  testWidgets(
+    'session falls back from Media3 to mpv and keeps playing',
+    (tester) async {
+      MediaKit.ensureInitialized();
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final session = PlaybackSession(
+        selector: container.read(engineSelectorProvider),
+        factory: container.read(playbackEngineFactoryProvider),
+        environment: container.read(platformEnvironmentProvider),
+        resolver: _LocalResolver(const PlaybackSource.network(_fallbackUrl)),
+        sourceGateway: FakeSourceGateway(),
+        progressGateway: FakeProgressGateway(),
+        defaultRate: () => 1.0,
+      );
+      final notices = <String>[];
+      session.notices.listen(notices.add);
+      expect(session.engine.kind, PlaybackEngineKind.media3);
+
+      Widget view() => Directionality(
+        textDirection: TextDirection.ltr,
+        child: Builder(
+          builder:
+              (context) =>
+                  session.engine.buildVideoView(context, fit: BoxFit.contain),
+        ),
+      );
+      await session.initialize();
+      await session.load(const MoviePlaybackItem(1));
+      await tester.pumpWidget(view());
+
+      await _waitFor(
+        tester,
+        () => session.engine.kind == PlaybackEngineKind.mpvTexture,
+        'fallback to mpv',
+      );
+      await tester.pumpWidget(view());
+      await _waitFor(
+        tester,
+        () => session.engine.state.position > const Duration(seconds: 2),
+        'mpv playback',
+      );
+      debugPrint('NP_FALLBACK notices=$notices');
+      expect(notices.any((n) => n.contains('已切换到 mpv')), isTrue);
+      expect(session.status, isA<PlaybackSessionReady>());
+
+      await tester.pumpWidget(const SizedBox());
+      session.dispose();
+    },
+    skip: _fallbackUrl.isEmpty,
   );
 }

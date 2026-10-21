@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,7 +11,7 @@ import 'package:media_player/screens/player/widgets/custom_video_controls.dart';
 import 'package:media_player/screens/player/widgets/player_top_bar.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
-/// 不短于 60 秒、带中文字幕的本地样片
+/// 不短于 60 秒、带中文字幕的样片：本地路径或 http 地址
 const _samplePath = String.fromEnvironment('NATIVE_PLAYER_GESTURE_SAMPLE');
 
 /// 手动驱动的验证：真实触摸经过原生 PlatformView 时 Flutter 控制层是否正常，以及 iOS 前后台恢复。
@@ -27,7 +28,10 @@ void main() {
       final lifecycle = _LifecycleRecorder();
       WidgetsBinding.instance.addObserver(lifecycle);
       final engine = NativePlaybackEngine(
-        kind: PlaybackEngineKind.aether,
+        kind:
+            defaultTargetPlatform == TargetPlatform.android
+                ? PlaybackEngineKind.media3
+                : PlaybackEngineKind.aether,
         initialCapabilities: const EngineCapabilities(
           dolbyVisionColor: true,
           maxVolume: 1.0,
@@ -51,7 +55,11 @@ void main() {
           ),
         ),
       );
-      await engine.open(const PlaybackSource.localFile(_samplePath));
+      await engine.open(
+        _samplePath.startsWith('http')
+            ? const PlaybackSource.network(_samplePath)
+            : const PlaybackSource.localFile(_samplePath),
+      );
       await _waitFor(
         tester,
         'tracks',
@@ -110,9 +118,11 @@ void main() {
         'background',
         () => lifecycle.wentToBackground && lifecycle.resumed,
       );
-      // 回到前台保持暂停，重建后从原位置继续
+      // iOS 回到前台保持暂停，重建后从原位置继续；Android 与 mpv 一致，后台继续播放
       await _settle(tester, const Duration(seconds: 3));
-      expect(engine.state.playing, isFalse);
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        expect(engine.state.playing, isFalse);
+      }
       expect(engine.state.position, greaterThanOrEqualTo(beforeBackground));
       await engine.play();
       await _waitFor(

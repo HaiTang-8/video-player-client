@@ -19,7 +19,11 @@ final platformEnvironmentProvider = Provider<PlatformEnvironment>(
 );
 
 final engineSelectorProvider = Provider<EngineSelector>(
-  (ref) => const EngineSelector([AppleAetherRule(), DefaultMpvTextureRule()]),
+  (ref) => const EngineSelector([
+    AppleAetherRule(),
+    AndroidMedia3Rule(),
+    DefaultMpvTextureRule(),
+  ]),
 );
 
 final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
@@ -34,6 +38,16 @@ final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
             maxRate: 2.0,
           ),
           subtitleFontAssets: subtitleFontAssets,
+        ),
+    // 真实能力在 initialize 时由原生返回（是否有杜比视界解码器）
+    PlaybackEngineKind.media3:
+        () => NativePlaybackEngine(
+          kind: PlaybackEngineKind.media3,
+          initialCapabilities: const EngineCapabilities(
+            dolbyVisionColor: false,
+            maxVolume: 1.0,
+            maxRate: 3.0,
+          ),
         ),
   }),
 );

@@ -363,15 +363,15 @@ final class AetherPlayerBackend: PlayerBackend {
     let status = info?.underlyingCode.map(Int64.init)
     switch kind {
     case .sourceRefused?, .sourceRateLimited?:
-      return NativeError(kind: .http, message: message, httpStatus: status, recoverable: false)
+      return NativeError(kind: .http, message: message, httpStatus: status, recoverable: false, fallbackSuggested: false)
     case .sourceOpenFailed?, .sourceCertificateRejected?, .vodSourceFailed?:
-      return NativeError(kind: .network, message: message, httpStatus: nil, recoverable: false)
+      return NativeError(kind: .network, message: message, httpStatus: nil, recoverable: false, fallbackSuggested: false)
     case .audioSessionFailed?, .audioBridgeProducedNoOutput?:
-      return NativeError(kind: .audioOutput, message: message, httpStatus: nil, recoverable: true)
+      return NativeError(kind: .audioOutput, message: message, httpStatus: nil, recoverable: true, fallbackSuggested: false)
     case .softwarePipelineFailed?, .nativeItemFailed?, .dolbyVisionRequiresHardware?:
-      return NativeError(kind: .decoder, message: message, httpStatus: nil, recoverable: false)
+      return NativeError(kind: .decoder, message: message, httpStatus: nil, recoverable: false, fallbackSuggested: false)
     default:
-      return NativeError(kind: .unknown, message: message, httpStatus: nil, recoverable: false)
+      return NativeError(kind: .unknown, message: message, httpStatus: nil, recoverable: false, fallbackSuggested: false)
     }
   }
 }

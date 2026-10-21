@@ -195,12 +195,24 @@ void main() {
         message: 'refused',
         httpStatus: 403,
         recoverable: false,
+        fallbackSuggested: false,
+      ),
+    );
+    engine.onError(
+      7,
+      NativeError(
+        kind: NativeErrorKind.decoder,
+        message: 'no decoder',
+        recoverable: false,
+        fallbackSuggested: true,
       ),
     );
     await pumpEventQueue();
 
-    expect(errors.single.kind, PlaybackErrorKind.http);
-    expect(errors.single.httpStatus, 403);
+    expect(errors.first.kind, PlaybackErrorKind.http);
+    expect(errors.first.httpStatus, 403);
+    expect(errors.first.fallbackSuggested, isFalse);
+    expect(errors.last.fallbackSuggested, isTrue);
   });
 
   testWidgets('video view reports fit changes', (tester) async {

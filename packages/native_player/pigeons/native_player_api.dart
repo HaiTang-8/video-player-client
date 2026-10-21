@@ -5,6 +5,9 @@ import 'package:pigeon/pigeon.dart';
     dartOut: 'lib/src/generated/native_player_api.g.dart',
     swiftOut:
         'darwin/native_player/Sources/native_player/NativePlayerApi.g.swift',
+    kotlinOut:
+        'android/src/main/kotlin/com/mediaserver/nativeplayer/NativePlayerApi.g.kt',
+    kotlinOptions: KotlinOptions(package: 'com.mediaserver.nativeplayer'),
     dartPackageName: 'native_player',
   ),
 )
@@ -61,12 +64,16 @@ class NativeError {
     required this.message,
     this.httpStatus,
     required this.recoverable,
+    required this.fallbackSuggested,
   });
 
   NativeErrorKind kind;
   String message;
   int? httpStatus;
   bool recoverable;
+
+  /// 当前内核无法播放此媒体（如设备不能解码杜比视界 P5、缺少音频解码器），应换下一个候选内核
+  bool fallbackSuggested;
 }
 
 /// Dart 调用原生。所有带 playerId 的方法作用于 [create] 返回的实例

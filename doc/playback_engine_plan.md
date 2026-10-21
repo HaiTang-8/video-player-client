@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1、Stage 3、Stage 4 完成（含 4.9 发布 CI），待真机与 macOS 运行验证；Stage 2（Windows）推后，下一步 Stage 5（Android）**
+> 状态：**Stage 1、Stage 3、Stage 4 完成（含 4.9 发布 CI），待真机与 macOS 运行验证；Stage 5 第一批（5.1、5.2、5.3、5.5、5.6）完成，下一步第二批 5.4 / 5.7；Stage 2（Windows）推后**
 > 最后更新：2026-10-21
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -379,6 +379,7 @@ abstract class NativePlayerEventApi {
 - 画面承载用 PlatformView，`viewType = 'media_player/native_video'`，`creationParams = {playerId}`。原生侧按 `playerId` 从注册表取引擎实例并挂载视图。
 - 原生侧用 `playerId → 引擎实例` 的注册表，为以后的迷你播放器 / 多实例留出空间。
 - position 事件节流到约 250ms。
+- 错误事件带 `fallbackSuggested`：当前内核放不了此媒体（无解码器等）时为 true，会话换下一个候选内核并从原位置继续（Stage 5 加入）。Pigeon 同时输出 Dart、Swift、Kotlin。
 - 生成命令写进插件的 README，生成文件放在 `lib/src/generated/`，禁止手改。
 
 ### 4.7 引擎选择规则（责任链，按顺序评估）
@@ -570,12 +571,12 @@ abstract class NativePlayerEventApi {
 
 **前置**：Stage 3；D3 已决策。
 
-- [ ] 5.1 Kotlin `Media3PlayerHost`：每个 playerId 一个 ExoPlayer；`DefaultHttpDataSource` 带请求头；支持 MKV；轨道选择用 `TrackSelectionOverride`；错误映射（`ERROR_CODE_DECODING_FORMAT_UNSUPPORTED` 等映射为 `unsupportedFormat` + `fallbackSuggested`）。
-- [ ] 5.2 PlatformView：SurfaceView + Hybrid Composition，验证 HDR 送显和 Flutter 控制层的叠加、手势、性能。
-- [ ] 5.3 设备能力：通过 `MediaCodecList` 查询 `video/dolby-vision` 解码器和支持的 profile，再加上 `Display.HdrCapabilities`，通过 `getDeviceCapabilities` 返回。
+- [x] 5.1 Kotlin `Media3PlayerHost`：每个 playerId 一个 ExoPlayer；`DefaultHttpDataSource` 带请求头；支持 MKV；轨道选择用 `TrackSelectionOverride`；错误映射（`ERROR_CODE_DECODING_FORMAT_UNSUPPORTED` 等映射为 `unsupportedFormat` + `fallbackSuggested`）。
+- [x] 5.2 PlatformView：SurfaceView + Hybrid Composition，验证 HDR 送显和 Flutter 控制层的叠加、手势、性能。
+- [x] 5.3 设备能力：通过 `MediaCodecList` 查询 `video/dolby-vision` 解码器和支持的 profile，再加上 `Display.HdrCapabilities`，通过 `getDeviceCapabilities` 返回。
 - [ ] 5.4 音频：按 D3 接入 LGPL 构建的 FFmpeg 扩展（AC3 / EAC3 / DTS / TrueHD）。不支持的音频返回 `fallbackSuggested`。
-- [ ] 5.5 字幕：内嵌字幕；外挂字幕用 `SubtitleConfiguration` + 带请求头的数据源。ASS 特效字幕支持有限，记为已知限制，用户可以在设置里切到兼容模式。
-- [ ] 5.6 选择规则加入第 3 条；无 DV 解码器的设备遇到 P5 时回退到 mpv 并提示。
+- [x] 5.5 字幕：内嵌字幕；外挂字幕用 `SubtitleConfiguration` + 带请求头的数据源。ASS 特效字幕支持有限，记为已知限制，用户可以在设置里切到兼容模式。
+- [x] 5.6 选择规则加入第 3 条；无 DV 解码器的设备遇到 P5 时回退到 mpv 并提示。
 - [ ] 5.7 设置项“播放内核偏好”在 Android 上生效。
 
 **验收**：有 DV 解码器的机型上 P5 / P8.1 为真杜比视界；无 DV 解码器的机型上 P8.1 按 HDR10 播放，P5 回退到 mpv 并提示；HDR10 为真 HDR；MKV / MP4、各音频格式、字幕正常；§10 全部通过。
@@ -601,10 +602,10 @@ abstract class NativePlayerEventApi {
 |---|---|---|---|---|---|
 | D1 | Apple 最低系统版本：AetherEngine 自 2026-09-16（提交 `852b6a0`）起要求 iOS 18 / macOS 15，项目目前是 iOS 13.4 / macOS 10.15 | A. 提升到 iOS 18 / macOS 15，Apple 上只用 AetherEngine；B. 保留低版本，低版本继续用 media_kit（需要先验证两套 FFmpeg 能否共存，风险高） | A | 4 | **A（2026-10-13 用户确认）**。在 Stage 4.1 提升版本，之前保持现状；锁定 AetherEngine 最新的精确版本。后果：Apple 上没有 mpv 兜底，AetherEngine 打不开的片源直接报错 |
 | D2 | 原生代码放在哪里 | A. 本地插件 `packages/native_player`；B. 直接写在各平台 Runner 里 | A（封装好、边界清晰）；SPM 或窗口消息受阻时，单个平台可以退回 B | 2, 3 | **以插件为主（2026-10-21 用户确认）**：Pigeon 契约、Dart 侧、Android、Windows 放本地插件 `packages/native_player`；Apple 端先在 Stage 4.0 Spike 开启 Flutter SPM 并完整构建 iOS / macOS（重点确认不支持 SPM 的 `open_filex`、`auto_updater`、`screen_brightness_macos` 能否回退到 CocoaPods），通过则放进插件，不通过则 Apple 原生代码改放 Runner |
-| D3 | Android 音频扩展 | A. 自行构建 LGPL 版 Media3 FFmpeg 扩展；B. 使用现成的 GPL 构建（会传染 GPL，不建议）；C. 不支持的音频回退到 mpv | A，C 作为兜底 | 5 | 待定 |
+| D3 | Android 音频扩展 | A. 自行构建 LGPL 版 Media3 FFmpeg 扩展；B. 使用现成的 GPL 构建（会传染 GPL，不建议）；C. 不支持的音频回退到 mpv | A，C 作为兜底 | 5 | **第一批用 C（不支持的音频回退到 mpv），第二批做 A（自行构建 LGPL 扩展）（2026-10-21 用户确认）**。Jellyfin 的现成构建是 GPL-3.0 且落后 Media3 两个版本，本仓库公开但没有许可证，不能直接使用 |
 | D4 | 是否做 Stage 6 | 做 / 不做 | 看无 DV 解码器机型的用户占比再定 | 6 | 待定 |
 | D5 | 后端是否新增媒体技术信息探测（ffprobe：动态范围、DV profile、音频编码） | 做（独立后端任务）/ 不做 | 暂不做；先靠客户端运行时检测和回退。以后用于提前选择引擎和在详情页展示 HDR 标识 | — | 待定 |
-| D6 | 是否向用户开放“播放内核偏好”设置 | 开放 / 隐藏为调试项 | 开放（自动 / 兼容模式） | 2, 5 | 待定 |
+| D6 | 是否向用户开放“播放内核偏好”设置 | 开放 / 隐藏为调试项 | 开放（自动 / 兼容模式） | 2, 5 | **开放，“自动 / 兼容模式”（2026-10-21 用户确认）**，在 5.7 实现 |
 | D7 | Apple 字幕渲染：AetherEngine 只发布字幕 cue（文本带粗体、斜体、颜色、位置等基础样式；PGS 为图片），由宿主绘制；完整 ASS 特效需要宿主开启 `preserveASSMarkup` 并自行接入 libass 渲染器 | A. 原生层绘制基础样式 cue（丢失卡拉 OK、动画、复杂定位等 ASS 特效）；B. 原生层接入 libass 渲染器（例如 swift-ass-renderer），效果与现在的 mpv 一致；C. cue 经 Pigeon 传回 Flutter 绘制（样式可跨引擎统一，同样丢失 ASS 特效） | 字幕组 ASS 是主要场景就选 B；否则先 A，再迭代到 B | 4 | **B（2026-10-13 用户确认）** |
 | D8 | Apple 音量上限：AVPlayer 最大 100%，现在的 mpv 可到 200% | A. 接受，Apple 上音量最大 100%；B. 自行实现音频增益 | A | 4 | **A（2026-10-13 用户确认）** |
 | D9 | 旧系统用户：iOS 18 以下 / macOS 15 以下的设备将无法安装新版本 | A. 不再支持；B. 保留旧版分支维护 | A（取决于 iOS / macOS 的实际用户和分发方式） | 4 | **A（2026-10-13 用户确认）** |
@@ -704,6 +705,8 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | Stage 4.9 发布 CI | 完成，待首次运行 | `.github/workflows/release.yml`：四个构建任务改用 `flutter-version-file: .fvmrc`（`subosito/flutter-action` v2.23.0 起支持，以后升级只改 `.fvmrc`）；macOS / iOS 任务改用 `macos-26`（Apple Silicon）并通过 `DEVELOPER_DIR` 固定 `/Applications/Xcode_26.3.app`（镜像默认 26.6，未验证），先打印 `xcodebuild -version`；新增 `version` 任务统一计算版本（tag 触发取 tag，手动触发取 `pubspec.yaml`），新增 `workflow_dispatch` 手动触发，只构建四个平台，发布任务仅在 `v*` tag 上运行。注意：手动触发要求带 `workflow_dispatch` 的工作流文件已在默认分支上。本机用 CI 相同命令验证：`flutter build macos --release` 产出 arm64 + x86_64 通用包（FFmpeg、libass、Sparkle 都包含两种架构，字幕字体已打包），`flutter build ios --release --no-codesign` 通过（含灵动岛扩展，无 libmpv）。Android / Windows 本机无法构建（缺 Android cmdline-tools、需要 Windows），4.1 的按平台拆分 media_kit 依赖也还没在这两个平台构建过，以首次 CI 运行结果为准 |
 | 2026-10-21 | Stage 4.9 首次手动运行 | 已修复 | 结果：iOS 通过，macOS / Android / Windows 失败。① Android / Windows 的 `pub get` 报 `native_player is only Swift Package Manager compatible`：flutter_tools 只在能读到 Xcode 版本时才认为工程启用了 SPM（`usesSwiftPackageManager`），非 macOS 主机没有 Xcode，只支持 SPM 的插件直接被拒（Windows 开发机本地 `pub get` 同样会失败）。修复：新增 `packages/native_player/darwin/native_player.podspec`，内容只是报错说明本插件只支持 SPM；macOS 上启用 SPM 时 `podhelper.rb` 会跳过有 `Package.swift` 的插件，不会被 CocoaPods 安装。② macOS 报 `.packages/FlutterFramework cannot be accessed`：`pubspec.lock` 记录的 hosted 地址是镜像 `pub.flutter-io.cn`，CI 用 pub.dev，地址不一致时 pub 会忽略 lockfile 重新解析（日志 Changed 180 dependencies），`path_provider_foundation` 升到 2.6.0，其 `Package.swift` 依赖只有更新版 Flutter 才会生成的 `FlutterFramework` 包。修复：CI 获取依赖前把 lockfile 地址换回 pub.dev，并改用 `flutter pub get --enforce-lockfile`。本机验证：全新克隆 + 无效 `DEVELOPER_DIR`（模拟无 Xcode 的主机）时，去掉 podspec 复现同样的错误，加上后通过；全新克隆按 CI 步骤 `--enforce-lockfile` 无版本变化，macOS / iOS Release 构建均通过，`Podfile.lock` 中没有 native_player |
 | 2026-10-21 | Stage 4.9 第二次手动运行 | 通过 | run 39600500949：四个平台全部构建成功，发布任务按设计跳过。macOS / iOS 确认使用 Xcode 26.3（17C529）；四个平台 `--enforce-lockfile` 均无版本变化；macOS DMG 的 Sparkle 签名正常。产物：macOS 57 MB、Windows 99 MB、Android 69 MB、iOS 36 MB。Android / Windows 在去掉 Apple 端 libmpv、按平台拆分 media_kit 依赖后首次构建通过，运行时表现仍待真机验证 |
+| 2026-10-21 | 决策 D3 / D6、Stage 5 分批 | 完成 | D3：第一批 C，第二批 A；D6：开放“自动 / 兼容模式”。Stage 5 分两批：第一批 5.1、5.2、5.3、5.5、5.6（含会话层自动回退、契约增加 `fallbackSuggested`、Pigeon 增加 Kotlin 输出，Android 音量上限同 D8 为 100%）；第二批 5.4、5.7。检索结论：Media3 最新稳定版 1.11.1（Kotlin 2.2，项目 Android Kotlin 插件为 2.1.0，可能需要升级）；本机原本没有 Android SDK，用户同意安装 |
+| 2026-10-22 | Stage 5 第一批（5.1、5.2、5.3、5.5、5.6） | 完成 | **契约与会话层**：`NativeError` / `PlaybackError` 增加 `fallbackSuggested`；Pigeon 增加 Kotlin 输出；新增 `AndroidMedia3Rule`（Android → `[media3, mpvTexture]`）；`PlaybackSession` 支持运行中换内核：收到 `fallbackSuggested` 且有下一个候选时，记下位置、释放旧引擎、换新引擎并从原位置重新加载，提示“X 无法播放（原因），已切换到 Y”；`PlayerScreen` 的控制层以引擎为 key 随之重建。**Android 插件**（`packages/native_player/android`，Media3 **1.10.1**）：`Media3PlayerBackend`（ExoPlayer，请求头与 UA、跨协议重定向、音轨 / 字幕 `TrackSelectionOverride`、外挂字幕 `SubtitleConfiguration` 从当前位置重新准备、音频焦点与拔耳机暂停、倍速上限 3.0、音量上限 100%）；`NativeVideoView`（Hybrid Composition，SurfaceView 直接送显，字幕 `SubtitleView` 叠在 `AspectRatioFrameLayout` 视频区域内）；`DeviceCapabilities`（与 ExoPlayer 一致用 `ALL_CODECS` 查杜比视界解码器及 profile，屏幕 HDR 类型）。**主动回退**：没有解码器的轨道 ExoPlayer 不报错只是不播放，所以有视频 / 音频轨但一条都放不了时主动发 `fallbackSuggested`；另外很多 MKV 只在 HEVC 码流里带杜比视界 RPU、封装里没有 dvcC，Media3 会当普通 HEVC 解码（P5 偏色且不报错），新增 `DolbyVisionProbe`（在解封装输出上查看前 10 个视频样本里的 NAL 62），基础层不是 HDR10 / HLG 时判定为 P5 并请求回退；MKV 没有 Colour 元素时从 HEVC SPS 解析传输特性。**问题与处理**：① 准备阶段任意一次加载错误会走 Media3 的重试路径，MKV 轨道 format 被清掉后抛 NPE（`IO_UNSPECIFIED`），改为网络类错误最多重新准备 3 次；② Media3 1.11.x 有 MKV 嵌套章节 NPE（androidx/media#3438，修复未发布），所以用 1.10.1；③ Media3 走系统网络栈，受明文流量策略限制，App 增加 `usesCleartextTraffic`（以前 mpv / Dart 不受影响）。**真机验证（三星 S23U，Android 16）**：`integration_test/native_player_android_test.dart`（样片经 `adb reverse` 由电脑 HTTP 提供）6 项全部通过：HDR10 硬解（`c2.qti.hevc.decoder`）并识别为 HDR10、倍速 / 音量 / seek、内嵌 ASS / SRT、外挂 ASS、PGS、杜比视界 P5 请求回退、DTS 请求回退；`playback_session_native_test.dart` 新增用例验证 Media3 → mpv 端到端回退后继续播放；手势验证（`adb shell input` 注入单击、长按、横滑、回主屏）通过。**已知限制**：S23U 不向第三方 App 开放 `c2.qti.dv.decoder`，P5 在这台手机上只能回退到 mpv（颜色仍偏，Stage 6 解决）；有杜比视界解码器的机型上，封装未声明的 P5 也会回退（应改为改写 format 走 DV 解码器，待有设备验证）；Media3 的 ASS 不支持行内覆盖标签（颜色、斜体等）；PGS 一个显示集有多个对象时只显示一个且位置错误（可在第二批自定义 PGS 解析器）；Android 退到后台继续播放（与 mpv 一致）。**测试注意**：签名不同时 `flutter test` 会先卸载手机上已装的 App（本次误删了用户原有“观影”及数据，主用户和双开都被卸载）；Ruby WEBrick 对匹配的 If-Range 错误返回 304，测试服务器需忽略 If-Range |
 | 2026-10-21 | 修复：iOS 缓冲提示常驻、进度条无法拖动 | 完成，待真机验证 | 原因：AetherEngine 的 `open` 要等加载完成才返回，缓冲 `true → false`、时长、倍速等事件在 `CustomVideoControls` 挂载前已发完，`PlaybackStateHub` 只在变化时广播，控制层停在写死的初值（缓冲 `true`、时长 0 导致进度条拖动后总跳到 0）。修复：挂载时 `_syncFromEngineState` 从 `engine.state` 读取位置、时长、播放、缓冲、倍速、轨道和视频信息的初值（缓冲为 `true` 时同步开始网速轮询），之后再靠事件更新。mpv 端若挂载时尚未开始加载，加载提示会稍晚出现 |
 
 ---
