@@ -257,7 +257,7 @@ class PlaybackError {
   final bool fallbackSuggested;      // 当前内核放不了，会话换下一个候选内核
 }
 
-class PlaybackSnapshot { position, duration, playing, buffering, completed, rate, volume, tracks, selectedTracks, videoInfo }
+class PlaybackSnapshot { position, duration, playing, buffering, completed, firstFrameRendered, rate, volume, tracks, selectedTracks, videoInfo }  // firstFrameRendered：本次 open 后第一帧已上屏，内核不支持时始终为 false
 class PlaybackStreams  { 上述各项对应的 Stream，另加 Stream<PlaybackError> errors }
 class SelectedTracks   { AudioTrackInfo? audio; SubtitleTrackInfo? subtitle; bool subtitleOff; }  // subtitleOff 区分“关闭”和“引擎自动选择”
 
@@ -268,7 +268,7 @@ abstract interface class PlaybackEngine {
   PlaybackStreams get streams;
 
   Future<void> initialize();
-  Future<void> open(PlaybackSource source, {bool autoPlay = true});
+  Future<void> open(PlaybackSource source, {bool autoPlay = true, Duration? startPosition});  // 起播位置由内核打开时直接定位
   Future<void> play();
   Future<void> pause();
   Future<void> playOrPause();
@@ -350,7 +350,7 @@ abstract class NativePlayerHostApi {
   NativeCapabilities capabilities();                   // dolbyVisionColor / maxVolume / maxRate
   void configureSubtitleFonts(List<String> assetKeys); // 字幕字体（Flutter 资源名，第一个为默认字体），在 create 之前调用
   int create();                                        // 返回 playerId
-  @async void open(int playerId, NativeSource source, bool autoPlay);
+  @async void open(int playerId, NativeSource source, bool autoPlay);  // NativeSource.startPositionMs：起播位置，可为空
   void play(int playerId);
   void pause(int playerId);
   void playOrPause(int playerId);
@@ -372,6 +372,7 @@ abstract class NativePlayerEventsApi {                // 每类事件一个方�
   void onPlaying(int playerId, bool playing);
   void onBuffering(int playerId, bool buffering);
   void onCompleted(int playerId, bool completed);
+  void onFirstFrame(int playerId);                    // 每次 open 后第一帧上屏时一次（后台重建、seek 不再上报）
   void onRate(int playerId, double rate);
   void onVolume(int playerId, double volume);
   void onTracks(int playerId, List<NativeTrack> audio, List<NativeTrack> subtitle);
@@ -740,6 +741,10 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-22 | Stage 7.2 清理与文档 | 完成（Windows 部分随 Stage 2） | 检索没有发现残留的旧播放代码或临时开关，§6 的两条依赖自查为空；Android `debug.nativeplayer.dovi.*` 调试属性是 README 记录的诊断工具，不设置时没有开销，保留；`dolby_vision_probe_test.dart` 的 `DOVI_SPIKE_*` 参数改名为 `DOVI_PROBE_*`。文档：§4.2 / §4.4 / §4.6 改为实际实现，§4.7、§5 标注 Windows 待 Stage 2，§3.2 更新最低系统版本、去掉已不存在的 vendor 目录说明，D4 标为不做。Stage 2 与 7.3 完成后再把总状态改为“已完成” |
 | 2026-10-22 | Android PGS 多对象字幕 | 完成 | **原因**：Media3 1.10.1 的 `PgsParser`（上游 main 相同）每个显示集只读第一个组合对象的坐标，所有对象的图像共用一块缓冲，结果只显示最后一个对象、位置用第一个对象的；也不支持裁剪、按 id 引用调色板和跨显示集复用。**改动**：插件新增 `PgsSubtitleParser`（按 id 保存对象和调色板，ODS 分段拼接，每个组合对象各出一个图像 cue 并支持裁剪，epoch 开始时清空，`reset()` 在 seek 时清空；游程解码、zlib、颜色换算与 Media3 一致），`PgsSubtitleParserFactory` 只替换 PGS，其余格式仍用 `DefaultSubtitleParserFactory`，在 `Media3PlayerBackend` 通过 `DefaultMediaSourceFactory.setSubtitleParserFactory` 注册（同时作用于封装内字幕和外挂字幕）。窗口（WDS）裁切没有实现。**验证**：`pgs.mkv` 在 6.298–7.424 秒有一个两对象的显示集（底部台词 + 顶部注释）；S23U 上 `native_player_android_test.dart` 8 项通过，PGS 用例停在 6.8 秒时两条字幕都显示，位置与 ffmpeg 叠加渲染的参考帧一致 |
 | 2026-10-22 | Android ASS 字幕改用 libass | 完成 | **原因**：Media3 的 `SsaParser` 只认 `\pos` / `\an`，其余行内标签（颜色、粗斜体、字号、字体、卡拉 OK、动画、描边）全部丢弃，与 iOS（D7 = B，libass）表现不一致。**方案**：接入 `io.github.peerless2012:ass-media` / `ass-kt` 0.5.1（MIT，Jellyfin Android TV 等在用），渲染方式 `OVERLAY_OPEN_GL`（叠加层在 `SubtitleView` 内，不阻塞 UI，不影响 HDR）；`media3-effect` 对齐到 1.10.1。**接入时的处理**：① 库的字幕解析工厂会把非 ASS 格式交回 Media3 默认解析器，改为 `PgsSubtitleParserFactory(AssSubtitleParserFactory)`，MKV 由新增的 `AssExtractorsFactory` 换成 `AssMatroskaExtractor`（读取内嵌字体），再由杜比视界探测工厂包一层；② 杜比视界 GPU 重建时播放器输出到渲染器的输入 Surface，报告的尺寸是 -1，libass 帧尺寸无效导致 P5 上完全没有字幕，改为重建期间按 SurfaceView 尺寸设置并跟随布局变化；③ 叠加层只随播放推进重画（每 3 次渲染回调一次），暂停时切换字幕或 seek 不刷新，在 `onTracksChanged` / `onRenderedFirstFrame` 且未播放时手动重画；关闭字幕后叠加层被清空，但 libass 记着上一帧，重新打开同一条字幕时报告没有变化而不重画（播放中同样存在），切换字幕轨时改动一次帧尺寸让 libass 重新排版。**代价**：每种架构多一个 `libass.so`（arm64 3.0 MB、armeabi-v7a 2.1 MB、x86_64 3.1 MB，未压缩存放），通用 APK 约 +8.3 MB；静态链接的 libass（ISC）、freetype（FTL）、harfbuzz（MIT）、fribidi（LGPL 2.1+，在可替换的 .so 内）、libunibreak、fontconfig、expat、libpng，没有 GPL；字体用系统字体（fontconfig `sans-serif`），与 iOS 的 HarmonyOS Sans 不同。**验证（S23U）**：`native_player_android_test.dart` 9 项通过，新增“P5 上的 ASS 与暂停时刷新”（样片 `p5_ass.mkv`）；截图核对内嵌 ASS（红色斜体、顶部黄色 Top 样式、卡拉 OK）、外挂 ASS、切到 SRT 时 ASS 叠加层清空、PGS 两个对象、P5 GPU 重建画面上的 ASS 在播放 / 暂停关闭 / 暂停重开 / 暂停 seek 四种情况下都正确。**风险**：库按 Media3 1.8.0 构建且用反射读 `MatroskaExtractor` 私有字段，升级 Media3 时必须回归；低端电视盒上有社区反馈特效字幕约 0.5 秒延迟 |
+| 2026-10-22 | 播放缓存 Stage 0（另一份任务） | 完成 | `PlaybackSession` 新增起播计时（`PlaybackStartupTimeline`、`lastStartup`、`startup` 日志），不改变播放行为；详见 `doc/playback_cache_plan.md` §6 / §9 |
+| 2026-10-22 | 播放缓存 Stage 1：起播位置交给内核（另一份任务） | 完成，待真机验证 | 契约变化：`PlaybackEngine.open` 增加 `startPosition`，Pigeon `NativeSource` 增加 `startPositionMs`（已重新生成三端代码）。Aether 用 `load(url:startPosition:options:)`，Media3 用 `setMediaSource(source, startPositionMs ?: C.TIME_UNSET)`，mpv 用 `Media(start:)`（media_kit 在 `on_load` 钩子里设置 `start`）。会话层不再在“时长就绪”时 seek，起播位置在 `open` 成功后立即用 `markControlledSeek` 标记，供可疑结束判断使用。Stage 4.8 记录的“开头会先从 0 播一瞬间”应随之消失；模拟器上 HEVC 走软件解码路径，没有复现这个现象，需要真机（AVPlayer 路径）确认。详见 `doc/playback_cache_plan.md` Stage 1 |
+| 2026-10-22 | 播放缓存 Stage 0.4：首帧事件（另一份任务） | 完成 | 契约变化：`PlaybackSnapshot` / `PlaybackStreams` 增加 `firstFrameRendered`（`resetForNewMedia` 时清零），Pigeon 事件增加 `onFirstFrame`（已重新生成三端代码；`NativePlayerEventDispatcher` 和集成测试的事件记录器同步实现）。Aether 订阅 `hasFirstFrameReadyForDisplay`（按单次加载锁存，AVPlayer 路径和软件路径都会置位），Media3 用 `onRenderedFirstFrame`，两端都用标志保证每次 open 只上报一次。**mpv 暂不实现**：可选信号（`vo-configured` 等）在连续打开文件时是否会重新变化取决于窗口配置，本机无法验证，留到推广阶段。iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。详见 `doc/playback_cache_plan.md` Stage 0.4 |
+| 2026-10-22 | 播放缓存 Stage 2：本机代理 Spike（另一份任务） | 模拟器通过，待真机 | 新增 `lib/playback/cache/`（独立隔离区的回环透传代理）。播放页的解析器经 `ProxiedSourceResolver.wrapIfEnabled` 包一层，只有 `--dart-define=PLAYBACK_PROXY=true` 时生效。**iOS Info.plist 新增 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`**（iOS 17 起 ATS 默认拦截 IP 地址；这一项对正式构建同样生效，也放开了局域网 IP 的 http）。Aether 经代理播放、seek、倍速、后台 20 秒后重建均正常。详见 `doc/playback_cache_plan.md` Stage 2 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---
