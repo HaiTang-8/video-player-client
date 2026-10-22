@@ -12,6 +12,7 @@ import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
 import '../../data/services/log_service.dart';
 import '../../providers/providers.dart';
+import '../../playback/cache/proxied_source_resolver.dart';
 import '../../playback/playback_providers.dart';
 import '../../playback/session/playback_item.dart';
 import '../../playback/session/playback_session.dart';
@@ -79,7 +80,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       selector: ref.read(engineSelectorProvider),
       factory: ref.read(playbackEngineFactoryProvider),
       environment: ref.read(platformEnvironmentProvider),
-      resolver: PlaybackSourceResolver(gateway),
+      resolver: ProxiedSourceResolver.wrapIfEnabled(
+        PlaybackSourceResolver(gateway),
+      ),
       sourceGateway: gateway,
       progressGateway: gateway,
       defaultRate: () => ref.read(playbackSettingsProvider).playbackSpeed,
