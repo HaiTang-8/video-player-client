@@ -137,6 +137,8 @@ private class RpuProbeTrackOutput(
   private var probing = false
   private var capturing = false
   private val pending = ByteArrayOutputStream()
+  /** 封装声明了附加数据（如 dvcC 的 BlockAdditionMapping）时，样本还带非主体数据，计入 sampleMetadata 的 size */
+  private var otherPartBytes = 0
   private var samples = 0
   private var zeros = 0
   private var expectHeader = false
@@ -166,7 +168,9 @@ private class RpuProbeTrackOutput(
       throw EOFException()
     }
     if (probing) scan(buffer, 0, read)
-    if (capturing && sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) pending.write(buffer, 0, read)
+    if (capturing) {
+      if (sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) pending.write(buffer, 0, read) else otherPartBytes += read
+    }
     super.sampleData(ParsableByteArray(buffer, read), read, sampleDataPart)
     return read
   }
@@ -176,8 +180,12 @@ private class RpuProbeTrackOutput(
 
   override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
     if (probing) scan(data.data, data.position, length)
-    if (capturing && sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) {
-      pending.write(data.data, data.position, length)
+    if (capturing) {
+      if (sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) {
+        pending.write(data.data, data.position, length)
+      } else {
+        otherPartBytes += length
+      }
     }
     super.sampleData(data, length, sampleDataPart)
   }
@@ -198,8 +206,10 @@ private class RpuProbeTrackOutput(
   private fun capture(timeUs: Long, size: Int, offset: Int) {
     val bytes = pending.toByteArray()
     pending.reset()
+    val mainSize = size - otherPartBytes
+    otherPartBytes = 0
     val end = bytes.size - offset
-    val start = end - size
+    val start = end - mainSize
     if (offset > 0) pending.write(bytes, end, offset)
     if (start < 0) return
     var i = start

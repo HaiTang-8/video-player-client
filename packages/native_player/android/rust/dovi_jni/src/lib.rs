@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use dolby_vision::rpu::dovi_rpu::DoviRpu;
+use dolby_vision::rpu::extension_metadata::blocks::ExtMetadataBlock;
 use dolby_vision::rpu::rpu_data_header::RpuDataHeader;
 use dolby_vision::rpu::rpu_data_mapping::DoviReshapingCurve;
 use jni::objects::{JByteArray, JClass};
@@ -14,7 +15,7 @@ const MAX_PIVOTS: usize = 9;
 const MAX_PIECES: usize = 8;
 const PIECE_LEN: usize = 27;
 const COMP_LEN: usize = 1 + MAX_PIVOTS + MAX_PIECES * PIECE_LEN;
-const HEADER_LEN: usize = 25;
+const HEADER_LEN: usize = 29;
 const LEN: usize = HEADER_LEN + 3 * COMP_LEN;
 
 /// BT.2020 HPE LMS → RGB，与 RPU 中的 rgb_to_lms 矩阵相乘后得到最终的 LMS → RGB
@@ -118,6 +119,12 @@ fn convert(nal: &[u8]) -> Result<[f32; LEN], String> {
     }
     out[23] = min_pq as f32 / 4095.0;
     out[24] = max_pq as f32 / 4095.0;
+    if let Some(ExtMetadataBlock::Level6(l6)) = rpu.vdr_dm_data.as_ref().and_then(|dm| dm.get_block(6)) {
+        out[25] = l6.max_display_mastering_luminance as f32;
+        out[26] = l6.min_display_mastering_luminance as f32 / 10000.0;
+        out[27] = l6.max_content_light_level as f32;
+        out[28] = l6.max_frame_average_light_level as f32;
+    }
 
     for (c, curve) in mapping.curves.iter().enumerate() {
         write_curve(header, curve, &mut out[HEADER_LEN + c * COMP_LEN..][..COMP_LEN])

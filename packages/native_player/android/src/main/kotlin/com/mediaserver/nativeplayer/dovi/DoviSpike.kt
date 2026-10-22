@@ -14,9 +14,9 @@ object DoviSpike {
   val enabled: Boolean
     get() = property("debug.nativeplayer.dovi") == "1"
 
-  /** 窗口建立后的第一帧读回并输出 PQ 网格 */
-  val dump: Boolean
-    get() = property("debug.nativeplayer.dovi.dump") == "1"
+  /** 显示时间（微秒）等于该值的帧画好后读回并输出 PQ 网格 */
+  val dumpAtUs: Long?
+    get() = property("debug.nativeplayer.dovi.dump").toLongOrNull()
 
   @SuppressLint("PrivateApi")
   private fun property(key: String): String =

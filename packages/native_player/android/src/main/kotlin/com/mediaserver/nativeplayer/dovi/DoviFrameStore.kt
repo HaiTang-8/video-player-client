@@ -15,6 +15,7 @@ class DoviFrameStore {
     private set
   @Volatile var released = 0
     private set
+  @Volatile private var lastPresentedUs = 0L
 
   val hasRpu: Boolean
     get() = parsed > 0
@@ -27,7 +28,7 @@ class DoviFrameStore {
     }
     if (parsed++ == 0) Log.i(DoviSpike.TAG, "first RPU at ${timeUs}us profile=${params[1].toInt()}")
     bySampleUs[timeUs] = params
-    if (bySampleUs.size > MAX_FRAMES) prune(timeUs)
+    if (bySampleUs.size > MAX_FRAMES) prune()
   }
 
   fun onFrameReleased(presentationUs: Long, releaseNs: Long) {
@@ -41,15 +42,19 @@ class DoviFrameStore {
   /** 返回该帧的显示时间和参数；参数找不到时为 null */
   fun lookup(releaseNs: Long): Pair<Long?, FloatArray?> {
     val presentationUs = releaseToPresentationUs.remove(releaseNs) ?: return null to null
+    lastPresentedUs = presentationUs
     return presentationUs to bySampleUs[presentationUs]
   }
 
-  private fun prune(latestUs: Long) {
-    bySampleUs.keys.filter { it < latestUs - KEEP_US }.forEach(bySampleUs::remove)
+  /** 解封装会提前读几十秒，只能按播放位置清理，不能按解封装位置 */
+  private fun prune() {
+    val before = lastPresentedUs - KEEP_BEHIND_US
+    bySampleUs.keys.filter { it < before }.forEach(bySampleUs::remove)
   }
 
   private companion object {
-    const val MAX_FRAMES = 1200
-    const val KEEP_US = 20_000_000L
+    /** 60 fps 下约 100 秒，覆盖 Media3 默认的 50 秒预读 */
+    const val MAX_FRAMES = 6000
+    const val KEEP_BEHIND_US = 2_000_000L
   }
 }

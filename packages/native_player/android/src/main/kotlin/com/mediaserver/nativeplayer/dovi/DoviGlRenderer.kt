@@ -38,7 +38,10 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
   private var params: FloatArray? = null
   private val uniforms = DoviUniforms()
   private var loggedFrames = 0
-  private var dumped = false
+  private val dumpAtUs = DoviSpike.dumpAtUs
+  private var dumpPending = false
+  /** 母版最大 / 最小亮度、MaxCLL、MaxFALL（nits，0 表示未知）；没有 RPU 时为 HDR10 样片的默认值 */
+  private var hdrMetadata = floatArrayOf(1000f, 0.005f, 1000f, 400f)
   private var surfaceTexture: SurfaceTexture? = null
   private val transform = FloatArray(16)
   private var surfaceView: SurfaceView? = null
@@ -57,14 +60,17 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
   private val holderCallback =
     object : SurfaceHolder.Callback {
       override fun surfaceCreated(holder: SurfaceHolder) {
+        Log.i(DoviSpike.TAG, "surfaceCreated ${holder.surfaceFrame}")
         runBlocking { createWindow(holder.surface) }
       }
 
       override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        Log.i(DoviSpike.TAG, "surfaceChanged ${width}x$height")
         handler.post { draw() }
       }
 
       override fun surfaceDestroyed(holder: SurfaceHolder) {
+        Log.i(DoviSpike.TAG, "surfaceDestroyed")
         runBlocking { destroyWindow() }
       }
     }
@@ -172,22 +178,23 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
     draw()
   }
 
-  /** 先用固定的 HDR10 静态元数据：BT.2020 / D65、1000 nits */
+  /** HDR10 静态元数据：母版显示器按杜比视界常见的 P3-D65，亮度取自 RPU */
   private fun setHdrMetadata() {
+    val (maxLuminance, minLuminance, maxCll, maxFall) = hdrMetadata.toList()
     val metadata =
       listOf(
-        EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT to 0.708f,
-        EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT to 0.292f,
-        EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT to 0.170f,
-        EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT to 0.797f,
-        EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT to 0.131f,
-        EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT to 0.046f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_RX_EXT to 0.680f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_RY_EXT to 0.320f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_GX_EXT to 0.265f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_GY_EXT to 0.690f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_BX_EXT to 0.150f,
+        EGL_SMPTE2086_DISPLAY_PRIMARY_BY_EXT to 0.060f,
         EGL_SMPTE2086_WHITE_POINT_X_EXT to 0.3127f,
         EGL_SMPTE2086_WHITE_POINT_Y_EXT to 0.3290f,
-        EGL_SMPTE2086_MAX_LUMINANCE_EXT to 1000f,
-        EGL_SMPTE2086_MIN_LUMINANCE_EXT to 0.005f,
-        EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT to 1000f,
-        EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT to 400f,
+        EGL_SMPTE2086_MAX_LUMINANCE_EXT to maxLuminance,
+        EGL_SMPTE2086_MIN_LUMINANCE_EXT to minLuminance,
+        EGL_CTA861_3_MAX_CONTENT_LIGHT_LEVEL_EXT to maxCll,
+        EGL_CTA861_3_MAX_FRAME_AVERAGE_LEVEL_EXT to maxFall,
       )
     for ((key, value) in metadata) {
       if (!EGL14.eglSurfaceAttrib(display, window, key, (value * EGL_METADATA_SCALING_EXT).toInt())) {
@@ -213,7 +220,14 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
     if (frameParams != null && frameParams !== params) {
       params = frameParams
       uniforms.pack(frameParams)
+      val metadata = hdrMetadata(frameParams)
+      if (!metadata.contentEquals(hdrMetadata)) {
+        hdrMetadata = metadata
+        Log.i(DoviSpike.TAG, "HDR10 metadata from RPU: ${metadata.joinToString()}")
+        if (window != EGL14.EGL_NO_SURFACE) setHdrMetadata()
+      }
     }
+    if (presentationUs != null && presentationUs == dumpAtUs) dumpPending = true
     if (loggedFrames < 8 && store.hasRpu) {
       loggedFrames++
       Log.i(DoviSpike.TAG, "frame release=${st.timestamp} pts=$presentationUs rpu=${frameParams != null}")
@@ -246,8 +260,8 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
       gpuNanos += System.nanoTime() - gpuStart
       gpuSamples++
     }
-    if (DoviSpike.dump && !dumped) {
-      dumped = true
+    if (dumpPending) {
+      dumpPending = false
       dumpGrid(size[0], size[1])
     }
     EGL14.eglSwapBuffers(display, window)
@@ -307,6 +321,24 @@ class DoviGlRenderer(private val store: DoviFrameStore) {
   }
 
   private companion object {
+    /** 有 L6 就用 L6；没有时母版亮度取 source_min/max_pq，MaxCLL / MaxFALL 记为未知 */
+    fun hdrMetadata(params: FloatArray): FloatArray =
+      if (params[25] > 0f) {
+        floatArrayOf(params[25], params[26], params[27], params[28])
+      } else {
+        floatArrayOf(pqToNits(params[24]), pqToNits(params[23]), 0f, 0f)
+      }
+
+    fun pqToNits(value: Float): Float {
+      val p = Math.pow(value.toDouble(), 1.0 / PQ_M2)
+      return (10000.0 * Math.pow(maxOf(p - PQ_C1, 0.0) / (PQ_C2 - PQ_C3 * p), 1.0 / PQ_M1)).toFloat()
+    }
+
+    const val PQ_M1 = 2610.0 / 16384.0
+    const val PQ_M2 = 2523.0 / 4096.0 * 128.0
+    const val PQ_C1 = 3424.0 / 4096.0
+    const val PQ_C2 = 2413.0 / 4096.0 * 32.0
+    const val PQ_C3 = 2392.0 / 4096.0 * 32.0
     const val GRID_COLS = 48
     const val GRID_ROWS = 27
     const val EGL_OPENGL_ES3_BIT = 0x40
