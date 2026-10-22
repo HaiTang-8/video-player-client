@@ -15,6 +15,7 @@ import 'playback_gateways.dart';
 import 'playback_item.dart';
 import 'playback_progress_tracker.dart';
 import 'playback_source_resolver.dart';
+import 'playback_startup_timeline.dart';
 import 'seek_coordinator.dart';
 import 'subtitle_auto_selector.dart';
 
@@ -96,6 +97,8 @@ class PlaybackSession extends ChangeNotifier {
   List<SubtitleInfo> _externalSubtitles = const [];
   double? _sessionRate;
   double? _sessionVolume;
+  PlaybackStartupTimeline? _startup;
+  PlaybackStartupReport? _lastStartup;
   bool _disposed = false;
 
   PlaybackSessionStatus get status => _status;
@@ -112,6 +115,9 @@ class PlaybackSession extends ChangeNotifier {
   double? get sessionVolume => _sessionVolume;
 
   bool get isRecoveringFromNetworkError => _tracker.hasRecentNetworkError;
+
+  /// 最近一次加载的起播耗时
+  PlaybackStartupReport? get lastStartup => _lastStartup;
 
   /// 需要提示给用户的消息
   Stream<String> get notices => _notices.stream;
@@ -135,7 +141,7 @@ class PlaybackSession extends ChangeNotifier {
     _setStatus(const PlaybackSessionLoading(resolvingSource: true));
   }
 
-  /// [startAt] 为加载完成后要跳转到的位置，非正数视为从头播放
+  /// [startAt] 为起播位置，由内核打开时直接定位；非正数视为从头播放
   Future<void> load(PlaybackItem item, {Duration? startAt}) async {
     if (_disposed) return;
     await _seek.awaitActive();
@@ -144,28 +150,34 @@ class PlaybackSession extends ChangeNotifier {
       ..stop()
       ..resetErrorTracking();
     _item = item;
-    _startAt = (startAt == null || startAt <= Duration.zero) ? null : startAt;
+    final start =
+        (startAt == null || startAt <= Duration.zero) ? null : startAt;
+    _startAt = start;
     _rateApplied = false;
     _subtitleSelector.reset();
     _currentUrl = null;
     _filePath = null;
     _externalSubtitles = const [];
+    _startup = PlaybackStartupTimeline(engine: engine.kind, target: start);
     _setStatus(const PlaybackSessionLoading(resolvingSource: true));
 
     try {
       final resolved = await _resolver.resolve(item);
       if (_isStale(generation)) return;
+      _startup?.markResolved(localFile: resolved.source.isLocalFile);
       _currentUrl = resolved.source.url;
       _filePath = resolved.filePath;
       _setStatus(const PlaybackSessionLoading(resolvingSource: false));
 
-      await engine.open(resolved.source);
+      await engine.open(resolved.source, startPosition: start);
       if (_isStale(generation)) return;
+      _startup?.markOpened();
       final volume = _sessionVolume;
       if (volume != null) await engine.setVolume(volume);
       if (_isStale(generation)) return;
 
       _tracker.start(item);
+      if (start != null) _tracker.markControlledSeek(start);
       if (resolved.source.isLocalFile) {
         _notify('正在使用本地缓存播放');
       } else {
@@ -313,9 +325,14 @@ class PlaybackSession extends ChangeNotifier {
       ..add(streams.errors.listen(_onError))
       ..add(
         streams.position.listen((position) {
-          if (!_disposed) _tracker.onPosition(position);
+          if (_disposed) return;
+          _tracker.onPosition(position);
+          _checkStartup();
         }),
       )
+      ..add(streams.playing.listen((_) => _checkStartup()))
+      ..add(streams.buffering.listen((_) => _checkStartup()))
+      ..add(streams.firstFrameRendered.listen((_) => _checkStartup()))
       ..add(streams.duration.listen(_onDuration))
       ..add(streams.completed.listen(_onCompleted))
       ..add(streams.tracks.listen(_onTracks));
@@ -341,7 +358,7 @@ class PlaybackSession extends ChangeNotifier {
     );
   }
 
-  /// 时长就绪后应用倍速（每次加载都需要重新设置）并跳转到起播位置
+  /// 时长就绪后应用倍速（每次加载都需要重新设置）；起播位置此时视为已生效
   void _onDuration(Duration duration) {
     if (_disposed || duration.inSeconds <= 0) return;
     if (!_rateApplied) {
@@ -350,15 +367,19 @@ class PlaybackSession extends ChangeNotifier {
         math.min(_sessionRate ?? _defaultRate(), engine.capabilities.maxRate),
       );
     }
-    final target = _startAt;
     LogService.instance.debug(
       'PlaybackSession',
-      'duration=${duration.inSeconds}s, startAt=${target?.inSeconds}',
+      'duration=${duration.inSeconds}s, startAt=${_startAt?.inSeconds}',
     );
-    if (target == null) return;
     _startAt = null;
-    _tracker.markControlledSeek(target);
-    engine.seek(target);
+  }
+
+  void _checkStartup() {
+    final report = _startup?.onState(engine.state);
+    if (_disposed || report == null) return;
+    _startup = null;
+    _lastStartup = report;
+    LogService.instance.info('PlaybackSession', 'startup $report');
   }
 
   void _onCompleted(bool completed) {
@@ -420,6 +441,7 @@ class PlaybackSession extends ChangeNotifier {
 
   void _setStatus(PlaybackSessionStatus status) {
     if (_disposed) return;
+    if (status is PlaybackSessionFailed) _startup = null;
     _status = status;
     notifyListeners();
   }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
@@ -16,12 +18,16 @@ import '../fakes/fake_playback_engine.dart';
 class _FakeResolver implements PlaybackSourceResolver {
   ResolvedPlayback? result;
   Object? error;
+
+  /// 设置后 resolve 会等待它完成，用于模拟慢速解析
+  Completer<void>? gate;
   int resolveCount = 0;
   bool disposed = false;
 
   @override
   Future<ResolvedPlayback> resolve(PlaybackItem item) async {
     resolveCount++;
+    await gate?.future;
     final failure = error;
     if (failure != null) throw failure;
     return result!;
@@ -89,16 +95,114 @@ void main() {
     expect(session.filePath, '/movies/a.mkv');
   });
 
-  test('applies rate and start position once duration is known', () async {
+  test('opens at the start position and applies rate once duration is known', () async {
     await session.load(movie, startAt: const Duration(seconds: 120));
     engine.hub.update(duration: hour);
     await pumpEventQueue();
 
-    expect(engine.calls, [
-      'open http://media.local/a.mkv',
-      'rate 1.25',
-      'seek 120',
-    ]);
+    expect(engine.calls, ['open http://media.local/a.mkv @120', 'rate 1.25']);
+    expect(engine.openedStartPosition, const Duration(seconds: 120));
+  });
+
+  test('start position guards progress against a bogus jump to the end', () async {
+    await session.load(movie, startAt: const Duration(minutes: 50));
+    engine.hub
+      ..update(duration: hour)
+      ..addError(
+        const PlaybackError(
+          kind: PlaybackErrorKind.network,
+          message: 'reset',
+          recoverable: true,
+        ),
+      );
+    await pumpEventQueue();
+    engine.hub.update(position: const Duration(minutes: 59));
+    await pumpEventQueue();
+    await session.prepareExit();
+
+    expect(progressGateway.uploads, isEmpty);
+  });
+
+  test('non-positive start position opens from the beginning', () async {
+    await session.load(movie, startAt: Duration.zero);
+    expect(engine.calls, ['open http://media.local/a.mkv']);
+  });
+
+  test('reports startup once playing at the start position', () async {
+    await session.load(movie, startAt: const Duration(seconds: 120));
+    engine.hub.update(playing: true, position: const Duration(seconds: 1));
+    await pumpEventQueue();
+    expect(session.lastStartup, isNull);
+
+    engine.hub.update(position: const Duration(seconds: 120), buffering: true);
+    await pumpEventQueue();
+    expect(session.lastStartup, isNull);
+
+    engine.hub.update(buffering: false);
+    await pumpEventQueue();
+    expect(session.lastStartup, isNull, reason: '位置还没有前进');
+
+    engine.hub.update(position: const Duration(milliseconds: 120400));
+    await pumpEventQueue();
+    final report = session.lastStartup!;
+    expect(report.target, const Duration(seconds: 120));
+    expect(report.localFile, isFalse);
+    expect(report.resolved, isNotNull);
+    expect(report.opened, isNotNull);
+    expect(report.firstPlaying, lessThanOrEqualTo(report.ready));
+    expect(report.toString(), contains('target=120s'));
+  });
+
+  test('startup records when the first frame was shown', () async {
+    await session.load(movie);
+    engine.hub.update(firstFrameRendered: true, playing: true);
+    await pumpEventQueue();
+    engine.hub.update(position: const Duration(seconds: 1));
+    await pumpEventQueue();
+
+    final report = session.lastStartup!;
+    expect(report.firstFrame, isNotNull);
+    expect(report.firstFrame, lessThanOrEqualTo(report.ready));
+    expect(report.toString(), contains('firstFrame='));
+  });
+
+  test('first frame of the previous media is not counted', () async {
+    await session.load(movie);
+    engine.hub.update(firstFrameRendered: true);
+    await pumpEventQueue();
+
+    resolver.gate = Completer<void>();
+    final switching = session.load(movie);
+    await pumpEventQueue();
+    engine.hub.update(position: const Duration(seconds: 2));
+    await pumpEventQueue();
+    resolver.gate!.complete();
+    await switching;
+    engine.hub.update(playing: true);
+    await pumpEventQueue();
+    engine.hub.update(position: const Duration(seconds: 1));
+    await pumpEventQueue();
+
+    expect(session.lastStartup!.firstFrame, isNull);
+  });
+
+  test('startup without a start position waits for playback progress', () async {
+    await session.load(movie);
+    engine.hub.update(playing: true);
+    await pumpEventQueue();
+    expect(session.lastStartup, isNull);
+
+    engine.hub.update(position: const Duration(milliseconds: 500));
+    await pumpEventQueue();
+    expect(session.lastStartup!.target, isNull);
+  });
+
+  test('failed load does not report startup', () async {
+    engine.openError = Exception('boom');
+    await session.load(movie);
+    engine.hub.update(playing: true, position: const Duration(seconds: 5));
+    await pumpEventQueue();
+    expect(session.lastStartup, isNull);
   });
 
   test('user rate overrides default rate on next load', () async {
@@ -143,10 +247,8 @@ void main() {
 
     resolver.error = null;
     await session.reload();
-    engine.hub.update(duration: hour);
-    await pumpEventQueue();
     expect(session.status, isA<PlaybackSessionReady>());
-    expect(engine.calls.last, 'seek 90');
+    expect(engine.calls.last, 'open http://media.local/a.mkv @90');
   });
 
   test('reopening the same media re-applies settings', () async {
@@ -158,7 +260,8 @@ void main() {
     await pumpEventQueue();
 
     expect(engine.calls.where((c) => c.startsWith('rate')), hasLength(2));
-    expect(engine.calls.last, 'seek 30');
+    expect(engine.calls, contains('open http://media.local/a.mkv @30'));
+    expect(engine.calls.where((c) => c.startsWith('seek')), isEmpty);
   });
 
   test('open failure reports the url', () async {
@@ -258,15 +361,11 @@ void main() {
     expect(media3.disposed, isTrue);
     expect(
       mpv.calls,
-      containsAllInOrder(['initialize', 'open http://media.local/a.mkv']),
+      containsAllInOrder(['initialize', 'open http://media.local/a.mkv @300']),
     );
     expect(androidNotices.last, contains('已切换到 mpv'));
     expect(android.engineReason, 'Media3 无法播放：无法解码杜比视界 Profile 5');
     expect(android.status, isA<PlaybackSessionReady>());
-
-    mpv.hub.update(duration: hour);
-    await pumpEventQueue();
-    expect(mpv.calls.last, 'seek 300');
   });
 
   test('fallback without another engine fails the session', () async {
