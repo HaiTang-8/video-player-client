@@ -1,6 +1,6 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1、3、4、5、8 完成，Stage 7.1 / 7.2 完成（Windows 部分随 Stage 2 补齐）；Stage 6 不做（D4）；待做：Stage 2（Windows）、7.3 全平台回归；Stage 1、4 仍待真机与 macOS 运行验证**
+> 状态：**Stage 1、3、4、5、8 完成，Stage 7.1 / 7.2 完成（Windows 部分随 Stage 2 补齐）；Stage 6 不做（D4）；待完成：Stage 2（Windows，暂缓）、7.3 全平台回归（真机部分由用户自行测试）；Stage 1、4 仍待真机与 macOS 运行验证**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
@@ -520,9 +520,10 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 - §10 回归清单在 iOS、Android、macOS、Windows 全部通过，行为与重构前一致。
 - `flutter analyze` 无新增问题，`flutter test` 通过。
 
-### Stage 2：Windows `MpvNativeWindowEngine`
+### Stage 2：Windows `MpvNativeWindowEngine`（暂缓，待完成）
 
 **前置**：Stage 1；D2 已决策。
+**状态**：2026-10-22 用户决定暂缓，标记为待完成；在此之前 Windows 继续走 mpv 纹理（`mpvTexture`）。重新开始时先和用户确认测试方式（CI 构建 + Parallels Windows 11 ARM 虚拟机做窗口与交互验证，HDR / d3d11va / 多显示器只能在用户的 Windows 真机上验收）。
 
 - [ ] 2.1 Spike：用当前 Windows libmpv 验证 `wid` + `vo=gpu-next` + `gpu-api=d3d11` + `hwdec=d3d11va` 能否工作、DV P5 颜色是否正确、`target-colorspace-hint` 能否输出 HDR。如果不行，评估更换 libmpv 构建（参考 Moonfin 使用的 fork），结论记录到 §12。
 - [ ] 2.2 原生视频窗口模块（C++，放在 `packages/native_player/windows/`；插件拿不到所需窗口消息时退回 runner，参考 Moonfin `hdr_video_window.cpp`）：
@@ -609,7 +610,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 
 - [x] 7.1 统一媒体信息面板：播放内核、解码器、动态范围、DV profile、HDR 送显状态、引擎选择原因。（Windows 原生窗口引擎随 Stage 2 接入）
 - [x] 7.2 清理遗留代码和临时开关；更新本文档 §4、§5 为最终状态，状态改为“已完成”。（§4 / §5 已按当前实现更新，Windows 部分随 Stage 2 补齐；总状态在 Stage 2 与 7.3 完成后改为“已完成”）
-- [ ] 7.3 全平台完整回归。
+- [ ] 7.3 全平台完整回归（真机部分由用户自行测试，按 §10 清单）。
 
 ---
 
@@ -739,6 +740,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-22 | Stage 7.2 清理与文档 | 完成（Windows 部分随 Stage 2） | 检索没有发现残留的旧播放代码或临时开关，§6 的两条依赖自查为空；Android `debug.nativeplayer.dovi.*` 调试属性是 README 记录的诊断工具，不设置时没有开销，保留；`dolby_vision_probe_test.dart` 的 `DOVI_SPIKE_*` 参数改名为 `DOVI_PROBE_*`。文档：§4.2 / §4.4 / §4.6 改为实际实现，§4.7、§5 标注 Windows 待 Stage 2，§3.2 更新最低系统版本、去掉已不存在的 vendor 目录说明，D4 标为不做。Stage 2 与 7.3 完成后再把总状态改为“已完成” |
 | 2026-10-22 | Android PGS 多对象字幕 | 完成 | **原因**：Media3 1.10.1 的 `PgsParser`（上游 main 相同）每个显示集只读第一个组合对象的坐标，所有对象的图像共用一块缓冲，结果只显示最后一个对象、位置用第一个对象的；也不支持裁剪、按 id 引用调色板和跨显示集复用。**改动**：插件新增 `PgsSubtitleParser`（按 id 保存对象和调色板，ODS 分段拼接，每个组合对象各出一个图像 cue 并支持裁剪，epoch 开始时清空，`reset()` 在 seek 时清空；游程解码、zlib、颜色换算与 Media3 一致），`PgsSubtitleParserFactory` 只替换 PGS，其余格式仍用 `DefaultSubtitleParserFactory`，在 `Media3PlayerBackend` 通过 `DefaultMediaSourceFactory.setSubtitleParserFactory` 注册（同时作用于封装内字幕和外挂字幕）。窗口（WDS）裁切没有实现。**验证**：`pgs.mkv` 在 6.298–7.424 秒有一个两对象的显示集（底部台词 + 顶部注释）；S23U 上 `native_player_android_test.dart` 8 项通过，PGS 用例停在 6.8 秒时两条字幕都显示，位置与 ffmpeg 叠加渲染的参考帧一致 |
 | 2026-10-22 | Android ASS 字幕改用 libass | 完成 | **原因**：Media3 的 `SsaParser` 只认 `\pos` / `\an`，其余行内标签（颜色、粗斜体、字号、字体、卡拉 OK、动画、描边）全部丢弃，与 iOS（D7 = B，libass）表现不一致。**方案**：接入 `io.github.peerless2012:ass-media` / `ass-kt` 0.5.1（MIT，Jellyfin Android TV 等在用），渲染方式 `OVERLAY_OPEN_GL`（叠加层在 `SubtitleView` 内，不阻塞 UI，不影响 HDR）；`media3-effect` 对齐到 1.10.1。**接入时的处理**：① 库的字幕解析工厂会把非 ASS 格式交回 Media3 默认解析器，改为 `PgsSubtitleParserFactory(AssSubtitleParserFactory)`，MKV 由新增的 `AssExtractorsFactory` 换成 `AssMatroskaExtractor`（读取内嵌字体），再由杜比视界探测工厂包一层；② 杜比视界 GPU 重建时播放器输出到渲染器的输入 Surface，报告的尺寸是 -1，libass 帧尺寸无效导致 P5 上完全没有字幕，改为重建期间按 SurfaceView 尺寸设置并跟随布局变化；③ 叠加层只随播放推进重画（每 3 次渲染回调一次），暂停时切换字幕或 seek 不刷新，在 `onTracksChanged` / `onRenderedFirstFrame` 且未播放时手动重画；关闭字幕后叠加层被清空，但 libass 记着上一帧，重新打开同一条字幕时报告没有变化而不重画（播放中同样存在），切换字幕轨时改动一次帧尺寸让 libass 重新排版。**代价**：每种架构多一个 `libass.so`（arm64 3.0 MB、armeabi-v7a 2.1 MB、x86_64 3.1 MB，未压缩存放），通用 APK 约 +8.3 MB；静态链接的 libass（ISC）、freetype（FTL）、harfbuzz（MIT）、fribidi（LGPL 2.1+，在可替换的 .so 内）、libunibreak、fontconfig、expat、libpng，没有 GPL；字体用系统字体（fontconfig `sans-serif`），与 iOS 的 HarmonyOS Sans 不同。**验证（S23U）**：`native_player_android_test.dart` 9 项通过，新增“P5 上的 ASS 与暂停时刷新”（样片 `p5_ass.mkv`）；截图核对内嵌 ASS（红色斜体、顶部黄色 Top 样式、卡拉 OK）、外挂 ASS、切到 SRT 时 ASS 叠加层清空、PGS 两个对象、P5 GPU 重建画面上的 ASS 在播放 / 暂停关闭 / 暂停重开 / 暂停 seek 四种情况下都正确。**风险**：库按 Media3 1.8.0 构建且用反射读 `MatroskaExtractor` 私有字段，升级 Media3 时必须回归；低端电视盒上有社区反馈特效字幕约 0.5 秒延迟 |
+| 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---
 
