@@ -7,7 +7,9 @@ import 'package:native_player/native_player.dart';
 /// `adb reverse` 把手机的端口转到电脑上的静态文件服务（需要支持 Range），目录中需要：
 /// hdr10.mkv（HDR10，音轨 chi，SRT“简体”）、subs.mkv（另有 ASS“特效”）、styled.ass、
 /// pgs.mkv（PGS“简体中字”，6 秒起）、test.mkv（杜比视界 P5，封装没有声明）、dv_p5_dvcc.mkv
-/// （封装带 dvcC 的杜比视界 P5），以及 dts.mkv、ac3.mkv、eac3.mkv、truehd.mkv（对应编码的音频）
+/// （封装带 dvcC 的杜比视界 P5），p5_ass.mkv（test.mkv 的音视频加 subs.mkv 的 ASS 轨：
+/// `ffmpeg -i test.mkv -i subs.mkv -map 0:v -map 0:a -map 1:3 -c copy p5_ass.mkv`），
+/// 以及 dts.mkv、ac3.mkv、eac3.mkv、truehd.mkv（对应编码的音频）
 const _samples = String.fromEnvironment('NATIVE_PLAYER_ANDROID_SAMPLES');
 
 /// 为 true 时在关键画面打印 NP_HOLD 标记并停留，方便截图核对
@@ -207,6 +209,36 @@ void main() {
     await _waitFor(tester, () => recorder.positionMs > 2500, 'playback');
     await api.pause(id);
     await _holdForScreenshot(tester, 'external');
+    expect(recorder.errors, isEmpty);
+    await _close(tester, api, id);
+  }, skip: skip);
+
+  testWidgets('renders ASS over Dolby Vision P5 and refreshes while paused', (
+    tester,
+  ) async {
+    final caps = await NativePlayerHostApi().capabilities();
+    final (api, recorder, id) = await _open(tester, 'p5_ass.mkv');
+    await _waitFor(tester, () => recorder.subtitle.isNotEmpty, 'tracks');
+    final ass = recorder.subtitle.first.id;
+    await api.selectSubtitleTrack(id, ass);
+    if (!caps.dolbyVisionColor) {
+      await _waitFor(tester, () => recorder.errors.isNotEmpty, 'fallback');
+      expect(recorder.errors.single.fallbackSuggested, isTrue);
+      await _close(tester, api, id);
+      return;
+    }
+    // 字幕事件在 0.2–7.8 秒，暂停在这段时间内
+    await _waitFor(tester, () => recorder.positionMs > 2000, 'playback');
+    await api.pause(id);
+    await _holdForScreenshot(tester, 'p5_ass');
+    await api.selectSubtitleTrack(id, null);
+    await _waitFor(tester, () => recorder.selectedSubtitle == null, 'off');
+    await _holdForScreenshot(tester, 'p5_ass_off');
+    await api.selectSubtitleTrack(id, ass);
+    await _waitFor(tester, () => recorder.selectedSubtitle == ass, 'on');
+    await _holdForScreenshot(tester, 'p5_ass_on');
+    await api.seek(id, 1000);
+    await _holdForScreenshot(tester, 'p5_ass_seek');
     expect(recorder.errors, isEmpty);
     await _close(tester, api, id);
   }, skip: skip);

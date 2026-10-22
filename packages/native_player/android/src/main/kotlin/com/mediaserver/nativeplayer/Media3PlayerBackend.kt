@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -31,6 +33,12 @@ import androidx.media3.extractor.DefaultExtractorsFactory
 import com.mediaserver.nativeplayer.dovi.DoviFrameStore
 import com.mediaserver.nativeplayer.dovi.DoviGlRenderer
 import com.mediaserver.nativeplayer.dovi.DoviSupport
+import io.github.peerless2012.ass.media.AssHandler
+import io.github.peerless2012.ass.media.AssHandlerConfig
+import io.github.peerless2012.ass.media.factory.AssRenderersFactory
+import io.github.peerless2012.ass.media.parser.AssSubtitleParserFactory
+import io.github.peerless2012.ass.media.type.AssRenderType
+import io.github.peerless2012.ass.media.widget.AssSubtitleView
 import java.io.File
 import java.util.Locale
 import java.util.UUID
@@ -41,13 +49,19 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   Player.Listener {
   /** 没有杜比视界解码器但 GPU 能重建时，封装声明的 P5 也交给普通 HEVC 解码器，由 [DoviGlRenderer] 还原颜色 */
   private val reshapeDeclaredProfile5 = DoviSupport.available && !DeviceCapabilities.hasDolbyVisionDecoder
+  /** ASS / SSA 由 libass 渲染（特效、卡拉 OK、内嵌字体），画在 SubtitleView 内的叠加层上；其余字幕仍走 Media3 */
+  private val ass = AssHandler(AssRenderType.OVERLAY_OPEN_GL, AssHandlerConfig(maxRenderPixels = 1920 * 1080))
+  private val subtitleParsers = PgsSubtitleParserFactory(AssSubtitleParserFactory(ass))
   private val player =
     ExoPlayer.Builder(
         context,
-        DefaultRenderersFactory(context)
-          .setEnableDecoderFallback(true)
-          .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-          .apply { if (reshapeDeclaredProfile5) setMediaCodecSelector(DoviSupport.hevcForDolbyVision) },
+        AssRenderersFactory(
+          ass,
+          DefaultRenderersFactory(context)
+            .setEnableDecoderFallback(true)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+            .apply { if (reshapeDeclaredProfile5) setMediaCodecSelector(DoviSupport.hevcForDolbyVision) },
+        ),
       )
       .build()
   private val handler = Handler(Looper.getMainLooper())
@@ -67,6 +81,10 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   private val retryPrepare = Runnable { player.prepare() }
   private var mediaSourceFactory: DefaultMediaSourceFactory? = null
   private var view: NativeVideoView? = null
+  private var assView: AssSubtitleView? = null
+  /** GPU 重建时播放器输出到渲染器的输入 Surface，报告的尺寸无效，libass 改按 SurfaceView 的尺寸排版 */
+  private val assSurfaceSize =
+    View.OnLayoutChangeListener { surface, _, _, _, _, _, _, _, _ -> if (reshaping) syncAssSurfaceSize(surface) }
   private var fit = NativeVideoFit.CONTAIN
   private var aspectRatio = 0f
   private var playing = false
@@ -93,6 +111,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
       true,
     )
     player.setHandleAudioBecomingNoisy(true)
+    ass.init(player)
     player.addListener(this)
     player.addAnalyticsListener(
       object : AnalyticsListener {
@@ -154,14 +173,14 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
       ?.let { http.setUserAgent(it.value) }
     val extractors =
       DolbyVisionProbeExtractorsFactory(
-        DefaultExtractorsFactory(),
+        AssExtractorsFactory(DefaultExtractorsFactory(), subtitleParsers, ass),
         { handler.post { if (generation == openGeneration) onDolbyVisionRpu() } },
         store?.let { it::onSampleRpu },
         reshapeDeclaredProfile5,
       )
     val factory =
       DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
-        .setSubtitleParserFactory(PgsSubtitleParserFactory())
+        .setSubtitleParserFactory(subtitleParsers)
     mediaSourceFactory = factory
     val uri = if (source.isLocalFile) Uri.fromFile(File(source.url)) else Uri.parse(source.url)
     player.setMediaSource(factory.createMediaSource(MediaItem.fromUri(uri)))
@@ -230,12 +249,18 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view.setFit(fit)
     if (aspectRatio > 0) view.setAspectRatio(aspectRatio)
     view.subtitleView.setCues(player.currentCues.cues)
+    removeAssView()
+    assView = AssSubtitleView(view.subtitleView.context, ass).also(view.subtitleView::addView)
+    view.surfaceView.addOnLayoutChangeListener(assSurfaceSize)
+    if (reshaping) syncAssSurfaceSize(view.surfaceView)
     view.setKeepScreenOn(playing)
   }
 
   fun detach(view: NativeVideoView) {
     if (this.view !== view) return
     detachSurface(view)
+    removeAssView()
+    view.surfaceView.removeOnLayoutChangeListener(assSurfaceSize)
     this.view = null
   }
 
@@ -246,6 +271,32 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
 
   private fun detachSurface(view: NativeVideoView) {
     if (reshaping) dovi?.detach() else player.clearVideoSurfaceView(view.surfaceView)
+  }
+
+  private fun removeAssView() {
+    assView?.let { (it.parent as? ViewGroup)?.removeView(it) }
+    assView = null
+  }
+
+  private fun syncAssSurfaceSize(surface: View) {
+    if (surface.width > 0 && surface.height > 0) ass.onSurfaceSizeChanged(surface.width, surface.height)
+  }
+
+  /** libass 叠加层只在播放推进时重画；暂停时切换字幕或 seek 后手动画一次当前时间 */
+  private fun refreshAssView() {
+    if (!player.isPlaying) ass.videoTimeCallback?.invoke(ass.videoTime)
+  }
+
+  /**
+   * 关闭字幕时叠加层被清空，但 libass 仍记着上一帧，重新打开同一条字幕时报告“没有变化”而不重画。
+   * 帧尺寸变化会让 libass 重新排版、清掉上一帧
+   */
+  private fun resetAssFrame() {
+    val render = ass.render ?: return
+    val size = ass.computeRenderSize(ass.surfaceSize.width, ass.surfaceSize.height)
+    if (size.width <= 0 || size.height <= 0) return
+    render.setFrameSize(size.width, size.height + 2)
+    render.setFrameSize(size.width, size.height)
   }
 
   /** 发现 P5 后改由 GPU 重建：解码器输出切到渲染器，渲染器接管 SurfaceView */
@@ -266,7 +317,10 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     renderer.bind(store)
     reshaping = true
     player.setVideoSurface(renderer.inputSurface)
-    view?.let { renderer.attach(it.surfaceView) }
+    view?.let {
+      renderer.attach(it.surfaceView)
+      syncAssSurfaceSize(it.surfaceView)
+    }
     Log.i(DoviSupport.TAG, "Dolby Vision profile 5 is reshaped to HDR10 on the GPU")
   }
 
@@ -332,6 +386,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.let { detach(it) }
     player.removeListener(this)
     player.release()
+    ass.release()
     dovi?.release()
     clearSubtitleFiles()
   }
@@ -365,11 +420,15 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.setAspectRatio(aspectRatio)
   }
 
+  override fun onRenderedFirstFrame() = refreshAssView()
+
   override fun onCues(cueGroup: CueGroup) {
     view?.subtitleView?.setCues(cueGroup.cues)
   }
 
   override fun onTracksChanged(tracks: Tracks) {
+    resetAssFrame()
+    refreshAssView()
     val audio = mutableListOf<NativeTrack>()
     val subtitles = mutableListOf<NativeTrack>()
     var selectedAudio: String? = null
