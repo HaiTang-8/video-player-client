@@ -34,6 +34,8 @@ final class AetherPlayerBackend: PlayerBackend {
   private var subtitleFiles: [URL] = []
   /// 打开期间的错误由 open 的回调返回，不再重复发事件
   private var opening = false
+  /// 后台重建后引擎会再次报告首帧，每次 open 只上报一次
+  private var firstFrameReported = false
 
   var renderView: PlatformView { container }
 
@@ -66,10 +68,15 @@ final class AetherPlayerBackend: PlayerBackend {
     opening = true
     hasSource = false
     heldPositionMs = nil
+    firstFrameReported = false
     Task { @MainActor in
       defer { self.opening = false }
       do {
-        _ = try await self.engine.load(url: url, options: options)
+        _ = try await self.engine.load(
+          url: url,
+          startPosition: source.startPositionMs.map { Double($0) / 1000 },
+          options: options
+        )
         self.hasSource = true
         completion(.success(()))
       } catch {
@@ -180,6 +187,17 @@ final class AetherPlayerBackend: PlayerBackend {
       .throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)
       .sink { [weak self] time in
         MainActor.assumeIsolated { self?.reportPosition(Self.milliseconds(time)) }
+      }
+      .store(in: &subscriptions)
+    engine.$hasFirstFrameReadyForDisplay
+      .removeDuplicates()
+      .filter { $0 }
+      .sink { [weak self] _ in
+        MainActor.assumeIsolated {
+          guard let self, !self.firstFrameReported else { return }
+          self.firstFrameReported = true
+          self.events.firstFrame()
+        }
       }
       .store(in: &subscriptions)
     engine.$duration

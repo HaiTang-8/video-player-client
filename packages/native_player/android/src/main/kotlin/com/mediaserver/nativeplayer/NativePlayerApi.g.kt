@@ -286,7 +286,9 @@ data class NativeCapabilities (
 data class NativeSource (
   val url: String,
   val httpHeaders: Map<String, String>,
-  val isLocalFile: Boolean
+  val isLocalFile: Boolean,
+  /** 起播位置，内核打开时直接定位；null 表示从头播放 */
+  val startPositionMs: Long? = null
 )
  {
   companion object {
@@ -294,7 +296,8 @@ data class NativeSource (
       val url = pigeonVar_list[0] as String
       val httpHeaders = pigeonVar_list[1] as Map<String, String>
       val isLocalFile = pigeonVar_list[2] as Boolean
-      return NativeSource(url, httpHeaders, isLocalFile)
+      val startPositionMs = pigeonVar_list[3] as Long?
+      return NativeSource(url, httpHeaders, isLocalFile, startPositionMs)
     }
   }
   fun toList(): List<Any?> {
@@ -302,6 +305,7 @@ data class NativeSource (
       url,
       httpHeaders,
       isLocalFile,
+      startPositionMs,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -312,7 +316,7 @@ data class NativeSource (
       return true
     }
     val other = other as NativeSource
-    return NativePlayerApiPigeonUtils.deepEquals(this.url, other.url) && NativePlayerApiPigeonUtils.deepEquals(this.httpHeaders, other.httpHeaders) && NativePlayerApiPigeonUtils.deepEquals(this.isLocalFile, other.isLocalFile)
+    return NativePlayerApiPigeonUtils.deepEquals(this.url, other.url) && NativePlayerApiPigeonUtils.deepEquals(this.httpHeaders, other.httpHeaders) && NativePlayerApiPigeonUtils.deepEquals(this.isLocalFile, other.isLocalFile) && NativePlayerApiPigeonUtils.deepEquals(this.startPositionMs, other.startPositionMs)
   }
 
   override fun hashCode(): Int {
@@ -320,10 +324,11 @@ data class NativeSource (
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.url)
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.httpHeaders)
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.isLocalFile)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.startPositionMs)
     return result
   }
   override fun toString(): String {
-    return "NativeSource(url=$url, httpHeaders=$httpHeaders, isLocalFile=$isLocalFile)"
+    return "NativeSource(url=$url, httpHeaders=$httpHeaders, isLocalFile=$isLocalFile, startPositionMs=$startPositionMs)"
   }
 }
 
@@ -1034,6 +1039,24 @@ class NativePlayerEventsApi(private val binaryMessenger: BinaryMessenger, privat
     val channelName = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onCompleted$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(playerIdArg, completedArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(NativePlayerApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用） */
+  fun onFirstFrame(playerIdArg: Long, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onFirstFrame$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(playerIdArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

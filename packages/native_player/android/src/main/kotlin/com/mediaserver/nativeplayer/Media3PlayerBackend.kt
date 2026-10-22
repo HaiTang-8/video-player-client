@@ -96,6 +96,8 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   private var pendingSubtitleId: String? = null
   /** 已经请求过换内核，同一次打开不再重复上报 */
   private var fallbackReported = false
+  /** seek、换渲染目标后 Media3 会再次回调首帧，每次打开只上报一次 */
+  private var firstFrameReported = false
   private var networkRetries = 0
   private var openGeneration = 0
   /** 码流里发现了杜比视界 RPU（封装没有声明时 Media3 不会把它识别为杜比视界） */
@@ -145,6 +147,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   fun open(source: NativeSource, autoPlay: Boolean) {
     handler.removeCallbacks(retryPrepare)
     fallbackReported = false
+    firstFrameReported = false
     networkRetries = 0
     rpuDetected = false
     val generation = ++openGeneration
@@ -183,7 +186,10 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         .setSubtitleParserFactory(subtitleParsers)
     mediaSourceFactory = factory
     val uri = if (source.isLocalFile) Uri.fromFile(File(source.url)) else Uri.parse(source.url)
-    player.setMediaSource(factory.createMediaSource(MediaItem.fromUri(uri)))
+    player.setMediaSource(
+      factory.createMediaSource(MediaItem.fromUri(uri)),
+      source.startPositionMs ?: C.TIME_UNSET,
+    )
     player.playWhenReady = autoPlay
     player.prepare()
   }
@@ -420,7 +426,12 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.setAspectRatio(aspectRatio)
   }
 
-  override fun onRenderedFirstFrame() = refreshAssView()
+  override fun onRenderedFirstFrame() {
+    refreshAssView()
+    if (firstFrameReported) return
+    firstFrameReported = true
+    events.firstFrame()
+  }
 
   override fun onCues(cueGroup: CueGroup) {
     view?.subtitleView?.setCues(cueGroup.cues)

@@ -9,6 +9,9 @@ class PlaybackSnapshot {
   final bool playing;
   final bool buffering;
   final bool completed;
+
+  /// 本次打开后第一帧画面已上屏；内核不支持时始终为 false
+  final bool firstFrameRendered;
   final double rate;
   final double volume;
   final MediaTracks tracks;
@@ -21,6 +24,7 @@ class PlaybackSnapshot {
     this.playing = false,
     this.buffering = false,
     this.completed = false,
+    this.firstFrameRendered = false,
     this.rate = 1.0,
     this.volume = 1.0,
     this.tracks = const MediaTracks(),
@@ -35,6 +39,7 @@ class PlaybackStreams {
   final Stream<bool> playing;
   final Stream<bool> buffering;
   final Stream<bool> completed;
+  final Stream<bool> firstFrameRendered;
   final Stream<double> rate;
   final Stream<double> volume;
   final Stream<MediaTracks> tracks;
@@ -48,6 +53,7 @@ class PlaybackStreams {
     required this.playing,
     required this.buffering,
     required this.completed,
+    required this.firstFrameRendered,
     required this.rate,
     required this.volume,
     required this.tracks,

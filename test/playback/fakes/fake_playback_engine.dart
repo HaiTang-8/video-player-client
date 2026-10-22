@@ -10,6 +10,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   final PlaybackStateHub hub = PlaybackStateHub();
   final List<String> calls = [];
   PlaybackSource? openedSource;
+  Duration? openedStartPosition;
   Object? openError;
 
   /// 设置后 seek 会等待它完成，用于模拟慢 seek
@@ -36,9 +37,18 @@ class FakePlaybackEngine implements PlaybackEngine {
   Future<void> initialize() async => calls.add('initialize');
 
   @override
-  Future<void> open(PlaybackSource source, {bool autoPlay = true}) async {
-    calls.add('open ${source.url}');
+  Future<void> open(
+    PlaybackSource source, {
+    bool autoPlay = true,
+    Duration? startPosition,
+  }) async {
+    calls.add(
+      startPosition == null
+          ? 'open ${source.url}'
+          : 'open ${source.url} @${startPosition.inSeconds}',
+    );
     openedSource = source;
+    openedStartPosition = startPosition;
     final error = openError;
     if (error != null) throw error;
     hub.resetForNewMedia();

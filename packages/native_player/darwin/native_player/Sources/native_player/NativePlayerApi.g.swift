@@ -262,6 +262,8 @@ struct NativeSource: Hashable, CustomStringConvertible {
   var url: String
   var httpHeaders: [String: String]
   var isLocalFile: Bool
+  /// 起播位置，内核打开时直接定位；null 表示从头播放
+  var startPositionMs: Int64? = nil
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -269,11 +271,13 @@ struct NativeSource: Hashable, CustomStringConvertible {
     let url = pigeonVar_list[0] as! String
     let httpHeaders = pigeonVar_list[1] as! [String: String]
     let isLocalFile = pigeonVar_list[2] as! Bool
+    let startPositionMs: Int64? = nilOrValue(pigeonVar_list[3])
 
     return NativeSource(
       url: url,
       httpHeaders: httpHeaders,
-      isLocalFile: isLocalFile
+      isLocalFile: isLocalFile,
+      startPositionMs: startPositionMs
     )
   }
   func toList() -> [Any?] {
@@ -281,13 +285,14 @@ struct NativeSource: Hashable, CustomStringConvertible {
       url,
       httpHeaders,
       isLocalFile,
+      startPositionMs,
     ]
   }
   static func == (lhs: NativeSource, rhs: NativeSource) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return NativePlayerApiPigeonInternal.deepEquals(lhs.url, rhs.url) && NativePlayerApiPigeonInternal.deepEquals(lhs.httpHeaders, rhs.httpHeaders) && NativePlayerApiPigeonInternal.deepEquals(lhs.isLocalFile, rhs.isLocalFile)
+    return NativePlayerApiPigeonInternal.deepEquals(lhs.url, rhs.url) && NativePlayerApiPigeonInternal.deepEquals(lhs.httpHeaders, rhs.httpHeaders) && NativePlayerApiPigeonInternal.deepEquals(lhs.isLocalFile, rhs.isLocalFile) && NativePlayerApiPigeonInternal.deepEquals(lhs.startPositionMs, rhs.startPositionMs)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -295,10 +300,11 @@ struct NativeSource: Hashable, CustomStringConvertible {
     NativePlayerApiPigeonInternal.deepHash(value: url, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: httpHeaders, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: isLocalFile, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: startPositionMs, hasher: &hasher)
   }
 
   public var description: String {
-    return "NativeSource(url: \(String(describing: url)), httpHeaders: \(String(describing: httpHeaders)), isLocalFile: \(String(describing: isLocalFile)))"
+    return "NativeSource(url: \(String(describing: url)), httpHeaders: \(String(describing: httpHeaders)), isLocalFile: \(String(describing: isLocalFile)), startPositionMs: \(String(describing: startPositionMs)))"
   }
 }
 
@@ -883,6 +889,8 @@ protocol NativePlayerEventsApiProtocol {
   func onPlaying(playerId playerIdArg: Int64, playing playingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onBuffering(playerId playerIdArg: Int64, buffering bufferingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCompleted(playerId playerIdArg: Int64, completed completedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
+  func onFirstFrame(playerId playerIdArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onRate(playerId playerIdArg: Int64, rate rateArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onVolume(playerId playerIdArg: Int64, volume volumeArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onTracks(playerId playerIdArg: Int64, audio audioArg: [NativeTrack], subtitle subtitleArg: [NativeTrack], completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -977,6 +985,25 @@ class NativePlayerEventsApi: NativePlayerEventsApiProtocol {
     let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onCompleted\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([playerIdArg, completedArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
+  func onFirstFrame(playerId playerIdArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onFirstFrame\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([playerIdArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

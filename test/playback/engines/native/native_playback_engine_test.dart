@@ -139,6 +139,7 @@ void main() {
 
     expect(api.opened!.httpHeaders, {'Authorization': 'Bearer t'});
     expect(api.opened!.isLocalFile, isFalse);
+    expect(api.opened!.startPositionMs, isNull);
     expect(api.calls, [
       'fonts fonts/a.ttf,fonts/b.ttf',
       'create',
@@ -152,6 +153,15 @@ void main() {
     expect(diagnostics.videoDecoder, 'c2.qti.hevc.decoder');
     expect(diagnostics.outputDynamicRange, VideoDynamicRange.hdr10);
     expect(diagnostics.details, {'视频编码': 'hevc'});
+  });
+
+  test('forwards the start position in milliseconds', () async {
+    await engine.initialize();
+    await engine.open(
+      const PlaybackSource.localFile('/movies/a.mkv'),
+      startPosition: const Duration(minutes: 6, milliseconds: 40),
+    );
+    expect(api.opened!.startPositionMs, 360040);
   });
 
   test('maps native events into the playback state', () async {
@@ -174,7 +184,11 @@ void main() {
         ),
       );
 
+    expect(engine.state.firstFrameRendered, isFalse);
+    engine.onFirstFrame(7);
+
     final state = engine.state;
+    expect(state.firstFrameRendered, isTrue);
     expect(state.duration, const Duration(minutes: 90));
     expect(state.position, const Duration(milliseconds: 1500));
     expect(state.playing, isTrue);

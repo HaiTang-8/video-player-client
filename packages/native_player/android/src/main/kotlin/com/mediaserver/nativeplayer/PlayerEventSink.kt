@@ -25,4 +25,6 @@ class PlayerEventSink(private val playerId: Long, private val api: NativePlayerE
   fun videoInfo(info: NativeVideoInfo) = api.onVideoInfo(playerId, info) {}
 
   fun error(error: NativeError) = api.onError(playerId, error) {}
+
+  fun firstFrame() = api.onFirstFrame(playerId) {}
 }

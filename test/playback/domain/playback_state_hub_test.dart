@@ -56,6 +56,22 @@ void main() {
     expect(hub.state.selectedTracks, selected);
   });
 
+  test('first frame flag resets for the next media', () async {
+    final hub = PlaybackStateHub();
+    final frames = <bool>[];
+    hub.streams.firstFrameRendered.listen(frames.add);
+
+    hub
+      ..update(firstFrameRendered: true)
+      ..update(firstFrameRendered: true)
+      ..resetForNewMedia();
+    expect(hub.state.firstFrameRendered, isFalse);
+    hub.update(firstFrameRendered: true);
+    await pumpEventQueue();
+
+    expect(frames, [true, false, true]);
+  });
+
   test('stops emitting after close', () async {
     final hub = PlaybackStateHub();
     var done = false;

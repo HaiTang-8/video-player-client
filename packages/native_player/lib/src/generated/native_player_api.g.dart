@@ -177,6 +177,7 @@ class NativeSource {
     required this.url,
     required this.httpHeaders,
     required this.isLocalFile,
+    this.startPositionMs,
   });
 
   String url;
@@ -185,8 +186,11 @@ class NativeSource {
 
   bool isLocalFile;
 
+  /// 起播位置，内核打开时直接定位；null 表示从头播放
+  int? startPositionMs;
+
   List<Object?> _toList() {
-    return <Object?>[url, httpHeaders, isLocalFile];
+    return <Object?>[url, httpHeaders, isLocalFile, startPositionMs];
   }
 
   Object encode() {
@@ -199,6 +203,7 @@ class NativeSource {
       url: result[0]! as String,
       httpHeaders: (result[1]! as Map<Object?, Object?>).cast<String, String>(),
       isLocalFile: result[2]! as bool,
+      startPositionMs: result[3] as int?,
     );
   }
 
@@ -213,7 +218,8 @@ class NativeSource {
     }
     return _deepEquals(url, other.url) &&
         _deepEquals(httpHeaders, other.httpHeaders) &&
-        _deepEquals(isLocalFile, other.isLocalFile);
+        _deepEquals(isLocalFile, other.isLocalFile) &&
+        _deepEquals(startPositionMs, other.startPositionMs);
   }
 
   @override
@@ -222,7 +228,7 @@ class NativeSource {
 
   @override
   String toString() {
-    return 'NativeSource(url: $url, httpHeaders: $httpHeaders, isLocalFile: $isLocalFile)';
+    return 'NativeSource(url: $url, httpHeaders: $httpHeaders, isLocalFile: $isLocalFile, startPositionMs: $startPositionMs)';
   }
 }
 
@@ -874,6 +880,9 @@ abstract class NativePlayerEventsApi {
 
   void onCompleted(int playerId, bool completed);
 
+  /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
+  void onFirstFrame(int playerId);
+
   void onRate(int playerId, double rate);
 
   void onVolume(int playerId, double volume);
@@ -1023,6 +1032,31 @@ abstract class NativePlayerEventsApi {
           final bool arg_completed = args[1]! as bool;
           try {
             api.onCompleted(arg_playerId, arg_completed);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.native_player.NativePlayerEventsApi.onFirstFrame$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_playerId = args[0]! as int;
+          try {
+            api.onFirstFrame(arg_playerId);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

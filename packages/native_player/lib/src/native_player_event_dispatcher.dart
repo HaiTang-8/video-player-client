@@ -49,6 +49,9 @@ class NativePlayerEventDispatcher
       _listeners[playerId]?.onCompleted(playerId, completed);
 
   @override
+  void onFirstFrame(int playerId) => _listeners[playerId]?.onFirstFrame(playerId);
+
+  @override
   void onRate(int playerId, double rate) =>
       _listeners[playerId]?.onRate(playerId, rate);
 

@@ -68,7 +68,11 @@ class NativePlaybackEngine
   }
 
   @override
-  Future<void> open(PlaybackSource source, {bool autoPlay = true}) {
+  Future<void> open(
+    PlaybackSource source, {
+    bool autoPlay = true,
+    Duration? startPosition,
+  }) {
     _tracks = const MediaTracks();
     _hub.resetForNewMedia();
     return _api.open(
@@ -77,6 +81,7 @@ class NativePlaybackEngine
         url: source.url,
         httpHeaders: source.httpHeaders,
         isLocalFile: source.isLocalFile,
+        startPositionMs: startPosition?.inMilliseconds,
       ),
       autoPlay,
     );
@@ -165,6 +170,9 @@ class NativePlaybackEngine
 
   @override
   void onPlaying(int playerId, bool playing) => _hub.update(playing: playing);
+
+  @override
+  void onFirstFrame(int playerId) => _hub.update(firstFrameRendered: true);
 
   @override
   void onBuffering(int playerId, bool buffering) =>

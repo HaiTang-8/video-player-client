@@ -30,11 +30,15 @@ class NativeSource {
     required this.url,
     required this.httpHeaders,
     required this.isLocalFile,
+    this.startPositionMs,
   });
 
   String url;
   Map<String, String> httpHeaders;
   bool isLocalFile;
+
+  /// 起播位置，内核打开时直接定位；null 表示从头播放
+  int? startPositionMs;
 }
 
 class NativeTrack {
@@ -152,6 +156,9 @@ abstract class NativePlayerEventsApi {
   void onBuffering(int playerId, bool buffering);
 
   void onCompleted(int playerId, bool completed);
+
+  /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
+  void onFirstFrame(int playerId);
 
   void onRate(int playerId, double rate);
 

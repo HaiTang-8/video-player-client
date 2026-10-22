@@ -69,7 +69,11 @@ abstract class MpvEngineBase
   }
 
   @override
-  Future<void> open(PlaybackSource source, {bool autoPlay = true}) {
+  Future<void> open(
+    PlaybackSource source, {
+    bool autoPlay = true,
+    Duration? startPosition,
+  }) {
     _mediaGeneration++;
     _dolbyVision.reset();
     _gamma = null;
@@ -78,8 +82,12 @@ abstract class MpvEngineBase
     _hub.resetForNewMedia();
     final media =
         source.isLocalFile
-            ? Media(source.url)
-            : Media(source.url, httpHeaders: source.httpHeaders);
+            ? Media(source.url, start: startPosition)
+            : Media(
+              source.url,
+              httpHeaders: source.httpHeaders,
+              start: startPosition,
+            );
     return player.open(media, play: autoPlay);
   }
 

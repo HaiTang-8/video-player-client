@@ -12,6 +12,7 @@ class PlaybackStateHub {
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
+  final _firstFrameRendered = StreamController<bool>.broadcast();
   final _rate = StreamController<double>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<MediaTracks>.broadcast();
@@ -28,6 +29,7 @@ class PlaybackStateHub {
     playing: _playing.stream,
     buffering: _buffering.stream,
     completed: _completed.stream,
+    firstFrameRendered: _firstFrameRendered.stream,
     rate: _rate.stream,
     volume: _volume.stream,
     tracks: _tracks.stream,
@@ -44,6 +46,7 @@ class PlaybackStateHub {
     bool? playing,
     bool? buffering,
     bool? completed,
+    bool? firstFrameRendered,
     double? rate,
     double? volume,
     MediaTracks? tracks,
@@ -58,6 +61,11 @@ class PlaybackStateHub {
       playing: _apply(playing, s.playing, _playing),
       buffering: _apply(buffering, s.buffering, _buffering),
       completed: _apply(completed, s.completed, _completed),
+      firstFrameRendered: _apply(
+        firstFrameRendered,
+        s.firstFrameRendered,
+        _firstFrameRendered,
+      ),
       rate: _apply(rate, s.rate, _rate),
       volume: _apply(volume, s.volume, _volume),
       tracks: _apply(tracks, s.tracks, _tracks),
@@ -72,6 +80,7 @@ class PlaybackStateHub {
     position: Duration.zero,
     duration: Duration.zero,
     completed: false,
+    firstFrameRendered: false,
     tracks: const MediaTracks(),
     videoInfo: const VideoInfo(),
   );
@@ -89,6 +98,7 @@ class PlaybackStateHub {
       _playing.close(),
       _buffering.close(),
       _completed.close(),
+      _firstFrameRendered.close(),
       _rate.close(),
       _volume.close(),
       _tracks.close(),

@@ -15,7 +15,12 @@ abstract interface class PlaybackEngine {
   PlaybackStreams get streams;
 
   Future<void> initialize();
-  Future<void> open(PlaybackSource source, {bool autoPlay = true});
+  /// [startPosition] 由内核在打开时直接定位，不先从头播放
+  Future<void> open(
+    PlaybackSource source, {
+    bool autoPlay = true,
+    Duration? startPosition,
+  });
   Future<void> play();
   Future<void> pause();
   Future<void> playOrPause();

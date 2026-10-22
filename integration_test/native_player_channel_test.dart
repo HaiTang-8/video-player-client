@@ -33,6 +33,7 @@ class _Recorder implements NativePlayerEventsApi {
   List<NativeTrack> audio = [];
   List<NativeTrack> subtitle = [];
   NativeVideoInfo? videoInfo;
+  int firstFrames = 0;
   final List<NativeError> errors = [];
 
   @override
@@ -45,6 +46,8 @@ class _Recorder implements NativePlayerEventsApi {
   void onBuffering(int playerId, bool buffering) {}
   @override
   void onCompleted(int playerId, bool completed) {}
+  @override
+  void onFirstFrame(int playerId) => firstFrames++;
   @override
   void onRate(int playerId, double rate) => this.rate = rate;
   @override
@@ -206,6 +209,7 @@ void main() {
 
     await _waitFor(tester, () => recorder.durationMs > 7000, 'duration');
     await _waitFor(tester, () => recorder.playing, 'playing');
+    await _waitFor(tester, () => recorder.firstFrames > 0, 'first frame');
     await _waitFor(tester, () => recorder.positionMs > 500, 'position');
     await _waitFor(
       tester,
@@ -218,6 +222,7 @@ void main() {
 
     await api.seek(id, 5000);
     await _waitFor(tester, () => recorder.positionMs >= 4500, 'seek');
+    expect(recorder.firstFrames, 1, reason: 'seek 不再上报首帧');
 
     await api.setRate(id, 3.0);
     expect(recorder.rate, 2.0);

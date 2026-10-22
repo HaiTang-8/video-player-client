@@ -38,6 +38,8 @@ class _Recorder implements NativePlayerEventsApi {
   @override
   void onCompleted(int playerId, bool completed) {}
   @override
+  void onFirstFrame(int playerId) {}
+  @override
   void onRate(int playerId, double rate) => this.rate = rate;
   @override
   void onVolume(int playerId, double volume) => this.volume = volume;
