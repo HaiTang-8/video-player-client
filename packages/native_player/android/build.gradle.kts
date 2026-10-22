@@ -8,6 +8,17 @@ plugins {
     id("kotlin-android")
 }
 
+// 预编译的 Media3 FFmpeg 音频扩展（tool/build_ffmpeg_extension.sh）；App 工程解析依赖时也要能找到它
+val ffmpegRepository = file("maven").toURI()
+rootProject.allprojects {
+    repositories {
+        maven {
+            url = ffmpegRepository
+            content { includeGroup("com.mediaserver.media3") }
+        }
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
@@ -32,4 +43,6 @@ dependencies {
     val media3 = "1.10.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // 系统没有 AC3 / E-AC3 / DTS / TrueHD 解码器时使用，版本必须与 Media3 一致
+    implementation("com.mediaserver.media3:decoder-ffmpeg:$media3")
 }

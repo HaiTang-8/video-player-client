@@ -37,7 +37,12 @@ import java.util.UUID
 class Media3PlayerBackend(private val context: Context, private val events: PlayerEventSink) :
   Player.Listener {
   private val player =
-    ExoPlayer.Builder(context, DefaultRenderersFactory(context).setEnableDecoderFallback(true))
+    ExoPlayer.Builder(
+        context,
+        DefaultRenderersFactory(context)
+          .setEnableDecoderFallback(true)
+          .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
+      )
       .build()
   private val handler = Handler(Looper.getMainLooper())
   private val positionTicker =

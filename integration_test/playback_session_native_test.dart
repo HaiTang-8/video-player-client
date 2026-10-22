@@ -14,7 +14,7 @@ import '../test/playback/fakes/fake_gateways.dart';
 
 const _samplePath = String.fromEnvironment('NATIVE_PLAYER_SAMPLE');
 
-/// Android：Media3 无法解码的样片地址（如 DTS 音频），验证会话自动回退到 mpv
+/// Android：Media3 无法解码的样片地址（如没有杜比视界解码器的手机上的 P5），验证会话自动回退到 mpv
 const _fallbackUrl = String.fromEnvironment('NATIVE_PLAYER_FALLBACK_URL');
 
 class _LocalResolver implements PlaybackSourceResolver {

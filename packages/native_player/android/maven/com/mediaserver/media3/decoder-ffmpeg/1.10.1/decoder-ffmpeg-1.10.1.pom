@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.mediaserver.media3</groupId>
+  <artifactId>decoder-ffmpeg</artifactId>
+  <version>1.10.1</version>
+  <packaging>aar</packaging>
+  <description>Media3 1.10.1 decoder_ffmpeg, FFmpeg n6.0.1 (LGPL-2.1-or-later), decoders: ac3 eac3 dca truehd</description>
+  <dependencies>
+    <dependency>
+      <groupId>androidx.media3</groupId>
+      <artifactId>media3-decoder</artifactId>
+      <version>1.10.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.media3</groupId>
+      <artifactId>media3-exoplayer</artifactId>
+      <version>1.10.1</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>

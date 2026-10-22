@@ -6,7 +6,8 @@ import 'package:native_player/native_player.dart';
 /// 样片的 HTTP 地址前缀，通过 --dart-define 传入；未传时全部跳过。测试时用
 /// `adb reverse` 把手机的端口转到电脑上的静态文件服务（需要支持 Range），目录中需要：
 /// hdr10.mkv（HDR10，音轨 chi，SRT“简体”）、subs.mkv（另有 ASS“特效”）、styled.ass、
-/// pgs.mkv（PGS“简体中字”，6 秒起）、test.mkv（杜比视界 P5）、dts.mkv（DTS 音频）
+/// pgs.mkv（PGS“简体中字”，6 秒起）、test.mkv（杜比视界 P5），以及 dts.mkv、ac3.mkv、eac3.mkv、
+/// truehd.mkv（对应编码的音频）
 const _samples = String.fromEnvironment('NATIVE_PLAYER_ANDROID_SAMPLES');
 
 /// 为 true 时在关键画面打印 NP_HOLD 标记并停留，方便截图核对
@@ -241,25 +242,31 @@ void main() {
     await _close(tester, api, id);
   }, skip: skip);
 
-  testWidgets('asks for fallback when no audio track can be decoded', (
+  testWidgets('decodes AC3 / E-AC3 / DTS / TrueHD without fallback', (
     tester,
   ) async {
-    final (api, recorder, id) = await _open(tester, 'dts.mkv');
-    await _waitFor(tester, () => recorder.audio.isNotEmpty, 'tracks');
-    await _waitFor(
-      tester,
-      () => recorder.errors.isNotEmpty || recorder.positionMs > 2000,
-      'fallback or playback',
-    );
-    final info = await api.diagnostics(id);
-    debugPrint('NP_DTS errors=${recorder.errors.map((e) => e.message)} $info');
-    if (recorder.errors.isNotEmpty) {
-      expect(recorder.errors.single.fallbackSuggested, isTrue);
-      expect(recorder.errors.single.message, contains('DTS'));
-    } else {
-      expect(info['音频解码'], isNotNull, reason: '设备支持 DTS 时应有音频解码器');
+    final decoders = <String, String>{};
+    for (final file in ['ac3.mkv', 'eac3.mkv', 'dts.mkv', 'truehd.mkv']) {
+      final (api, recorder, id) = await _open(tester, file);
+      await _waitFor(
+        tester,
+        () => recorder.errors.isNotEmpty || recorder.positionMs > 2000,
+        '$file playback',
+      );
+      final info = await api.diagnostics(id);
+      debugPrint(
+        'NP_AUDIO $file errors=${recorder.errors.map((e) => e.message)} $info',
+      );
+      expect(recorder.errors, isEmpty, reason: file);
+      decoders[file] = info['音频解码']!;
+      await _close(tester, api, id);
     }
-    await _close(tester, api, id);
+    // 系统有对应解码器时优先使用系统的，手机上至少 DTS / TrueHD 会走 FFmpeg
+    expect(
+      decoders.values.any((name) => name.startsWith('ffmpeg')),
+      isTrue,
+      reason: '$decoders',
+    );
   }, skip: skip);
 }
 
