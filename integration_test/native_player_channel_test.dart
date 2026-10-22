@@ -101,7 +101,7 @@ Future<void> _waitForSubtitle(
 ) async {
   String? current;
   for (var i = 0; i < 100; i++) {
-    current = (await api.diagnostics(id))['字幕'];
+    current = (await api.diagnostics(id)).details['字幕'];
     if (current == expected) return;
     await tester.pump(const Duration(milliseconds: 100));
   }
@@ -225,7 +225,8 @@ void main() {
     expect(recorder.volume, 0.5);
 
     final info = await api.diagnostics(id);
-    expect(info['视频编码'], isNotNull);
+    debugPrint('NP_DIAG $info');
+    expect(info.details['视频编码'], isNotNull);
     expect(recorder.errors, isEmpty);
 
     await tester.pumpWidget(const SizedBox());

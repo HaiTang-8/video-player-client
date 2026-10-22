@@ -277,28 +277,51 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.let { player.setVideoSurfaceView(it.surfaceView) }
   }
 
-  fun diagnostics(): Map<String, String> {
+  fun diagnostics(): NativeDiagnostics {
     val info = linkedMapOf<String, String>()
-    player.videoFormat?.let { format ->
+    val video = player.videoFormat
+    video?.let { format ->
       info["视频编码"] = codecName(format)
       if (format.width > 0) info["分辨率"] = "${format.width}x${format.height}"
       if (format.frameRate > 0) info["帧率"] = String.format(Locale.US, "%.2f fps", format.frameRate)
       if (format.bitrate > 0) info["视频码率"] = "${format.bitrate / 1000} kbps"
     }
-    videoDecoder?.let { info["视频解码"] = it }
     player.audioFormat?.let { format ->
       info["音频编码"] =
         codecName(format) + if (format.channelCount > 0) " ${format.channelCount}ch" else ""
     }
     audioDecoder?.let { info["音频解码"] = it }
-    info["动态范围"] = dynamicRangeLabel()
     if (reshaping) {
       info["杜比视界处理"] = "GPU 重建为 HDR10"
       dovi?.hdrMetadataDescription?.let { info["HDR10 元数据"] = it }
     }
     info["杜比视界解码器"] = DeviceCapabilities.dolbyVisionDescription
     info["屏幕 HDR"] = DeviceCapabilities.displayHdrDescription(context)
-    return info
+    return NativeDiagnostics(videoDecoder, video?.let(::outputDynamicRange), info)
+  }
+
+  /**
+   * 送显信号：GPU 重建为 HDR10；杜比视界片源不是由杜比视界解码器解码时输出的是基础层；
+   * 屏幕不支持 HDR 时由系统映射为 SDR
+   */
+  private fun outputDynamicRange(format: Format): NativeDynamicRange? {
+    val signal =
+      when {
+        reshaping -> NativeDynamicRange.HDR10
+        dynamicRange == NativeDynamicRange.DOLBY_VISION &&
+          !DeviceCapabilities.isDolbyVisionDecoder(videoDecoder) ->
+          when (DolbyVisionProbeExtractorsFactory.colorTransfer(format)) {
+            C.COLOR_TRANSFER_ST2084 -> NativeDynamicRange.HDR10
+            C.COLOR_TRANSFER_HLG -> NativeDynamicRange.HLG
+            else -> NativeDynamicRange.SDR
+          }
+        else -> dynamicRange
+      }
+    return when {
+      signal == NativeDynamicRange.UNKNOWN -> null
+      signal == NativeDynamicRange.SDR || DeviceCapabilities.displaySupportsHdr(context) -> signal
+      else -> NativeDynamicRange.SDR
+    }
   }
 
   fun dispose() {
@@ -509,16 +532,6 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
       else -> NativeError(NativeErrorKind.UNKNOWN, error.message ?: name, null, false, false)
     }
   }
-
-  private fun dynamicRangeLabel(): String =
-    when (dynamicRange) {
-      NativeDynamicRange.UNKNOWN -> "未知"
-      NativeDynamicRange.SDR -> "SDR"
-      NativeDynamicRange.HDR10 -> "HDR10"
-      NativeDynamicRange.HDR10PLUS -> "HDR10+"
-      NativeDynamicRange.HLG -> "HLG"
-      NativeDynamicRange.DOLBY_VISION -> "杜比视界"
-    }
 
   private fun clearSubtitleFiles() {
     subtitleFiles.forEach { it.delete() }

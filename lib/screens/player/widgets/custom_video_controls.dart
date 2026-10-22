@@ -25,6 +25,7 @@ import '../../../data/models/episode.dart';
 import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
 import '../../../playback/domain/playback_domain.dart';
+import 'media_info_rows.dart';
 import 'player_top_bar.dart';
 import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
@@ -38,6 +39,9 @@ class _PlayerHelpEntry {
 
 class CustomVideoControls extends StatefulWidget {
   final PlaybackEngine engine;
+
+  /// 选择当前内核的原因，展示在媒体信息面板
+  final String engineReason;
   final String? title;
   final VoidCallback? onBack;
   final VoidCallback? onPrevious;
@@ -65,6 +69,7 @@ class CustomVideoControls extends StatefulWidget {
   const CustomVideoControls({
     super.key,
     required this.engine,
+    this.engineReason = '',
     this.title,
     this.onBack,
     this.onPrevious,
@@ -331,12 +336,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _dolbyVisionHintTimer = Timer(const Duration(seconds: 6), () {
       if (mounted) setState(() => _showDolbyVisionHint = false);
     });
-  }
-
-  String get _dynamicRangeText {
-    final profile = _videoInfo.dolbyVisionProfile;
-    final label = _videoInfo.dynamicRange.label;
-    return profile == null ? label : '$label Profile $profile';
   }
 
   void _startSpeedPolling() {
@@ -1050,17 +1049,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Future<void> _fetchMediaInfo() async {
     final Object engine = widget.engine;
     try {
-      final info = <String, String>{
-        if (engine is MediaDiagnosticsProvider)
-          ...await engine.fetchDiagnostics(),
-      };
-
-      // 播放信息
+      final diagnostics =
+          engine is MediaDiagnosticsProvider
+              ? await engine.fetchDiagnostics()
+              : const MediaDiagnostics();
       if (!mounted) return;
-      if (_videoInfo.dynamicRange != VideoDynamicRange.unknown) {
-        info['动态范围'] = _dynamicRangeText;
-      }
-      info['播放内核'] = widget.engine.kind.label;
+      final info = buildMediaInfoRows(
+        engine: widget.engine.kind,
+        engineReason: widget.engineReason,
+        videoInfo: _videoInfo,
+        diagnostics: diagnostics,
+      );
       info['倍速'] = '${_playbackSpeed}x';
       info['屏幕刷新率'] = '${View.of(context).display.refreshRate.round()} Hz';
       info['音量'] = '${(_volume * 100).toInt()}%';

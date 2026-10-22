@@ -70,12 +70,16 @@ class PlaybackSession extends ChangeNotifier {
   final double Function() _defaultRate;
   final EnginePreference _enginePreference;
   final Set<PlaybackEngineKind> _failedKinds = {};
+  String _engineReason = '';
   late PlaybackEngine _engine;
   late PlaybackProgressTracker _tracker;
   late SeekCoordinator _seek;
 
   /// 内核回退后会换成新实例，UI 需要随之重建
   PlaybackEngine get engine => _engine;
+
+  /// 选择当前内核的原因，展示在媒体信息面板
+  String get engineReason => _engineReason;
   final SubtitleAutoSelector _subtitleSelector = SubtitleAutoSelector();
   final List<StreamSubscription> _subscriptions = [];
   final StreamController<String> _notices = StreamController.broadcast();
@@ -251,6 +255,7 @@ class PlaybackSession extends ChangeNotifier {
     );
     if (decision.candidates.isEmpty) return null;
     final kind = decision.candidates.first;
+    _engineReason = decision.reason;
     LogService.instance.info(
       'PlaybackSession',
       'Playback engine: ${kind.label} (${decision.reason})',
@@ -281,6 +286,7 @@ class PlaybackSession extends ChangeNotifier {
     _failedKinds.add(failed);
     final next = _selectKind();
     if (next == null) return false;
+    _engineReason = '${failed.label} 无法播放：${error.message}';
     final position = _startAt ?? _engine.state.position;
     _loadGeneration++;
     _tracker.stop();

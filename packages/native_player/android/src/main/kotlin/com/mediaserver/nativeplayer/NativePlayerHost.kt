@@ -64,7 +64,7 @@ class NativePlayerHost(private val context: Context, private val events: NativeP
 
   override fun setVideoFit(playerId: Long, fit: NativeVideoFit) = backendOrThrow(playerId).setVideoFit(fit)
 
-  override fun diagnostics(playerId: Long): Map<String, String> = backendOrThrow(playerId).diagnostics()
+  override fun diagnostics(playerId: Long): NativeDiagnostics = backendOrThrow(playerId).diagnostics()
 
   override fun dispose(playerId: Long) {
     players.remove(playerId)?.dispose()

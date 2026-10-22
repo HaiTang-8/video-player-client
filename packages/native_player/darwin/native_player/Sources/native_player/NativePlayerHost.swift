@@ -76,7 +76,7 @@ final class NativePlayerHost: @preconcurrency NativePlayerHostApi {
 
   func setVideoFit(playerId: Int64, fit: NativeVideoFit) throws { try player(playerId).setVideoFit(fit) }
 
-  func diagnostics(playerId: Int64) throws -> [String: String] { try player(playerId).diagnostics() }
+  func diagnostics(playerId: Int64) throws -> NativeDiagnostics { try player(playerId).diagnostics() }
 
   func dispose(playerId: Int64) throws {
     players.removeValue(forKey: playerId)?.dispose()

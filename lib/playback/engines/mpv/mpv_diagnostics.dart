@@ -1,8 +1,11 @@
 import 'package:media_kit/media_kit.dart';
 
+import '../../domain/playback_domain.dart';
+
 /// 从 mpv 属性读取媒体信息面板中的视频、音频部分
 abstract final class MpvDiagnostics {
-  static Future<Map<String, String>> read(NativePlayer platform) async {
+  /// 纹理输出只有 8 位 SDR，HDR 片源一律映射为 SDR 送显
+  static Future<MediaDiagnostics> read(NativePlayer platform) async {
     final info = <String, String>{};
 
     final videoCodec = await platform.getProperty('video-codec');
@@ -29,7 +32,6 @@ abstract final class MpvDiagnostics {
         info['视频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
       }
     }
-    if (hwdec.isNotEmpty && hwdec != 'no') info['硬解'] = hwdec;
     final outputFpsVal = double.tryParse(outputFps);
     if (outputFpsVal != null) {
       info['输出帧率'] = '${outputFpsVal.toStringAsFixed(2)} fps';
@@ -59,7 +61,12 @@ abstract final class MpvDiagnostics {
         info['音频码率'] = '${(br / 1000).toStringAsFixed(0)} kbps';
       }
     }
-    return info;
+    if (videoCodec.isEmpty) return MediaDiagnostics(details: info);
+    return MediaDiagnostics(
+      videoDecoder: hwdec.isEmpty || hwdec == 'no' ? '软解' : hwdec,
+      outputDynamicRange: VideoDynamicRange.sdr,
+      details: info,
+    );
   }
 
   static Future<double?> cacheSpeed(NativePlayer platform) async =>

@@ -143,7 +143,7 @@ final class AetherPlayerBackend: PlayerBackend {
     subtitles.fill = fit == .cover
   }
 
-  func diagnostics() -> [String: String] {
+  func diagnostics() -> NativeDiagnostics {
     var info: [String: String] = [:]
     if let codec = engine.sourceVideoCodecName { info["视频编码"] = codec }
     if engine.sourceVideoWidth > 0 {
@@ -151,13 +151,16 @@ final class AetherPlayerBackend: PlayerBackend {
     }
     if let fps = engine.sourceVideoFrameRate { info["帧率"] = String(format: "%.2f fps", fps) }
     if engine.sourceVideoBitrate > 0 { info["视频码率"] = "\(engine.sourceVideoBitrate / 1000) kbps" }
-    if let decoder = engine.activeVideoDecoder { info["视频解码"] = decoder }
     if let decoder = engine.activeAudioDecoder { info["音频解码"] = decoder }
-    info["输出格式"] = Self.label(engine.videoFormat)
     if engine.dolbyVisionConversion == .profile7ToProfile81 { info["杜比视界转换"] = "Profile 7 → 8.1" }
     info["字幕"] = subtitles.summary
-    info["播放路径"] = engine.videoRoute.rawValue
-    return info
+    if let route = Self.label(engine.videoRoute) { info["播放路径"] = route }
+    let hasVideo = engine.videoRoute != .none && engine.videoRoute != .audio
+    // videoFormat 是屏幕实际呈现的格式：屏幕不支持时 HDR / 杜比视界片源会是 .sdr
+    return NativeDiagnostics(
+      videoDecoder: engine.activeVideoDecoder,
+      outputDynamicRange: hasVideo ? Self.dynamicRange(engine.videoFormat) : nil,
+      details: info)
   }
 
   func dispose() {
@@ -206,7 +209,7 @@ final class AetherPlayerBackend: PlayerBackend {
           subtitleOff: subtitle == nil)
       }
       .store(in: &subscriptions)
-    // 动态范围按片源报告；实际输出格式（macOS 上杜比视界可能标为 HDR10）放在媒体信息里
+    // 动态范围按片源报告；实际送显格式（macOS 上杜比视界可能标为 HDR10）见 diagnostics
     engine.$sourceVideoFormat
       .combineLatest(engine.$sourceDVProfile)
       .sink { [events] format, profile in
@@ -330,13 +333,13 @@ final class AetherPlayerBackend: PlayerBackend {
     }
   }
 
-  private static func label(_ format: VideoFormat) -> String {
-    switch format {
-    case .sdr: "SDR"
-    case .hdr10: "HDR10"
-    case .hdr10Plus: "HDR10+"
-    case .hlg: "HLG"
-    case .dolbyVision: "杜比视界"
+  private static func label(_ route: VideoRoute) -> String? {
+    switch route {
+    case .none: nil
+    case .remoteBypass: "AVPlayer 直接播放"
+    case .loopback: "转封装为 HLS 交给 AVPlayer"
+    case .software: "FFmpeg 软解"
+    case .audio: "仅音频"
     }
   }
 

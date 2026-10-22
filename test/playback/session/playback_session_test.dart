@@ -217,6 +217,7 @@ void main() {
     );
     addTearDown(android.dispose);
     expect(android.engine, same(mpv));
+    expect(android.engineReason, '用户选择了兼容模式');
   });
 
   test('falls back to the next engine from the same position', () async {
@@ -242,6 +243,7 @@ void main() {
     android.notices.listen(androidNotices.add);
 
     await android.load(movie);
+    expect(android.engineReason, 'Android 优先使用 Media3');
     media3.hub.update(duration: hour, position: const Duration(minutes: 5));
     media3.hub.addError(
       const PlaybackError(
@@ -259,6 +261,7 @@ void main() {
       containsAllInOrder(['initialize', 'open http://media.local/a.mkv']),
     );
     expect(androidNotices.last, contains('已切换到 mpv'));
+    expect(android.engineReason, 'Media3 无法播放：无法解码杜比视界 Profile 5');
     expect(android.status, isA<PlaybackSessionReady>());
 
     mpv.hub.update(duration: hour);

@@ -67,9 +67,12 @@ class _FakeHostApi extends NativePlayerHostApi {
       calls.add('fit ${fit.name}');
 
   @override
-  Future<Map<String, String>> diagnostics(int playerId) async => {
-    '视频编码': 'hevc',
-  };
+  Future<NativeDiagnostics> diagnostics(int playerId) async =>
+      NativeDiagnostics(
+        videoDecoder: 'c2.qti.hevc.decoder',
+        outputDynamicRange: NativeDynamicRange.hdr10,
+        details: {'视频编码': 'hevc'},
+      );
 
   @override
   Future<void> dispose(int playerId) async => calls.add('dispose $playerId');
@@ -145,7 +148,10 @@ void main() {
       'subtitle null',
       'external 中文 ass',
     ]);
-    expect(await engine.fetchDiagnostics(), {'视频编码': 'hevc'});
+    final diagnostics = await engine.fetchDiagnostics();
+    expect(diagnostics.videoDecoder, 'c2.qti.hevc.decoder');
+    expect(diagnostics.outputDynamicRange, VideoDynamicRange.hdr10);
+    expect(diagnostics.details, {'视频编码': 'hevc'});
   });
 
   test('maps native events into the playback state', () async {

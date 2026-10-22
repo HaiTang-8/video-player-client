@@ -537,6 +537,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             // 内核回退时引擎换成新实例，控制层随之重建
             key: ObjectKey(_session.engine),
             engine: _session.engine,
+            engineReason: _session.engineReason,
             title: _displayTitle,
             onBack: () async {
               if (_isExiting) return;

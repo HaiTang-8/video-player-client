@@ -1,7 +1,7 @@
 # 播放内核多端改造任务文档（杜比视界 / HDR）
 
-> 状态：**Stage 1、Stage 3、Stage 4 完成（含 4.9 发布 CI），待真机与 macOS 运行验证；Stage 5 第一批（5.1、5.2、5.3、5.5、5.6）完成，下一步第二批 5.4 / 5.7；Stage 2（Windows）推后**
-> 最后更新：2026-10-21
+> 状态：**Stage 1、3、4、5、8 完成，Stage 7.1 / 7.2 完成（Windows 部分随 Stage 2 补齐）；Stage 6 不做（D4）；待做：Stage 2（Windows）、7.3 全平台回归；Stage 1、4 仍待真机与 macOS 运行验证**
+> 最后更新：2026-10-22
 > 适用范围：`client/lib/screens/player/`、`client/lib/playback/`（新增）、`client/packages/native_player/`（新增）、各平台原生工程
 >
 > **后续会话必读顺序**：§0 → §1 → §4 → §6 → §12（进度记录）→ 当前要做的阶段（§7）。
@@ -111,10 +111,9 @@
 - 路由：`lib/core/router/` 中 `/player/movie/:id` 和 `/player/episode/:tvShowId/:seasonId/:episodeId` 创建 `PlayerScreen`。
 - 音量语义：控制层的 `_maxVolume = 2.0`，调用 `setVolume(volume * 100)`（mpv 支持 0–200）。
 - 原生通道：已有 `media_player/orientation`（iOS/Android）、存储、下载器通道。窗口控制统一走 `lib/core/window/window_controls.dart`。
-- 最低系统版本：iOS App 13.4（扩展 16.2），macOS 10.15，Android `flutter.minSdkVersion`。
+- 最低系统版本：iOS 18（灵动岛扩展 16.2）、macOS 15（Stage 4.1 起，D1），Android `flutter.minSdkVersion`。
 - Flutter 版本：项目通过 FVM 固定为 **3.38.5**（`client/.fvmrc`，2026-10-20 从 3.35.7 升级）。本机全局 SDK `/Users/zhouquan/application/flutter` 也是 3.38.5，可以直接用；`fvm` 在 `~/.pub-cache/bin/fvm`（不在 PATH）。被 gitignore 的本地缓存 `client/.fvm/flutter_sdk` 在执行 `fvm use 3.38.5` 之前仍然指向 3.35.7，**不要用它**。
 - **pub 镜像**：命令行执行 `pub get` 前必须先 `export PUB_HOSTED_URL=https://pub.flutter-io.cn FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn`（用户在 `~/.zshrc` 里配置了，但 agent 的 shell 不一定会加载）。漏掉的话，pub 会把所有依赖重新解析到 pub.dev，大面积改写 `pubspec.lock` 和生成的插件注册文件。
-- `client/vendor/media_kit_libs_macos_video` **没有被 pubspec 引用**，不要依赖它。
 - **Xcode**：系统默认仍是 `/Applications/Xcode.app`（16.3），另装了 `/Applications/Xcode-26.3.app`（Swift 6.2.4，iOS / macOS 26.2 SDK）。macOS 15.7.2 最高只能装 Xcode 26.3，26.4 及以后需要 macOS 26.2。**Stage 4 起所有 Apple 构建都要加上** `export DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer`，不要改 `xcode-select`。iOS 26.2 平台组件已用 `xcodebuild -downloadPlatform iOS -architectureVariant arm64` 安装。
 - 后端**没有**媒体技术信息探测（无 ffprobe），客户端拿不到预先探测好的 HDR / DV 信息。
 
@@ -153,22 +152,26 @@ flowchart TD
 
 ```
 client/lib/playback/
-├── domain/
-│   ├── playback_engine.dart          # PlaybackEngine 接口 + 可选能力接口
+├── domain/                           # 纯 Dart，统一由 playback_domain.dart 导出
+│   ├── playback_engine.dart          # PlaybackEngine 接口、MediaDiagnostics 与可选能力接口
 │   ├── playback_engine_kind.dart
 │   ├── engine_capabilities.dart
-│   ├── playback_source.dart          # PlaybackSource / MediaHints / ExternalSubtitle
+│   ├── engine_preference.dart        # 播放内核偏好：自动 / 兼容模式
+│   ├── playback_source.dart          # PlaybackSource / ExternalSubtitle
 │   ├── playback_state.dart           # PlaybackSnapshot / PlaybackStreams
 │   ├── playback_state_hub.dart       # 引擎共用的状态发布器（内部工具）
-│   ├── media_track.dart              # VideoTrackInfo / AudioTrackInfo / SubtitleTrackInfo
+│   ├── media_track.dart              # AudioTrackInfo / SubtitleTrackInfo / MediaTracks / SelectedTracks
 │   ├── video_info.dart               # VideoInfo / VideoDynamicRange
 │   └── playback_error.dart
 ├── selection/
-│   ├── platform_environment.dart     # 平台、系统版本、设备能力（可注入假实现）
-│   ├── engine_selection_rule.dart    # 规则接口 + 内置规则
+│   ├── platform_environment.dart     # 运行平台（可直接构造用于测试）
+│   ├── engine_selection_rule.dart    # 规则接口 + 内置规则（§4.7）
 │   └── engine_selector.dart
 ├── session/
-│   ├── playback_session.dart         # 门面：引擎生命周期、打开、回退、对 UI 暴露状态
+│   ├── playback_session.dart         # 门面：引擎生命周期、加载、回退、对 UI 暴露状态
+│   ├── playback_item.dart            # MoviePlaybackItem / EpisodePlaybackItem
+│   ├── playback_gateways.dart        # PlaybackSourceGateway / WatchProgressGateway
+│   ├── riverpod_playback_gateway.dart
 │   ├── playback_source_resolver.dart # 本地缓存 / 流地址 / 302 / 鉴权头
 │   ├── seek_coordinator.dart         # seek 串行化、受控 seek、初始 / 续播 seek
 │   ├── playback_progress_tracker.dart# 进度定时保存、可疑结束判断、完成上报
@@ -177,31 +180,33 @@ client/lib/playback/
 │   ├── playback_engine_factory.dart  # EngineKind → 构造器注册表
 │   ├── mpv/
 │   │   ├── mpv_engine_base.dart      # 模板方法：mpv 公共逻辑
-│   │   ├── mpv_texture_engine.dart   # 现有 media_kit 纹理路径
-│   │   ├── mpv_native_window_engine.dart # Windows wid + gpu-next
+│   │   ├── mpv_texture_engine.dart   # media_kit 纹理路径
 │   │   ├── mpv_options.dart          # mpv 属性构建器
 │   │   ├── mpv_error_mapper.dart
+│   │   ├── mpv_track_mapper.dart
 │   │   ├── mpv_diagnostics.dart      # 媒体信息 / 网速
-│   │   └── speed_frame_limiter.dart  # 从 screens/player 迁入
-│   ├── native/
-│   │   ├── native_playback_engine.dart # 基于 Pigeon，Aether 与 Media3 共用
-│   │   └── native_video_view.dart      # UiKitView / AppKitView / PlatformViewLink
-│   └── windows/
-│       ├── native_video_window.dart    # 与原生 HWND 模块通信
-│       └── native_video_surface.dart   # 透明占位 widget，上报矩形
+│   │   ├── mpv_video_info.dart       # 动态范围推断
+│   │   ├── dolby_vision_log_detector.dart # 杜比视界日志信号（§5.1）
+│   │   └── speed_frame_limiter.dart
+│   └── native/
+│       └── native_playback_engine.dart # 基于 Pigeon，Aether 与 Media3 共用
 └── playback_providers.dart           # Riverpod：environment / selector / factory
 
-client/packages/native_player/        # 本地 Flutter 插件（见 D2）
-├── pigeons/native_player_api.dart    # 唯一的跨语言契约
-├── lib/src/generated/                # Pigeon 生成，禁止手改
-├── darwin/                           # iOS + macOS 共享 Swift（sharedDarwinSource）+ Package.swift（依赖 AetherEngine）
-├── android/                          # Kotlin + Media3
-└── windows/                          # C++：视频 HWND 管理（Windows 引擎用）
+client/lib/screens/player/widgets/media_info_rows.dart  # 媒体信息面板的行（Stage 7.1）
 
-client/test/playback/
-├── fakes/fake_playback_engine.dart
-├── selection/…  session/…  engines/mpv/…
+client/packages/native_player/        # 本地 Flutter 插件（见 D2）
+├── pigeons/native_player_api.dart    # 唯一的跨语言契约（§4.6）
+├── lib/src/generated/                # Pigeon 生成，禁止手改
+├── lib/src/native_video_view.dart    # UiKitView / AppKitView / PlatformViewLink
+├── lib/src/native_player_event_dispatcher.dart # 按 playerId 分发原生事件
+├── darwin/native_player/             # iOS + macOS 共用 Swift（SPM：AetherEngine 7.22.2、libass-build 0.17.5）
+└── android/                          # Kotlin + Media3 1.10.1；maven/ 为 FFmpeg 音频扩展，dovi/ + rust/dovi_jni 为 P5 GPU 重建
+
+client/test/playback/                 # fakes/、selection/、session/、engines/
+client/test/screens/player/           # 媒体信息面板
 ```
+
+Stage 2 将新增：`engines/mpv/mpv_native_window_engine.dart`（Windows `wid` + `gpu-next`）、`engines/windows/`（`native_video_window.dart` 与原生 HWND 模块通信，`native_video_surface.dart` 透明占位并上报矩形）、`packages/native_player/windows/`（C++ 视频 HWND 管理）。
 
 ### 4.3 设计模式一览
 
@@ -218,69 +223,48 @@ client/test/playback/
 | 构建器 (Builder) | `MpvOptions` | 按场景组合 mpv 属性（网络 / 缓存 / 解码 / HDR） |
 | 测试替身 (Fake) | `FakePlaybackEngine` | 不依赖原生库测试会话逻辑 |
 
-### 4.4 核心契约（草案：实现时可以微调，但必须同步更新本节）
-
-> 已实现的接口以 `lib/playback/domain/` 下的代码为准，与下方草案的差异见 §12 中 Stage 1.1–1.4 的记录。尚未实现的部分（Pigeon、原生引擎相关能力等）仍按草案执行。
+### 4.4 核心契约（以 `lib/playback/domain/`、`lib/playback/selection/` 的代码为准，接口变化时同步更新本节）
 
 ```dart
-enum PlaybackEngineKind { mpvTexture, mpvNativeWindow, aether, media3 }
+enum PlaybackEngineKind { mpvTexture, mpvNativeWindow, aether, media3 }   // 带展示名 label；mpvNativeWindow 待 Stage 2
+enum VideoDynamicRange { unknown, sdr, hdr10, hdr10Plus, hlg, dolbyVision }
+enum EnginePreference { auto, compatibility }                          // 用户设置：自动 / 兼容模式
 
-enum VideoDynamicRange { sdr, hdr10, hdr10Plus, hlg, dolbyVision, unknown }
-
-final class VideoInfo {
-  final int? width, height;
-  final double? fps;
-  final String? codec;
+class VideoInfo {                    // 按片源报告
   final VideoDynamicRange dynamicRange;
   final int? dolbyVisionProfile;     // 5 / 7 / 8 …
-  final bool hdrOutputActive;        // 是否真正以 HDR 送显
-  final String? decoder;             // 例如 d3d11va / videotoolbox / c2.qti.dv.decoder / software
 }
 
-final class EngineCapabilities {
+class EngineCapabilities {
   final bool dolbyVisionColor;       // 能否正确还原 DV 颜色（含 P5）
-  final bool hdrOutput;              // 能否输出真 HDR
-  final double maxVolume;            // 1.0 = 100%；mpv 为 2.0，原生引擎通常为 1.0
-  final double maxRate;
-  final bool audioTrackSelection;
-  final bool embeddedSubtitleSelection;
-  final bool externalSubtitleData;   // 支持直接传入字幕文本
-  final bool externalSubtitleUrl;    // 支持传入 URL + headers
-  final bool rendersViaPlatformView;
-  final bool rendersBehindFlutter;   // Windows 原生窗口：页面需要透明
+  final double maxVolume;            // 1.0 = 100%；mpv 为 2.0，原生引擎为 1.0
+  final double maxRate;              // mpv 100，Aether 2.0，Media3 3.0
 }
 
-final class PlaybackSource {
-  final Uri uri;
+class PlaybackSource {               // PlaybackSource.network(url, httpHeaders:) / PlaybackSource.localFile(path)
+  final String url;
   final Map<String, String> httpHeaders;
   final bool isLocalFile;
-  final MediaHints hints;            // 已知的容器 / 动态范围 / DV profile，可为空
 }
 
-sealed class ExternalSubtitle {}     // ExternalSubtitle.data(text, title) | ExternalSubtitle.url(uri, headers, title)
+sealed class ExternalSubtitle {}     // 目前只有 ExternalSubtitleData(text, title:, formatHint:)
 
-final class PlaybackError {
-  final PlaybackErrorKind kind;      // network, http, unsupportedFormat, decoder, renderer, source, unknown
+class PlaybackError {
+  final PlaybackErrorKind kind;      // network, http, audioOutput, source, decoder, unknown
   final String message;
   final int? httpStatus;
-  final bool recoverable;            // 可忽略或可自动恢复的临时错误
-  final bool fallbackSuggested;      // 建议会话切换到下一个候选引擎
+  final bool recoverable;            // 临时错误，通常会自动恢复
+  final bool fallbackSuggested;      // 当前内核放不了，会话换下一个候选内核
 }
 
-final class PlaybackStreams {
-  final Stream<Duration> position, duration, buffered;
-  final Stream<bool> playing, buffering, completed;
-  final Stream<double> rate, volume;
-  final Stream<MediaTracks> tracks;
-  final Stream<SelectedTracks> selectedTracks;
-  final Stream<VideoInfo> videoInfo;
-  final Stream<PlaybackError> errors;
-}
+class PlaybackSnapshot { position, duration, playing, buffering, completed, rate, volume, tracks, selectedTracks, videoInfo }
+class PlaybackStreams  { 上述各项对应的 Stream，另加 Stream<PlaybackError> errors }
+class SelectedTracks   { AudioTrackInfo? audio; SubtitleTrackInfo? subtitle; bool subtitleOff; }  // subtitleOff 区分“关闭”和“引擎自动选择”
 
 abstract interface class PlaybackEngine {
   PlaybackEngineKind get kind;
   EngineCapabilities get capabilities;
-  PlaybackSnapshot get state;          // 最新快照，等价于 media_kit 的 player.state
+  PlaybackSnapshot get state;          // 最新快照
   PlaybackStreams get streams;
 
   Future<void> initialize();
@@ -290,39 +274,46 @@ abstract interface class PlaybackEngine {
   Future<void> playOrPause();
   Future<void> seek(Duration position);
   Future<void> setRate(double rate);
-  Future<void> setVolume(double volume);           // 0.0 – capabilities.maxVolume
+  Future<void> setVolume(double volume);                       // 0.0 – capabilities.maxVolume
   Future<void> selectAudioTrack(AudioTrackInfo track);
-  Future<void> selectSubtitleTrack(SubtitleTrackInfo track);   // SubtitleTrackInfo.off 表示关闭
-  Future<void> addExternalSubtitle(ExternalSubtitle subtitle, {bool select = true});
+  Future<void> selectSubtitleTrack(SubtitleTrackInfo? track);  // null 表示关闭
+  Future<void> addExternalSubtitle(ExternalSubtitle subtitle); // 加载并选中
   Widget buildVideoView(BuildContext context, {required BoxFit fit});
-  Future<void> dispose();                          // 幂等；之后所有流关闭
+  Future<void> dispose();                                      // 幂等；之后所有流关闭
+}
+
+class MediaDiagnostics {
+  final String? videoDecoder;
+  final VideoDynamicRange? outputDynamicRange;  // 实际送显的动态范围，SDR 表示 HDR 片源已映射为 SDR；未知为 null
+  final Map<String, String> details;            // 内核专属项，键为展示名
 }
 
 abstract interface class MediaDiagnosticsProvider {
-  Future<Map<String, String>> fetchDiagnostics();  // 媒体信息面板：键为展示名
+  Future<MediaDiagnostics> fetchDiagnostics();
 }
 
-abstract interface class NetworkThroughputProvider {
-  Future<int?> currentDownloadBytesPerSecond();
+abstract interface class NetworkThroughputProvider {   // 目前只有 mpv 实现
+  Future<double?> currentDownloadBytesPerSecond();
 }
 
+// selection/
+class EngineSelectionContext { PlatformEnvironment environment; Set<PlaybackEngineKind> failedKinds; EnginePreference preference; }
+class EngineDecision { List<PlaybackEngineKind> candidates; String reason; }  // 候选按优先级排序；reason 写日志并显示在媒体信息“选择原因”
 abstract interface class EngineSelectionRule {
   EngineDecision? evaluate(EngineSelectionContext context);  // 返回 null 表示交给下一条规则
 }
-
-final class EngineDecision {
-  final List<PlaybackEngineKind> candidates;   // 按优先级排序，会话按顺序回退
-  final String reason;                         // 写入日志和媒体信息面板
-}
 ```
+
+草案中没有实现的部分：`MediaHints` / `VideoTrackInfo`（客户端拿不到预先探测的信息，见 D5）、`ExternalSubtitle.url`（外挂字幕统一由 Dart 下载后传文本）、`EngineCapabilities` 的其余能力位（目前没有功能需要按它们显隐）。`rendersBehindFlutter` 等 Windows 相关能力随 Stage 2 加入。
 
 **语义约定**：
 
 - 时间统一用 `Duration`；音量 1.0 = 100%；倍速为 `double`。
 - `PlaybackStateHub`：每个引擎内部持有一个 hub，只需调用 `hub.update(...)`，由 hub 负责快照、广播和去重，避免各引擎重复写 StreamController。
 - `open()` 必须能被新的 `open()` 打断（用代际计数丢弃过期回调），这对选集快速切换很重要。
-- 引擎**不得**把底层原始异常抛给 UI，一律映射为 `PlaybackError`。`player_screen.dart` 里 `_isRecoverablePlaybackError` 那套 mpv 字符串匹配要迁到 `MpvErrorMapper`。
+- 引擎**不得**把底层原始异常抛给 UI，一律映射为 `PlaybackError`（mpv 的错误字符串识别在 `MpvErrorMapper`）。
 - 字幕在各引擎内部渲染（mpv 自绘；Aether / Media3 在原生视图内的字幕层绘制），Flutter 控制层不画字幕。
+- 媒体信息面板（`buildMediaInfoRows`）各内核统一：播放内核 → 选择原因（`PlaybackSession.engineReason`，回退后为“X 无法播放：原因”）→ 视频解码 → 动态范围（含 DV Profile，来自 `VideoInfo`）→ HDR 送显（来自 `MediaDiagnostics.outputDynamicRange`）→ 内核专属项（按固定键序，未知键排在最后）→ 倍速、屏幕刷新率、音量、源路径。HDR 送显的判定：mpv 纹理固定为 SDR；Aether 取 `AetherEngine.videoFormat`（屏幕实际呈现的格式）；Media3 在 GPU 重建时为 HDR10，杜比视界片源没用 DV 解码器时取基础层，屏幕不支持 HDR 时为 SDR。
 
 ### 4.5 会话层职责划分（从 `PlayerScreen` 拆出）
 
@@ -351,37 +342,50 @@ final class EngineDecision {
 
 ### 4.6 原生跨语言契约（Pigeon，Apple 与 Android 共用）
 
+以 `packages/native_player/pigeons/native_player_api.dart` 为准（pigeon 固定 27.3.0）：
+
 ```dart
-// packages/native_player/pigeons/native_player_api.dart（草案）
 @HostApi()
 abstract class NativePlayerHostApi {
-  NativeDeviceCapabilities getDeviceCapabilities();   // DV 解码器 / 支持的 profile / HDR 显示能力
-  int create(NativePlayerConfig config);              // 返回 playerId
+  NativeCapabilities capabilities();                   // dolbyVisionColor / maxVolume / maxRate
+  void configureSubtitleFonts(List<String> assetKeys); // 字幕字体（Flutter 资源名，第一个为默认字体），在 create 之前调用
+  int create();                                        // 返回 playerId
   @async void open(int playerId, NativeSource source, bool autoPlay);
   void play(int playerId);
   void pause(int playerId);
-  void seek(int playerId, int positionMs);
+  void playOrPause(int playerId);
+  @async void seek(int playerId, int positionMs);
   void setRate(int playerId, double rate);
-  void setVolume(int playerId, double volume);
+  void setVolume(int playerId, double volume);         // 1.0 = 100%
   void selectAudioTrack(int playerId, String trackId);
-  void selectSubtitleTrack(int playerId, String? trackId);
-  @async void addExternalSubtitle(int playerId, NativeExternalSubtitle subtitle);
-  void configureSubtitleFonts(List<String> assetKeys); // 字幕渲染字体（Flutter 资源名，第一个为默认字体），在 create 之前调用
+  void selectSubtitleTrack(int playerId, String? trackId);  // null 表示关闭
+  @async void addExternalSubtitle(int playerId, String text, String title, String? formatHint);
+  void setVideoFit(int playerId, NativeVideoFit fit);
+  NativeDiagnostics diagnostics(int playerId);         // videoDecoder / outputDynamicRange / details
   void dispose(int playerId);
 }
 
-@EventChannelApi()
-abstract class NativePlayerEventApi {
-  NativePlayerEvent playerEvents();   // sealed：Position / Duration / Playing / Buffering / Completed
-                                      // Tracks / SelectedTracks / VideoInfo / Error，均带 playerId
+@FlutterApi()
+abstract class NativePlayerEventsApi {                // 每类事件一个方法，均带 playerId
+  void onPosition(int playerId, int positionMs);
+  void onDuration(int playerId, int durationMs);
+  void onPlaying(int playerId, bool playing);
+  void onBuffering(int playerId, bool buffering);
+  void onCompleted(int playerId, bool completed);
+  void onRate(int playerId, double rate);
+  void onVolume(int playerId, double volume);
+  void onTracks(int playerId, List<NativeTrack> audio, List<NativeTrack> subtitle);
+  void onSelectedTracks(int playerId, String? audioTrackId, String? subtitleTrackId, bool subtitleOff);
+  void onVideoInfo(int playerId, NativeVideoInfo info);
+  void onError(int playerId, NativeError error);      // 带 recoverable / fallbackSuggested
 }
 ```
 
-- 画面承载用 PlatformView，`viewType = 'media_player/native_video'`，`creationParams = {playerId}`。原生侧按 `playerId` 从注册表取引擎实例并挂载视图。
-- 原生侧用 `playerId → 引擎实例` 的注册表，为以后的迷你播放器 / 多实例留出空间。
+- 画面承载用 PlatformView，`viewType = 'native_player/video'`，`creationParams = {playerId}`：iOS `UiKitView`、macOS `AppKitView`、Android `PlatformViewLink` + Hybrid Composition。原生侧按 `playerId` 从注册表取引擎实例并挂载视图，为以后的迷你播放器 / 多实例留出空间；Dart 侧由 `NativePlayerEventDispatcher` 按 playerId 分发事件。
 - position 事件节流到约 250ms。
-- 错误事件带 `fallbackSuggested`：当前内核放不了此媒体（无解码器等）时为 true，会话换下一个候选内核并从原位置继续（Stage 5 加入）。Pigeon 同时输出 Dart、Swift、Kotlin。
-- 生成命令写进插件的 README，生成文件放在 `lib/src/generated/`，禁止手改。
+- `NativeError.fallbackSuggested` 为 true（无解码器、GPU 不支持杜比视界重建等）时，会话换下一个候选内核并从原位置继续。
+- Pigeon 同时输出 Dart、Swift、Kotlin；生成命令写在插件 README，生成文件禁止手改。
+- Windows 的原生窗口模块（Stage 2）不走这份契约，接口在 Stage 2 确定。
 
 ### 4.7 引擎选择规则（责任链，按顺序评估）
 
@@ -390,12 +394,12 @@ abstract class NativePlayerEventApi {
 | 1 | iOS / macOS | `[aether]`（Apple 不打包 libmpv，见 D1；因此排在兼容模式之前，偏好对 Apple 无效） |
 | 2 | 用户偏好为“兼容模式” | `[mpvTexture]` |
 | 3 | Android | `[media3, mpvTexture]` |
-| 4 | Windows | `[mpvNativeWindow, mpvTexture]` |
+| 4 | Windows | `[mpvNativeWindow, mpvTexture]`（Stage 2 加入，之前走第 5 条） |
 | 5 | 其他（Linux） | `[mpvTexture]` |
 
 - 已失败的引擎（`failedKinds`）从候选中剔除。
 - `PlaybackError.fallbackSuggested == true`（例如 Media3 遇到无法解码的音视频、GPU 不支持杜比视界重建的机型遇到 P5）时，会话切到下一个候选引擎，从原位置继续，并提示用户。Stage 8 起，没有 DV 解码器但 GPU 支持重建的机型上 P5 留在 Media3，不再回退。
-- 规则在实现各阶段逐条加入：Stage 1 只有第 5 条的等价规则（全部返回 `mpvTexture`）。
+- 已实现第 1、2、3、5 条（`AppleAetherRule`、`CompatibilityModeRule`、`AndroidMedia3Rule`、`DefaultMpvTextureRule`，注册在 `playback_providers.dart`）；第 4 条随 Stage 2 加入。
 
 ---
 
@@ -408,6 +412,8 @@ abstract class NativePlayerEventApi {
 | DV P7 / P8.1 | ✅（P7 → 8.1） | ✅ | ✅ | 按 HDR10 播放 | ✅ | ❌ |
 | 真 HDR 输出 | ✅ EDR | ✅ XDR 屏 | ✅ | ✅（HDR10；P5 由 GPU 重建后以 HDR10 输出） | ✅（系统开启 HDR 时） | ❌ |
 | MKV | ✅（设备端转封装） | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理，表现与 Linux 列相同。其余列为当前实现。
 
 ### 5.1 DV / HDR 检测方式（Stage 0.2 结论，2026-10-13）
 
@@ -582,9 +588,9 @@ abstract class NativePlayerEventApi {
 
 **验收**：有 DV 解码器的机型上 P5 / P8.1 为真杜比视界；无 DV 解码器的机型上 P8.1 按 HDR10 播放，P5 回退到 mpv 并提示；HDR10 为真 HDR；MKV / MP4、各音频格式、字幕正常；§10 全部通过。
 
-### Stage 6（可选）：Android libmpv 加入 libplacebo
+### Stage 6（不做，见 D4）：Android libmpv 加入 libplacebo
 
-**前置**：Stage 5；D4 决策为“做”。
+**前置**：Stage 5；D4 决策为“做”。**结论：不做（2026-10-22）**，原因见 §8 D4。
 
 - [ ] 6.1 换成带 libplacebo 的 libmpv（Predidit fork 或自行构建），只影响 Android。
 - [ ] 6.2 回退到 mpv 且识别为 DV P5 时，使用 `vo=gpu-next` + `hwdec=no` 还原颜色；在中低端机上验证性能、发热和掉帧，必要时只在设备性能足够时启用。
@@ -601,8 +607,8 @@ abstract class NativePlayerEventApi {
 
 ### Stage 7：诊断与收尾
 
-- [ ] 7.1 统一媒体信息面板：播放内核、解码器、动态范围、DV profile、HDR 送显状态、引擎选择原因。
-- [ ] 7.2 清理遗留代码和临时开关；更新本文档 §4、§5 为最终状态，状态改为“已完成”。
+- [x] 7.1 统一媒体信息面板：播放内核、解码器、动态范围、DV profile、HDR 送显状态、引擎选择原因。（Windows 原生窗口引擎随 Stage 2 接入）
+- [x] 7.2 清理遗留代码和临时开关；更新本文档 §4、§5 为最终状态，状态改为“已完成”。（§4 / §5 已按当前实现更新，Windows 部分随 Stage 2 补齐；总状态在 Stage 2 与 7.3 完成后改为“已完成”）
 - [ ] 7.3 全平台完整回归。
 
 ---
@@ -614,7 +620,7 @@ abstract class NativePlayerEventApi {
 | D1 | Apple 最低系统版本：AetherEngine 自 2026-09-16（提交 `852b6a0`）起要求 iOS 18 / macOS 15，项目目前是 iOS 13.4 / macOS 10.15 | A. 提升到 iOS 18 / macOS 15，Apple 上只用 AetherEngine；B. 保留低版本，低版本继续用 media_kit（需要先验证两套 FFmpeg 能否共存，风险高） | A | 4 | **A（2026-10-13 用户确认）**。在 Stage 4.1 提升版本，之前保持现状；锁定 AetherEngine 最新的精确版本。后果：Apple 上没有 mpv 兜底，AetherEngine 打不开的片源直接报错 |
 | D2 | 原生代码放在哪里 | A. 本地插件 `packages/native_player`；B. 直接写在各平台 Runner 里 | A（封装好、边界清晰）；SPM 或窗口消息受阻时，单个平台可以退回 B | 2, 3 | **以插件为主（2026-10-21 用户确认）**：Pigeon 契约、Dart 侧、Android、Windows 放本地插件 `packages/native_player`；Apple 端先在 Stage 4.0 Spike 开启 Flutter SPM 并完整构建 iOS / macOS（重点确认不支持 SPM 的 `open_filex`、`auto_updater`、`screen_brightness_macos` 能否回退到 CocoaPods），通过则放进插件，不通过则 Apple 原生代码改放 Runner |
 | D3 | Android 音频扩展 | A. 自行构建 LGPL 版 Media3 FFmpeg 扩展；B. 使用现成的 GPL 构建（会传染 GPL，不建议）；C. 不支持的音频回退到 mpv | A，C 作为兜底 | 5 | **第一批用 C（不支持的音频回退到 mpv），第二批做 A（自行构建 LGPL 扩展）（2026-10-21 用户确认）**。Jellyfin 的现成构建是 GPL-3.0 且落后 Media3 两个版本，本仓库公开但没有许可证，不能直接使用 |
-| D4 | 是否做 Stage 6 | 做 / 不做 | 看无 DV 解码器机型的用户占比再定 | 6 | 待定 |
+| D4 | 是否做 Stage 6 | 做 / 不做 | 看无 DV 解码器机型的用户占比再定 | 6 | **不做（2026-10-22 用户确认）**：Stage 8 已让没有 DV 解码器但 GPU 支持重建的机型以 HDR10 正确播放 P5；剩下 GPU 也不支持重建的机型回退 mpv（颜色仍偏），Stage 6 在这些机型上也只能软解、以 SDR 输出，收益太小 |
 | D5 | 后端是否新增媒体技术信息探测（ffprobe：动态范围、DV profile、音频编码） | 做（独立后端任务）/ 不做 | 暂不做；先靠客户端运行时检测和回退。以后用于提前选择引擎和在详情页展示 HDR 标识 | — | 待定 |
 | D6 | 是否向用户开放“播放内核偏好”设置 | 开放 / 隐藏为调试项 | 开放（自动 / 兼容模式） | 2, 5 | **开放，“自动 / 兼容模式”（2026-10-21 用户确认）**，在 5.7 实现 |
 | D7 | Apple 字幕渲染：AetherEngine 只发布字幕 cue（文本带粗体、斜体、颜色、位置等基础样式；PGS 为图片），由宿主绘制；完整 ASS 特效需要宿主开启 `preserveASSMarkup` 并自行接入 libass 渲染器 | A. 原生层绘制基础样式 cue（丢失卡拉 OK、动画、复杂定位等 ASS 特效）；B. 原生层接入 libass 渲染器（例如 swift-ass-renderer），效果与现在的 mpv 一致；C. cue 经 Pigeon 传回 Flutter 绘制（样式可跨引擎统一，同样丢失 ASS 特效） | 字幕组 ASS 是主要场景就选 B；否则先 A，再迭代到 B | 4 | **B（2026-10-13 用户确认）** |
@@ -728,6 +734,9 @@ abstract class NativePlayerEventApi {
 | 2026-10-22 | Stage 8.4 同步与性能（Spike，初步） | 初步通过，待真实片源 | 用 10 秒的 4K P5 样片（`test.mkv`）循环播放 10 分钟，对照组是同一码流去掉 RPU、标成 HDR10 后走系统直出（解码负载相同）；手机接 USB 充电、电量满，两组间等皮肤温度回落（对照组 31.4 °C 起，我们这组 32.0 °C 起）。结果：自绘管线 15069 帧全部画出（送显 = 绘制，0 丢帧），60 多次跳回开头后 `missingRpu=0`；GPU 每帧平均 1.77 ms、最大 4.40 ms，CPU 绘制 1.30 ms（24 fps 预算 41.7 ms）；两组解码器都没有丢帧，温控状态始终为 0。App CPU（`top` 每 30 秒采样，单核百分比）对照组平均 38.8%、我们 44.9%；10 分钟内皮肤温度都上升 1.4 °C，电池温度分别上升 1.2 / 1.0 °C。之前 40 秒内 6 次随机 seek 后同样没有缺失。**未覆盖**：真实片源（高码率、长片）、封装声明 dvhe 的 P5（会走自定义 `MediaCodecSelector`，还没有样片验证）、静态元数据目前固定 1000 nits（应改用 RPU 的 L6 / source_max_pq） |
 | 2026-10-22 | Stage 8.4 真实片源验证（Spike） | 通过 | 片源：《九门》S01E23 WEB-DL，47 分钟，3840×1608 60 fps，17.4 Mbps，**封装带 dvcC 的 P5**（Level 8），RPU 在码流内。**两个问题已修**：① 封装声明 dvcC（BlockAdditionMapping）时 Media3 给每个样本加 4 字节附加数据并计入 `sampleMetadata` 的 size，RPU 捕获要扣掉非主体数据；② RPU 缓存原来按解封装位置清理，60 fps 下 Media3 预读约 50 秒，会删掉还没播放的帧，改为按播放位置清理（保留当前帧前 2 秒，上限 6000 帧）。**颜色**：10:00、25:00 两帧与 mpv / libplacebo 对比，平坦区域平均误差 0.55–0.75（满量程 1023），最大 3–4；画面正常（含场景本身的绿色光效，与参考一致）。dvcC 片源由自定义 `MediaCodecSelector` 交给 `c2.qti.hevc.decoder` 硬解，DTS 走 FFmpeg 扩展。**HDR10 元数据**：改为来自 RPU，本片有 L6（母版 1000 / 0.0001 nits，MaxCLL 1455，MaxFALL 539）；没有 L6 时用 source_min/max_pq，MaxCLL / MaxFALL 记为未知；母版原色按 P3-D65。**10 分钟性能**（从 10:00 起的 11 分钟片段，两组都用 E-AC3 音轨；对照组用 FFmpeg 去掉 RPU 和 dvcC、标成 HDR10 的 MP4 走系统直出）：自绘管线 38172 帧全部画出、`missingRpu=0`，GPU 每帧平均 1.52 ms、最大 2.14 ms（60 fps 预算 16.7 ms），CPU 绘制 1.04 ms；两组解码器都没有丢帧，温控始终为 0；App CPU 对照组 44.9%、自绘管线 54.9%（多约 10 个百分点的单核，来自逐帧解析 RPU、复制样本和 GL 线程）；皮肤温度对照组 31.6 → 33.8 °C（+2.2），自绘管线 32.4 → 34.7 °C（+2.3）。**备注**：FFmpeg 9 对带 dvcC 的 HEVC 加位流过滤器后写 MKV 会失败，对照片段改用 MP4；第一次长测因缓存清理问题全程没匹配到 RPU，结果作废并重跑 |
 | 2026-10-22 | Stage 8.5 正式接入 | 完成 | **启用条件**：`DoviSupport.available`（S23U 通过）且片源为 P5。封装声明 P5 且没有 DV 解码器时，自定义 `MediaCodecSelector` 交给 HEVC 解码器并从第一帧捕获 RPU；封装没声明时由探测发现 RPU 的那一帧起捕获（探测期间同时缓存样本）。`DoviFrameStore` 每个片源一个，解析出第一个 P5 时在主线程切换：`clearVideoSurfaceView` → `setVideoSurface(renderer)` → 渲染器接管 SurfaceView（EGL 窗口创建失败时每 50 ms 重试，最多 20 次，等解码器断开）；打开新片源时切回直出。非 P5（如未声明的 P8，基础层就是 HDR10）解析后停止捕获，避免额外 CPU；30 次连续解析失败或渲染器初始化失败时请求回退 mpv。seek 后到新位置的第一帧显示前不清理缓存。能力：`dolbyVisionColor = 有 DV 解码器 || DoviSupport.available`。渲染器只在拿到参数后才画，不再调用 `eglTerminate`（默认 display 进程内共享）。**打包**：`tool/build_dovi_jni.sh` 构建 arm64-v8a（447 KB）、armeabi-v7a（325 KB）、x86_64（481 KB），`-z max-page-size=16384`；依赖均为宽松许可证。**测试**：Rust 4 个单元测试（两帧真实 RPU 与 FFmpeg 9 解码结果逐项对照、多项式改写成等价 MMR 后求值一致、非法数据报错）；Android 集成测试 8 项全部通过，新增封装带 dvcC 的 P5（含 seek），两种 P5 都断言“杜比视界处理：GPU 重建为 HDR10”。**真机**：正式路径 10:00 帧与 libplacebo 平坦区域误差 0.7；`debug.nativeplayer.dovi.mmr=1` 让着色器走 MMR 分支，输出与多项式路径逐值相同（两份样片都只用多项式，MMR 交叉项的运算仍只经过代码审查）；退到后台 6 秒再回来后 60 fps、无缺失；同一播放器从 P5 换到 HDR10 后图层从 `BT2020_PQ`（自绘）变回 `BT2020_ITU_PQ`（解码器直出）。**未覆盖**：没有 DV 解码器但 GPU 不支持的机型（回退路径只经代码审查）、有 DV 解码器机型上的未声明 P5、旋转（窗口尺寸变化已在启动时覆盖） |
+| 2026-10-22 | 决策 D4 | 完成 | **不做 Stage 6**（用户确认），原因见 §8 D4 |
+| 2026-10-22 | Stage 7.1 统一媒体信息面板 | 完成 | **问题**：三个内核各自拼面板键值（mpv“硬解”、原生“视频解码”；Media3 自报“动态范围”又被 Dart 覆盖；Aether 用“输出格式”表示送显），没有统一的 HDR 送显项，选择原因只写日志；Aether 的 details 是 Swift 字典，经 Pigeon 后顺序随机。**改动**：领域层新增 `MediaDiagnostics`（`videoDecoder`、`outputDynamicRange`、`details`），`fetchDiagnostics()` 改为返回它；Pigeon `diagnostics()` 改为返回 `NativeDiagnostics`（生成后对 Dart 文件执行 `dart format`，与之前的提交风格一致）；mpv 解码器取 `hwdec-current`（`no` 为“软解”），送显固定 SDR；Aether 解码器取 `activeVideoDecoder`，送显取 `videoFormat`，“播放路径”改为中文；Media3 送显按 GPU 重建 / DV 解码器 / 基础层 / 屏幕 HDR 能力判定（§4.4 语义约定）；`PlaybackSession.engineReason`（回退后为“X 无法播放：原因”）经 `PlayerScreen` 传给控制层；面板的行由 `screens/player/widgets/media_info_rows.dart` 统一拼装，内核专属项按固定键序排列，面板外观不变。**验证**：`flutter analyze` 无问题，全量 `flutter test` 通过（新增面板行拼装 5 项、原生诊断映射、会话选择原因与回退原因）；S23U 上 `native_player_android_test.dart` 8 项通过（HDR10 → 送显 HDR10，两种 P5 → GPU 重建后送显 HDR10，H.264 → SDR）；iOS 26.3 模拟器 `native_player_channel_test.dart` 5 项通过（HDR10 软解 `libavcodec HEVC (SW)`，送显 HDR10）；macOS Debug 编译通过。**未覆盖**：面板在真机上的截图核对（手机上靠三指点按打开，adb 无法注入多点触控，Tab 键被原生视频视图拿走焦点），需要在 7.3 回归时目视检查；macOS 未运行 |
+| 2026-10-22 | Stage 7.2 清理与文档 | 完成（Windows 部分随 Stage 2） | 检索没有发现残留的旧播放代码或临时开关，§6 的两条依赖自查为空；Android `debug.nativeplayer.dovi.*` 调试属性是 README 记录的诊断工具，不设置时没有开销，保留；`dolby_vision_probe_test.dart` 的 `DOVI_SPIKE_*` 参数改名为 `DOVI_PROBE_*`。文档：§4.2 / §4.4 / §4.6 改为实际实现，§4.7、§5 标注 Windows 待 Stage 2，§3.2 更新最低系统版本、去掉已不存在的 vendor 目录说明，D4 标为不做。Stage 2 与 7.3 完成后再把总状态改为“已完成” |
 
 ---
 

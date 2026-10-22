@@ -117,10 +117,16 @@ class NativePlaybackEngine
       };
 
   @override
-  Future<Map<String, String>> fetchDiagnostics() async {
+  Future<MediaDiagnostics> fetchDiagnostics() async {
     final id = _playerId;
-    if (id == null) return const {};
-    return _api.diagnostics(id);
+    if (id == null) return const MediaDiagnostics();
+    final info = await _api.diagnostics(id);
+    final output = info.outputDynamicRange;
+    return MediaDiagnostics(
+      videoDecoder: info.videoDecoder,
+      outputDynamicRange: output == null ? null : _dynamicRange(output),
+      details: info.details,
+    );
   }
 
   @override
@@ -220,17 +226,20 @@ class NativePlaybackEngine
   @override
   void onVideoInfo(int playerId, NativeVideoInfo info) => _hub.update(
     videoInfo: VideoInfo(
-      dynamicRange: switch (info.dynamicRange) {
+      dynamicRange: _dynamicRange(info.dynamicRange),
+      dolbyVisionProfile: info.dolbyVisionProfile,
+    ),
+  );
+
+  static VideoDynamicRange _dynamicRange(NativeDynamicRange value) =>
+      switch (value) {
         NativeDynamicRange.unknown => VideoDynamicRange.unknown,
         NativeDynamicRange.sdr => VideoDynamicRange.sdr,
         NativeDynamicRange.hdr10 => VideoDynamicRange.hdr10,
         NativeDynamicRange.hdr10Plus => VideoDynamicRange.hdr10Plus,
         NativeDynamicRange.hlg => VideoDynamicRange.hlg,
         NativeDynamicRange.dolbyVision => VideoDynamicRange.dolbyVision,
-      },
-      dolbyVisionProfile: info.dolbyVisionProfile,
-    ),
-  );
+      };
 
   @override
   void onError(int playerId, NativeError error) => _hub.addError(

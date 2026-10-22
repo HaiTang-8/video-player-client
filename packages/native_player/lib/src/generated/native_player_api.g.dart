@@ -322,6 +322,62 @@ class NativeVideoInfo {
   }
 }
 
+/// 媒体信息面板数据；details 为内核专属项，键为展示名
+class NativeDiagnostics {
+  NativeDiagnostics({
+    this.videoDecoder,
+    this.outputDynamicRange,
+    required this.details,
+  });
+
+  String? videoDecoder;
+
+  /// 实际送显的动态范围，SDR 表示 HDR 片源已被映射为 SDR
+  NativeDynamicRange? outputDynamicRange;
+
+  Map<String, String> details;
+
+  List<Object?> _toList() {
+    return <Object?>[videoDecoder, outputDynamicRange, details];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static NativeDiagnostics decode(Object result) {
+    result as List<Object?>;
+    return NativeDiagnostics(
+      videoDecoder: result[0] as String?,
+      outputDynamicRange: result[1] as NativeDynamicRange?,
+      details: (result[2]! as Map<Object?, Object?>).cast<String, String>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NativeDiagnostics || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(videoDecoder, other.videoDecoder) &&
+        _deepEquals(outputDynamicRange, other.outputDynamicRange) &&
+        _deepEquals(details, other.details);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NativeDiagnostics(videoDecoder: $videoDecoder, outputDynamicRange: $outputDynamicRange, details: $details)';
+  }
+}
+
 class NativeError {
   NativeError({
     required this.kind,
@@ -415,8 +471,11 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is NativeVideoInfo) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is NativeError) {
+    } else if (value is NativeDiagnostics) {
       buffer.putUint8(136);
+      writeValue(buffer, value.encode());
+    } else if (value is NativeError) {
+      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -444,6 +503,8 @@ class _PigeonCodec extends StandardMessageCodec {
       case 135:
         return NativeVideoInfo.decode(readValue(buffer)!);
       case 136:
+        return NativeDiagnostics.decode(readValue(buffer)!);
+      case 137:
         return NativeError.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -757,8 +818,7 @@ class NativePlayerHostApi {
     );
   }
 
-  /// 媒体信息面板数据，键为展示名
-  Future<Map<String, String>> diagnostics(int playerId) async {
+  Future<NativeDiagnostics> diagnostics(int playerId) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.native_player.NativePlayerHostApi.diagnostics$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -776,8 +836,7 @@ class NativePlayerHostApi {
       pigeonVar_channelName,
       isNullValid: false,
     );
-    return (pigeonVar_replyValue! as Map<Object?, Object?>)
-        .cast<String, String>();
+    return pigeonVar_replyValue! as NativeDiagnostics;
   }
 
   Future<void> dispose(int playerId) async {

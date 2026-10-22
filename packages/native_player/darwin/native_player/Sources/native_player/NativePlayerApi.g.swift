@@ -387,6 +387,54 @@ struct NativeVideoInfo: Hashable, CustomStringConvertible {
   }
 }
 
+/// 媒体信息面板数据；details 为内核专属项，键为展示名
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct NativeDiagnostics: Hashable, CustomStringConvertible {
+  var videoDecoder: String? = nil
+  /// 实际送显的动态范围，SDR 表示 HDR 片源已被映射为 SDR
+  var outputDynamicRange: NativeDynamicRange? = nil
+  var details: [String: String]
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> NativeDiagnostics? {
+    let videoDecoder: String? = nilOrValue(pigeonVar_list[0])
+    let outputDynamicRange: NativeDynamicRange? = nilOrValue(pigeonVar_list[1])
+    let details = pigeonVar_list[2] as! [String: String]
+
+    return NativeDiagnostics(
+      videoDecoder: videoDecoder,
+      outputDynamicRange: outputDynamicRange,
+      details: details
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      videoDecoder,
+      outputDynamicRange,
+      details,
+    ]
+  }
+  static func == (lhs: NativeDiagnostics, rhs: NativeDiagnostics) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return NativePlayerApiPigeonInternal.deepEquals(lhs.videoDecoder, rhs.videoDecoder) && NativePlayerApiPigeonInternal.deepEquals(lhs.outputDynamicRange, rhs.outputDynamicRange) && NativePlayerApiPigeonInternal.deepEquals(lhs.details, rhs.details)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("NativeDiagnostics")
+    NativePlayerApiPigeonInternal.deepHash(value: videoDecoder, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: outputDynamicRange, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: details, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "NativeDiagnostics(videoDecoder: \(String(describing: videoDecoder)), outputDynamicRange: \(String(describing: outputDynamicRange)), details: \(String(describing: details)))"
+  }
+}
+
 /// Generated class from Pigeon that represents data sent in messages.
 struct NativeError: Hashable, CustomStringConvertible {
   var kind: NativeErrorKind
@@ -473,6 +521,8 @@ private class NativePlayerApiPigeonCodecReader: FlutterStandardReader {
     case 135:
       return NativeVideoInfo.fromList(self.readValue() as! [Any?])
     case 136:
+      return NativeDiagnostics.fromList(self.readValue() as! [Any?])
+    case 137:
       return NativeError.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -503,8 +553,11 @@ private class NativePlayerApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? NativeVideoInfo {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeError {
+    } else if let value = value as? NativeDiagnostics {
       super.writeByte(136)
+      super.writeValue(value.toList())
+    } else if let value = value as? NativeError {
+      super.writeByte(137)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -550,8 +603,7 @@ protocol NativePlayerHostApi {
   /// 加载并选中外挂字幕；formatHint 为文件扩展名（如 srt、ass）
   func addExternalSubtitle(playerId: Int64, text: String, title: String, formatHint: String?, completion: @escaping (Result<Void, Error>) -> Void)
   func setVideoFit(playerId: Int64, fit: NativeVideoFit) throws
-  /// 媒体信息面板数据，键为展示名
-  func diagnostics(playerId: Int64) throws -> [String: String]
+  func diagnostics(playerId: Int64) throws -> NativeDiagnostics
   func dispose(playerId: Int64) throws
 }
 
@@ -789,7 +841,6 @@ class NativePlayerHostApiSetup {
     } else {
       setVideoFitChannel.setMessageHandler(nil)
     }
-    /// 媒体信息面板数据，键为展示名
     let diagnosticsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.diagnostics\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       diagnosticsChannel.setMessageHandler { message, reply in

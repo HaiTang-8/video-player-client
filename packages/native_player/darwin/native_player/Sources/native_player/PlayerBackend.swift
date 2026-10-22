@@ -19,7 +19,7 @@ protocol PlayerBackend: AnyObject {
     text: String, title: String, formatHint: String?,
     completion: @escaping (Result<Void, Error>) -> Void)
   func setVideoFit(_ fit: NativeVideoFit)
-  func diagnostics() -> [String: String]
+  func diagnostics() -> NativeDiagnostics
   func dispose()
 }
 
@@ -65,6 +65,6 @@ final class UnsupportedPlayerBackend: PlayerBackend {
   }
 
   func setVideoFit(_ fit: NativeVideoFit) {}
-  func diagnostics() -> [String: String] { [:] }
+  func diagnostics() -> NativeDiagnostics { NativeDiagnostics(details: [:]) }
   func dispose() {}
 }

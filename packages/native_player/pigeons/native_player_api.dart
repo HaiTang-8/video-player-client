@@ -54,6 +54,21 @@ class NativeVideoInfo {
   int? dolbyVisionProfile;
 }
 
+/// 媒体信息面板数据；details 为内核专属项，键为展示名
+class NativeDiagnostics {
+  NativeDiagnostics({
+    this.videoDecoder,
+    this.outputDynamicRange,
+    required this.details,
+  });
+
+  String? videoDecoder;
+
+  /// 实际送显的动态范围，SDR 表示 HDR 片源已被映射为 SDR
+  NativeDynamicRange? outputDynamicRange;
+  Map<String, String> details;
+}
+
 enum NativeVideoFit { contain, cover }
 
 enum NativeErrorKind { network, http, audioOutput, source, decoder, unknown }
@@ -120,8 +135,7 @@ abstract class NativePlayerHostApi {
 
   void setVideoFit(int playerId, NativeVideoFit fit);
 
-  /// 媒体信息面板数据，键为展示名
-  Map<String, String> diagnostics(int playerId);
+  NativeDiagnostics diagnostics(int playerId);
 
   void dispose(int playerId);
 }

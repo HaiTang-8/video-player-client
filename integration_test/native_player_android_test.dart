@@ -157,7 +157,10 @@ void main() {
 
     final info = await api.diagnostics(id);
     debugPrint('NP_DIAG $info');
-    expect(info['视频解码'], isNotNull);
+    expect(info.videoDecoder, isNotNull);
+    if (info.details['屏幕 HDR'] != '不支持') {
+      expect(info.outputDynamicRange, NativeDynamicRange.hdr10);
+    }
     expect(recorder.errors, isEmpty);
     await _close(tester, api, id);
   }, skip: skip);
@@ -266,7 +269,7 @@ void main() {
       final info = await api.diagnostics(id);
       debugPrint('NP_DIAG_DVCC $info');
       expect(recorder.errors, isEmpty);
-      expect(info['视频编码'], startsWith('Dolby Vision (dvhe.05'));
+      expect(info.details['视频编码'], startsWith('Dolby Vision (dvhe.05'));
       _expectGpuReshapingWithoutDecoder(info);
     } else {
       await _waitFor(tester, () => recorder.errors.isNotEmpty, 'fallback');
@@ -291,7 +294,7 @@ void main() {
         'NP_AUDIO $file errors=${recorder.errors.map((e) => e.message)} $info',
       );
       expect(recorder.errors, isEmpty, reason: file);
-      decoders[file] = info['音频解码']!;
+      decoders[file] = info.details['音频解码']!;
       await _close(tester, api, id);
     }
     // 系统有对应解码器时优先使用系统的，手机上至少 DTS / TrueHD 会走 FFmpeg
@@ -320,8 +323,12 @@ Dialogue: 0,0:00:00.20,0:00:07.80,Top,,0,0,0,,外挂顶部黄色样式
 ''';
 
 /// 没有杜比视界解码器时 P5 应由 GPU 重建为 HDR10
-void _expectGpuReshapingWithoutDecoder(Map<String, String> info) {
-  if (info['杜比视界解码器'] != '无') return;
-  expect(info['杜比视界处理'], 'GPU 重建为 HDR10');
-  expect(info['HDR10 元数据'], startsWith('母版'));
+void _expectGpuReshapingWithoutDecoder(NativeDiagnostics info) {
+  final details = info.details;
+  if (details['杜比视界解码器'] != '无') return;
+  expect(details['杜比视界处理'], 'GPU 重建为 HDR10');
+  expect(details['HDR10 元数据'], startsWith('母版'));
+  if (details['屏幕 HDR'] != '不支持') {
+    expect(info.outputDynamicRange, NativeDynamicRange.hdr10);
+  }
 }

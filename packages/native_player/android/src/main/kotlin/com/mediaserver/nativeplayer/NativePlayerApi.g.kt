@@ -413,6 +413,56 @@ data class NativeVideoInfo (
   }
 }
 
+/**
+ * 媒体信息面板数据；details 为内核专属项，键为展示名
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class NativeDiagnostics (
+  val videoDecoder: String? = null,
+  /** 实际送显的动态范围，SDR 表示 HDR 片源已被映射为 SDR */
+  val outputDynamicRange: NativeDynamicRange? = null,
+  val details: Map<String, String>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NativeDiagnostics {
+      val videoDecoder = pigeonVar_list[0] as String?
+      val outputDynamicRange = pigeonVar_list[1] as NativeDynamicRange?
+      val details = pigeonVar_list[2] as Map<String, String>
+      return NativeDiagnostics(videoDecoder, outputDynamicRange, details)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      videoDecoder,
+      outputDynamicRange,
+      details,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NativeDiagnostics
+    return NativePlayerApiPigeonUtils.deepEquals(this.videoDecoder, other.videoDecoder) && NativePlayerApiPigeonUtils.deepEquals(this.outputDynamicRange, other.outputDynamicRange) && NativePlayerApiPigeonUtils.deepEquals(this.details, other.details)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.videoDecoder)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.outputDynamicRange)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.details)
+    return result
+  }
+  override fun toString(): String {
+    return "NativeDiagnostics(videoDecoder=$videoDecoder, outputDynamicRange=$outputDynamicRange, details=$details)"
+  }
+}
+
 /** Generated class from Pigeon that represents data sent in messages. */
 data class NativeError (
   val kind: NativeErrorKind,
@@ -506,6 +556,11 @@ private open class NativePlayerApiPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          NativeDiagnostics.fromList(it)
+        }
+      }
+      137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           NativeError.fromList(it)
         }
       }
@@ -542,8 +597,12 @@ private open class NativePlayerApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is NativeError -> {
+      is NativeDiagnostics -> {
         stream.write(136)
+        writeValue(stream, value.toList())
+      }
+      is NativeError -> {
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -579,8 +638,7 @@ interface NativePlayerHostApi {
   /** 加载并选中外挂字幕；formatHint 为文件扩展名（如 srt、ass） */
   fun addExternalSubtitle(playerId: Long, text: String, title: String, formatHint: String?, callback: (Result<Unit>) -> Unit)
   fun setVideoFit(playerId: Long, fit: NativeVideoFit)
-  /** 媒体信息面板数据，键为展示名 */
-  fun diagnostics(playerId: Long): Map<String, String>
+  fun diagnostics(playerId: Long): NativeDiagnostics
   fun dispose(playerId: Long)
 
   companion object {

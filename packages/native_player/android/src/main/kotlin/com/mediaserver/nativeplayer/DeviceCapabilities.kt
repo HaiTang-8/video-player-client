@@ -31,6 +31,8 @@ object DeviceCapabilities {
   val hasDolbyVisionDecoder: Boolean
     get() = dolbyVisionDecoders.isNotEmpty()
 
+  fun isDolbyVisionDecoder(name: String?): Boolean = dolbyVisionDecoders.any { it.name == name }
+
   /** 媒体信息面板中的“杜比视界解码器”一行 */
   val dolbyVisionDescription: String
     get() =
@@ -38,18 +40,11 @@ object DeviceCapabilities {
         "${decoder.name}（${decoder.profiles.sorted().joinToString(", ") { "P$it" }}）"
       }.ifEmpty { "无" }
 
+  fun displaySupportsHdr(context: Context): Boolean = displayHdrTypes(context)?.isNotEmpty() == true
+
   /** 媒体信息面板中的“屏幕 HDR”一行 */
   fun displayHdrDescription(context: Context): String {
-    val display =
-      context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
-        ?: return "未知"
-    val types =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-        display.mode.supportedHdrTypes
-      } else {
-        @Suppress("DEPRECATION")
-        display.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()
-      }
+    val types = displayHdrTypes(context) ?: return "未知"
     return types.sorted().joinToString(", ") { type ->
       when (type) {
         Display.HdrCapabilities.HDR_TYPE_DOLBY_VISION -> "杜比视界"
@@ -59,5 +54,17 @@ object DeviceCapabilities {
         else -> "类型 $type"
       }
     }.ifEmpty { "不支持" }
+  }
+
+  private fun displayHdrTypes(context: Context): IntArray? {
+    val display =
+      context.getSystemService(DisplayManager::class.java)?.getDisplay(Display.DEFAULT_DISPLAY)
+        ?: return null
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+      display.mode.supportedHdrTypes
+    } else {
+      @Suppress("DEPRECATION")
+      display.hdrCapabilities?.supportedHdrTypes ?: intArrayOf()
+    }
   }
 }

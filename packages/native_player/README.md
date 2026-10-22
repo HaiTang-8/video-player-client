@@ -11,6 +11,7 @@
 ```bash
 cd client/packages/native_player
 dart run pigeon --input pigeons/native_player_api.dart
+dart format lib/src/generated
 ```
 
 pigeon 固定为 27.3.0：更高版本需要 Dart 3.11，而项目固定的 Flutter 3.38.5 自带 Dart 3.10。

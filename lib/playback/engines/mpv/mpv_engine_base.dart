@@ -120,9 +120,9 @@ abstract class MpvEngineBase
       };
 
   @override
-  Future<Map<String, String>> fetchDiagnostics() async {
+  Future<MediaDiagnostics> fetchDiagnostics() async {
     final platform = player.platform;
-    if (platform is! NativePlayer) return const {};
+    if (platform is! NativePlayer) return const MediaDiagnostics();
     return MpvDiagnostics.read(platform);
   }
 
