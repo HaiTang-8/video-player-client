@@ -30,7 +30,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
 import com.mediaserver.nativeplayer.dovi.DoviFrameStore
 import com.mediaserver.nativeplayer.dovi.DoviGlRenderer
-import com.mediaserver.nativeplayer.dovi.DoviSpike
+import com.mediaserver.nativeplayer.dovi.DoviSupport
 import java.io.File
 import java.util.Locale
 import java.util.UUID
@@ -39,24 +39,24 @@ import java.util.UUID
 @OptIn(UnstableApi::class)
 class Media3PlayerBackend(private val context: Context, private val events: PlayerEventSink) :
   Player.Listener {
+  /** 没有杜比视界解码器但 GPU 能重建时，封装声明的 P5 也交给普通 HEVC 解码器，由 [DoviGlRenderer] 还原颜色 */
+  private val reshapeDeclaredProfile5 = DoviSupport.available && !DeviceCapabilities.hasDolbyVisionDecoder
   private val player =
     ExoPlayer.Builder(
         context,
         DefaultRenderersFactory(context)
           .setEnableDecoderFallback(true)
           .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-          .apply { if (DoviSpike.enabled) setMediaCodecSelector(DoviSpike.hevcForDolbyVision) },
+          .apply { if (reshapeDeclaredProfile5) setMediaCodecSelector(DoviSupport.hevcForDolbyVision) },
       )
       .build()
   private val handler = Handler(Looper.getMainLooper())
-  private val doviStore: DoviFrameStore? = if (DoviSpike.enabled) DoviFrameStore() else null
-  private val dovi: DoviGlRenderer? =
-    doviStore?.let { store ->
-      player.setVideoFrameMetadataListener { presentationUs, releaseNs, _, _ ->
-        store.onFrameReleased(presentationUs, releaseNs)
-      }
-      DoviGlRenderer(store).also { player.setVideoSurface(it.inputSurface) }
-    }
+  /** 当前片源的逐帧 RPU（GPU 能重建时才有） */
+  @Volatile private var doviStore: DoviFrameStore? = null
+  /** 第一次遇到 P5 时创建，之后复用 */
+  private var dovi: DoviGlRenderer? = null
+  /** 画面经 [dovi] 重建后送显，而不是由解码器直接输出到 SurfaceView */
+  private var reshaping = false
   private val positionTicker =
     object : Runnable {
       override fun run() {
@@ -105,10 +105,6 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
           videoDecoder = decoderName
         }
 
-        override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
-          Log.i(DoviSpike.TAG, "decoder dropped $droppedFrames frames in ${elapsedMs}ms")
-        }
-
         override fun onAudioDecoderInitialized(
           eventTime: AnalyticsListener.EventTime,
           decoderName: String,
@@ -119,6 +115,11 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         }
       }
     )
+    if (DoviSupport.available) {
+      player.setVideoFrameMetadataListener { presentationUs, releaseNs, _, _ ->
+        doviStore?.onFrameReleased(presentationUs, releaseNs)
+      }
+    }
   }
 
   /** 准备好就返回；之后的失败（含需要换内核的情况）通过错误事件上报 */
@@ -133,6 +134,17 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     audioDecoder = null
     lastDurationMs = C.TIME_UNSET
     clearSubtitleFiles()
+    deactivateReshaping()
+    val store =
+      if (DoviSupport.available) {
+        DoviFrameStore(
+          onProfile5 = { handler.post { if (generation == openGeneration) activateReshaping() } },
+          onUnusable = { reason -> handler.post { if (generation == openGeneration) reportFallback(reason) } },
+        )
+      } else {
+        null
+      }
+    doviStore = store
     val http =
       DefaultHttpDataSource.Factory()
         .setAllowCrossProtocolRedirects(true)
@@ -144,7 +156,8 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
       DolbyVisionProbeExtractorsFactory(
         DefaultExtractorsFactory(),
         { handler.post { if (generation == openGeneration) onDolbyVisionRpu() } },
-        doviStore?.let { it::onSampleRpu },
+        store?.let { it::onSampleRpu },
+        reshapeDeclaredProfile5,
       )
     val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
     mediaSourceFactory = factory
@@ -164,6 +177,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   fun playOrPause() = if (player.playWhenReady) pause() else play()
 
   fun seek(positionMs: Long) {
+    doviStore?.onSeek()
     player.seekTo(positionMs)
     events.position(positionMs)
   }
@@ -208,9 +222,9 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   }
 
   fun attach(view: NativeVideoView) {
-    this.view?.let { if (dovi == null) player.clearVideoSurfaceView(it.surfaceView) }
+    this.view?.let(::detachSurface)
     this.view = view
-    if (dovi != null) dovi.attach(view.surfaceView) else player.setVideoSurfaceView(view.surfaceView)
+    attachSurface(view)
     view.setFit(fit)
     if (aspectRatio > 0) view.setAspectRatio(aspectRatio)
     view.subtitleView.setCues(player.currentCues.cues)
@@ -219,8 +233,48 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
 
   fun detach(view: NativeVideoView) {
     if (this.view !== view) return
-    if (dovi != null) dovi.detach() else player.clearVideoSurfaceView(view.surfaceView)
+    detachSurface(view)
     this.view = null
+  }
+
+  private fun attachSurface(view: NativeVideoView) {
+    val renderer = dovi
+    if (reshaping && renderer != null) renderer.attach(view.surfaceView) else player.setVideoSurfaceView(view.surfaceView)
+  }
+
+  private fun detachSurface(view: NativeVideoView) {
+    if (reshaping) dovi?.detach() else player.clearVideoSurfaceView(view.surfaceView)
+  }
+
+  /** 发现 P5 后改由 GPU 重建：解码器输出切到渲染器，渲染器接管 SurfaceView */
+  private fun activateReshaping() {
+    val store = doviStore ?: return
+    if (reshaping) return
+    val renderer =
+      dovi
+        ?: runCatching { DoviGlRenderer() }
+          .onFailure { Log.e(DoviSupport.TAG, "renderer init failed", it) }
+          .getOrNull()
+          ?.also { dovi = it }
+    if (renderer == null) {
+      reportFallback("此设备无法用 GPU 还原杜比视界 Profile 5 的颜色")
+      return
+    }
+    view?.let { player.clearVideoSurfaceView(it.surfaceView) }
+    renderer.bind(store)
+    reshaping = true
+    player.setVideoSurface(renderer.inputSurface)
+    view?.let { renderer.attach(it.surfaceView) }
+    Log.i(DoviSupport.TAG, "Dolby Vision profile 5 is reshaped to HDR10 on the GPU")
+  }
+
+  private fun deactivateReshaping() {
+    if (!reshaping) return
+    reshaping = false
+    val renderer = dovi ?: return
+    renderer.detach()
+    player.clearVideoSurface(renderer.inputSurface)
+    view?.let { player.setVideoSurfaceView(it.surfaceView) }
   }
 
   fun diagnostics(): Map<String, String> {
@@ -238,6 +292,10 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     }
     audioDecoder?.let { info["音频解码"] = it }
     info["动态范围"] = dynamicRangeLabel()
+    if (reshaping) {
+      info["杜比视界处理"] = "GPU 重建为 HDR10"
+      dovi?.hdrMetadataDescription?.let { info["HDR10 元数据"] = it }
+    }
     info["杜比视界解码器"] = DeviceCapabilities.dolbyVisionDescription
     info["屏幕 HDR"] = DeviceCapabilities.displayHdrDescription(context)
     return info
@@ -397,7 +455,8 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     reportVideoInfo(tracks)
     val format =
       tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO }?.getTrackFormat(0) ?: return
-    if (dolbyVisionProfile(format) != null || dovi != null) return
+    // 能用 GPU 重建时由 doviStore 在解析出 P5 后切换，不需要换内核
+    if (dolbyVisionProfile(format) != null || doviStore != null) return
     val transfer = DolbyVisionProbeExtractorsFactory.colorTransfer(format)
     if (unsignaledProfile(transfer) != 5 || fallbackReported) return
     val reason =
@@ -420,7 +479,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
    * 所以有视频或音频轨但一条都放不了时主动请求换内核
    */
   private fun reportUnplayable(tracks: Tracks) {
-    if (fallbackReported || dovi != null) return
+    if (fallbackReported) return
     val reason =
       listOf(C.TRACK_TYPE_VIDEO to "视频", C.TRACK_TYPE_AUDIO to "音频").firstNotNullOfOrNull {
         (type, label) ->
@@ -479,18 +538,12 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
       )
-    val DOLBY_VISION_CODECS = setOf("dvhe", "dvh1", "dvav", "dva1", "dav1")
 
     /** 基础层是 HDR10 / HLG 时按 P8 处理，否则（基础层不可直接显示）是 P5 */
     fun unsignaledProfile(transfer: Int): Int =
       if (transfer == C.COLOR_TRANSFER_ST2084 || transfer == C.COLOR_TRANSFER_HLG) 8 else 5
 
-    /** codecs 形如 dvhe.05.06，第二段是 profile */
-    fun dolbyVisionProfile(format: Format): Int? {
-      val parts = format.codecs?.split('.') ?: return null
-      if (parts.size < 2 || parts[0] !in DOLBY_VISION_CODECS) return null
-      return parts[1].toIntOrNull()
-    }
+    fun dolbyVisionProfile(format: Format): Int? = DolbyVisionProbeExtractorsFactory.dolbyVisionProfile(format)
 
     fun describe(format: Format, label: String): String {
       dolbyVisionProfile(format)?.let { return "杜比视界 Profile $it $label" }

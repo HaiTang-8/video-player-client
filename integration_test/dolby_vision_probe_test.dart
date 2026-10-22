@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:native_player/native_player.dart';
 
-/// Spike：在真机上播放 DOVI_SPIKE_URL，停在 DOVI_SPIKE_SEEK_MS 附近 DOVI_SPIKE_HOLD_S 秒，
-/// 期间打印 DOVI_HOLD 标记，供 adb 截图、dumpsys 和 logcat 观察
+/// 杜比视界 GPU 重建的手动诊断：在真机上播放 DOVI_SPIKE_URL，停在 DOVI_SPIKE_SEEK_MS 附近
+/// DOVI_SPIKE_HOLD_S 秒，期间打印 DOVI_HOLD 标记，供 adb 截图、dumpsys 和 logcat 观察。
+/// 配合调试属性（见 `DoviSupport`）可以读回 PQ 网格或输出帧统计。不要用 `flutter test` 运行，
+/// 它结束时会卸载 App；用 `flutter build apk -t` 构建后 `adb install -r` 安装再启动
 const _url = String.fromEnvironment('DOVI_SPIKE_URL');
 const _seekMs = int.fromEnvironment('DOVI_SPIKE_SEEK_MS');
 const _holdSeconds = int.fromEnvironment('DOVI_SPIKE_HOLD_S', defaultValue: 20);
@@ -15,6 +17,9 @@ const _seeks = String.fromEnvironment('DOVI_SPIKE_SEEKS');
 
 /// 大于 0 时，播放位置超过该值（毫秒）就跳回开头，用于长时间连续播放
 const _loopMs = int.fromEnvironment('DOVI_SPIKE_LOOP_MS');
+
+/// 非空时保持结束后在同一个播放器里打开这个地址，再保持 DOVI_SPIKE_HOLD_S 秒（验证换片后切回直出）
+const _nextUrl = String.fromEnvironment('DOVI_SPIKE_NEXT_URL');
 
 class _Events implements NativePlayerEventsApi {
   int positionMs = 0;
@@ -58,7 +63,7 @@ class _Events implements NativePlayerEventsApi {
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('dovi spike playback', (tester) async {
+  testWidgets('dolby vision probe playback', (tester) async {
     final api = NativePlayerHostApi();
     final events = _Events();
     final id = await api.create();
@@ -99,6 +104,18 @@ void main() {
       }
       await Future<void>.delayed(const Duration(milliseconds: 100));
       await tester.pump();
+    }
+    if (_nextUrl.isNotEmpty) {
+      await api.open(
+        id,
+        NativeSource(url: _nextUrl, httpHeaders: const {}, isLocalFile: false),
+        true,
+      );
+      debugPrint('DOVI_HOLD next');
+      for (var i = 0; i < _holdSeconds * 10; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      }
     }
     debugPrint(
       'DOVI_HOLD end position=${events.positionMs} diag=${await api.diagnostics(id)}',

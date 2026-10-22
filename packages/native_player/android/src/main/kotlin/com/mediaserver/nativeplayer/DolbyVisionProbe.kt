@@ -29,8 +29,10 @@ import java.io.EOFException
 class DolbyVisionProbeExtractorsFactory(
   private val delegate: ExtractorsFactory,
   private val onRpu: () -> Unit,
-  /** 非空时保存每个视频样本里的 RPU（NAL 62），参数为样本时间和完整 NAL */
-  private val onSampleRpu: ((Long, ByteArray) -> Unit)? = null,
+  /** 非空时逐帧捕获 RPU（NAL 62），参数为样本时间和完整 NAL，返回 false 表示不再需要 */
+  private val onSampleRpu: ((Long, ByteArray) -> Boolean)? = null,
+  /** 封装声明的 P5 也捕获（没有杜比视界解码器、改用普通 HEVC 解码器时） */
+  private val captureDeclaredProfile5: Boolean = false,
 ) : ExtractorsFactory {
   override fun createExtractors(): Array<Extractor> =
     delegate.createExtractors().map(::wrap).toTypedArray()
@@ -60,9 +62,19 @@ class DolbyVisionProbeExtractorsFactory(
     return this
   }
 
-  private fun wrap(extractor: Extractor): Extractor = ProbingExtractor(extractor, onRpu, onSampleRpu)
+  private fun wrap(extractor: Extractor): Extractor =
+    ProbingExtractor(extractor, RpuCapture(onRpu, onSampleRpu, captureDeclaredProfile5))
 
   companion object {
+    private val DOLBY_VISION_CODECS = setOf("dvhe", "dvh1", "dvav", "dva1", "dav1")
+
+    /** codecs 形如 dvhe.05.06，第二段是 profile */
+    fun dolbyVisionProfile(format: Format): Int? {
+      val parts = format.codecs?.split('.') ?: return null
+      if (parts.size < 2 || parts[0] !in DOLBY_VISION_CODECS) return null
+      return parts[1].toIntOrNull()
+    }
+
     /** 视频格式没有颜色信息时（MKV 没写 Colour 元素），从 HEVC 的 SPS 取传输特性 */
     fun colorTransfer(format: Format): Int {
       format.colorInfo?.colorTransfer?.takeIf { it != Format.NO_VALUE }?.let { return it }
@@ -95,16 +107,19 @@ class DolbyVisionProbeExtractorsFactory(
 }
 
 @OptIn(UnstableApi::class)
-private class ProbingExtractor(
-  private val delegate: Extractor,
-  private val onRpu: () -> Unit,
-  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
-) : Extractor {
+private class RpuCapture(
+  val onRpu: () -> Unit,
+  val onSampleRpu: ((Long, ByteArray) -> Boolean)?,
+  val captureDeclaredProfile5: Boolean,
+)
+
+@OptIn(UnstableApi::class)
+private class ProbingExtractor(private val delegate: Extractor, private val capture: RpuCapture) : Extractor {
   override fun sniff(input: ExtractorInput): Boolean = delegate.sniff(input)
 
   override fun getSniffFailureDetails(): List<SniffFailure> = delegate.sniffFailureDetails
 
-  override fun init(output: ExtractorOutput) = delegate.init(ProbingOutput(output, onRpu, onSampleRpu))
+  override fun init(output: ExtractorOutput) = delegate.init(ProbingOutput(output, capture))
 
   override fun read(input: ExtractorInput, seekPosition: PositionHolder): Int =
     delegate.read(input, seekPosition)
@@ -117,25 +132,23 @@ private class ProbingExtractor(
 }
 
 @OptIn(UnstableApi::class)
-private class ProbingOutput(
-  private val delegate: ExtractorOutput,
-  private val onRpu: () -> Unit,
-  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
-) : ExtractorOutput by delegate {
+private class ProbingOutput(private val delegate: ExtractorOutput, private val capture: RpuCapture) :
+  ExtractorOutput by delegate {
   override fun track(id: Int, type: Int): TrackOutput {
     val output = delegate.track(id, type)
-    return if (type == C.TRACK_TYPE_VIDEO) RpuProbeTrackOutput(output, onRpu, onSampleRpu) else output
+    return if (type == C.TRACK_TYPE_VIDEO) RpuProbeTrackOutput(output, capture) else output
   }
 }
 
 @OptIn(UnstableApi::class)
-private class RpuProbeTrackOutput(
-  delegate: TrackOutput,
-  private val onRpu: () -> Unit,
-  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
-) : ForwardingTrackOutput(delegate) {
+private class RpuProbeTrackOutput(delegate: TrackOutput, private val capture: RpuCapture) :
+  ForwardingTrackOutput(delegate) {
+  /** 前几个样本里找 RPU（封装没有声明杜比视界的片源） */
   private var probing = false
+  /** 逐帧捕获 RPU；探测期间也缓存样本，发现 RPU 的那一帧同样能捕获 */
   private var capturing = false
+  private val buffering: Boolean
+    get() = capture.onSampleRpu != null && (probing || capturing)
   private val pending = ByteArrayOutputStream()
   /** 封装声明了附加数据（如 dvcC 的 BlockAdditionMapping）时，样本还带非主体数据，计入 sampleMetadata 的 size */
   private var otherPartBytes = 0
@@ -146,8 +159,10 @@ private class RpuProbeTrackOutput(
   override fun format(format: Format) {
     probing = format.sampleMimeType == MimeTypes.VIDEO_H265 && samples < MAX_SAMPLES
     capturing =
-      onSampleRpu != null &&
-        (format.sampleMimeType == MimeTypes.VIDEO_H265 || format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION)
+      capture.onSampleRpu != null &&
+        capture.captureDeclaredProfile5 &&
+        format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION &&
+        DolbyVisionProbeExtractorsFactory.dolbyVisionProfile(format) == 5
     super.format(format)
   }
 
@@ -167,10 +182,7 @@ private class RpuProbeTrackOutput(
       if (allowEndOfInput) return C.RESULT_END_OF_INPUT
       throw EOFException()
     }
-    if (probing) scan(buffer, 0, read)
-    if (capturing) {
-      if (sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) pending.write(buffer, 0, read) else otherPartBytes += read
-    }
+    inspect(buffer, 0, read, sampleDataPart)
     super.sampleData(ParsableByteArray(buffer, read), read, sampleDataPart)
     return read
   }
@@ -179,14 +191,7 @@ private class RpuProbeTrackOutput(
     sampleData(data, length, TrackOutput.SAMPLE_DATA_PART_MAIN)
 
   override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
-    if (probing) scan(data.data, data.position, length)
-    if (capturing) {
-      if (sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) {
-        pending.write(data.data, data.position, length)
-      } else {
-        otherPartBytes += length
-      }
-    }
+    if (probing || capturing) inspect(data.data, data.position, length, sampleDataPart)
     super.sampleData(data, length, sampleDataPart)
   }
 
@@ -199,11 +204,25 @@ private class RpuProbeTrackOutput(
   ) {
     super.sampleMetadata(timeUs, flags, size, offset, cryptoData)
     if (probing && ++samples >= MAX_SAMPLES) probing = false
-    if (capturing) capture(timeUs, size, offset)
+    if (capturing) {
+      extractRpu(timeUs, size, offset)
+    } else {
+      pending.reset()
+      otherPartBytes = 0
+    }
+  }
+
+  private fun inspect(data: ByteArray, offset: Int, length: Int, sampleDataPart: Int) {
+    if (sampleDataPart != TrackOutput.SAMPLE_DATA_PART_MAIN) {
+      if (buffering) otherPartBytes += length
+      return
+    }
+    if (probing) scan(data, offset, length)
+    if (buffering) pending.write(data, offset, length)
   }
 
   /** 样本数据是 Annex-B 格式；offset 字节属于下一个样本，留到下次 */
-  private fun capture(timeUs: Long, size: Int, offset: Int) {
+  private fun extractRpu(timeUs: Long, size: Int, offset: Int) {
     val bytes = pending.toByteArray()
     pending.reset()
     val mainSize = size - otherPartBytes
@@ -222,7 +241,7 @@ private class RpuProbeTrackOutput(
             next++
           }
           if (next + 2 >= end) next = end
-          onSampleRpu?.invoke(timeUs, bytes.copyOfRange(header, next))
+          if (capture.onSampleRpu?.invoke(timeUs, bytes.copyOfRange(header, next)) == false) capturing = false
           return
         }
         i = header
@@ -240,7 +259,8 @@ private class RpuProbeTrackOutput(
         expectHeader = false
         if ((byte shr 1) and 0x3F == RPU_NAL_TYPE) {
           probing = false
-          onRpu()
+          if (capture.onSampleRpu != null) capturing = true
+          capture.onRpu()
           return
         }
       }

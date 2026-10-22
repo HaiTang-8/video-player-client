@@ -16,6 +16,11 @@ class DoviUniforms {
   private val offset = FloatArray(3)
   private val nonlinear = FloatArray(9)
   private val lmsToRgb = FloatArray(9)
+  private val polynomialAsMmr = DoviSupport.polynomialAsMmr
+
+  init {
+    if (polynomialAsMmr) android.util.Log.i(DoviSupport.TAG, "debug: polynomial pieces are uploaded as MMR")
+  }
 
   fun pack(params: FloatArray) {
     params.copyInto(offset, 0, 2, 5)
@@ -31,7 +36,14 @@ class DoviUniforms {
       for (p in 0 until count - 1) {
         val piece = comp + 1 + MAX_PIVOTS + p * PIECE_LENGTH
         val slot = (c * MAX_PIECES + p) * 4
-        if (params[piece] == 0f) {
+        if (params[piece] == 0f && polynomialAsMmr) {
+          // c0 + c1·s + c2·s² 等价于常数项 + 本分量一次项 + 本分量平方项，三次项为 0
+          val dst = (c * MAX_PIECES + p) * 6 * 4
+          coeffs[slot] = params[piece + 1]
+          coeffs[slot + 3] = 3f
+          mmr[dst + c] = params[piece + 2]
+          mmr[dst + 8 + c] = params[piece + 3]
+        } else if (params[piece] == 0f) {
           params.copyInto(coeffs, slot, piece + 1, piece + 4)
         } else {
           val order = params[piece + 4].toInt()

@@ -29,3 +29,25 @@ pigeon 固定为 27.3.0：更高版本需要 Dart 3.11，而项目固定的 Flut
 cd client/packages/native_player/android
 ./tool/build_ffmpeg_extension.sh
 ```
+
+## Android：杜比视界 P5 的 GPU 重建
+
+没有杜比视界解码器（或片源没有在封装里声明杜比视界）时，P5 由 `dovi/DoviGlRenderer` 在 GPU 上按逐帧 RPU 重建颜色，以 HDR10（BT.2020 PQ + 静态元数据）送显。设备不支持所需的 EGL / GLES 扩展时回退到 mpv。
+
+- `rust/dovi_jni`：用 [libdovi](https://github.com/quietvoid/dovi_tool)（`dolby_vision` crate，MIT）解析 RPU 并转成着色器参数，`src/main/jniLibs/<abi>/libdovi_jni.so` 为预编译产物（arm64-v8a、armeabi-v7a、x86_64，16 KB 页对齐）
+- 依赖许可证：均为 MIT / Apache-2.0 / Unlicense / Zlib 等宽松许可证，链接进产物的没有 GPL / LGPL 组件
+- 修改 Rust 代码或升级依赖后重新构建并提交产物（Rust 版本由 `rust-toolchain.toml` 固定）：
+
+```bash
+cd client/packages/native_player/android
+./tool/build_dovi_jni.sh
+```
+
+- 单元测试（宿主机运行，用真实 RPU 与 FFmpeg 的解码结果对照）：
+
+```bash
+cd client/packages/native_player/android/rust/dovi_jni
+cargo test
+```
+
+- 调试属性（`adb shell setprop`）：`debug.nativeplayer.dovi.log=1` 每 5 秒输出帧统计；`debug.nativeplayer.dovi.dump=<显示时间微秒>` 读回该帧的 PQ 网格；`debug.nativeplayer.dovi.mmr=1` 把多项式改成等价的 MMR 上传，用来验证着色器的 MMR 分支。手动诊断用 `integration_test/dolby_vision_probe_test.dart`

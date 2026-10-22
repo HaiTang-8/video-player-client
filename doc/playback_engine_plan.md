@@ -7,6 +7,7 @@
 > **后续会话必读顺序**：§0 → §1 → §4 → §6 → §12（进度记录）→ 当前要做的阶段（§7）。
 > 动手前先确认该阶段依赖的“待决策事项”（§8）已有结论；没有结论就先问用户。
 > 每完成一个阶段或步骤，必须更新 §12 进度记录；接口有变化时同步更新 §4。
+> 相关任务：播放缓存（续播秒开）见 `doc/playback_cache_plan.md`，会修改 `PlaybackEngine.open` 与 Pigeon `NativeSource`。
 
 ---
 
@@ -393,7 +394,7 @@ abstract class NativePlayerEventApi {
 | 5 | 其他（Linux） | `[mpvTexture]` |
 
 - 已失败的引擎（`failedKinds`）从候选中剔除。
-- `PlaybackError.fallbackSuggested == true`（例如 Media3 在无 DV 解码器的机型上遇到 P5）时，会话切到下一个候选引擎，从原位置继续，并提示用户。
+- `PlaybackError.fallbackSuggested == true`（例如 Media3 遇到无法解码的音视频、GPU 不支持杜比视界重建的机型遇到 P5）时，会话切到下一个候选引擎，从原位置继续，并提示用户。Stage 8 起，没有 DV 解码器但 GPU 支持重建的机型上 P5 留在 Media3，不再回退。
 - 规则在实现各阶段逐条加入：Stage 1 只有第 5 条的等价规则（全部返回 `mpvTexture`）。
 
 ---
@@ -402,10 +403,10 @@ abstract class NativePlayerEventApi {
 
 | | iOS | macOS | Android（有 DV 解码器） | Android（无 DV 解码器） | Windows | Linux |
 |---|---|---|---|---|---|---|
-| 内核 | Aether | Aether | Media3 | Media3 → mpv 回退 | mpv `wid` | mpv 纹理 |
-| DV P5 颜色 | ✅ | ✅ | ✅ | ⚠️ 回退到 mpv（Stage 6 后软解可还原颜色） | ✅ 硬解 | ❌ |
+| 内核 | Aether | Aether | Media3 | Media3（GPU 重建 P5）；GPU 不支持时 → mpv | mpv `wid` | mpv 纹理 |
+| DV P5 颜色 | ✅ | ✅ | ✅ | ✅ 硬解基础层 + GPU 按 RPU 重建（Stage 8）；GPU 不支持时回退到 mpv | ✅ 硬解 | ❌ |
 | DV P7 / P8.1 | ✅（P7 → 8.1） | ✅ | ✅ | 按 HDR10 播放 | ✅ | ❌ |
-| 真 HDR 输出 | ✅ EDR | ✅ XDR 屏 | ✅ | ✅（HDR10） | ✅（系统开启 HDR 时） | ❌ |
+| 真 HDR 输出 | ✅ EDR | ✅ XDR 屏 | ✅ | ✅（HDR10；P5 由 GPU 重建后以 HDR10 输出） | ✅（系统开启 HDR 时） | ❌ |
 | MKV | ✅（设备端转封装） | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ### 5.1 DV / HDR 检测方式（Stage 0.2 结论，2026-10-13）
@@ -588,14 +589,15 @@ abstract class NativePlayerEventApi {
 - [ ] 6.1 换成带 libplacebo 的 libmpv（Predidit fork 或自行构建），只影响 Android。
 - [ ] 6.2 回退到 mpv 且识别为 DV P5 时，使用 `vo=gpu-next` + `hwdec=no` 还原颜色；在中低端机上验证性能、发热和掉帧，必要时只在设备性能足够时启用。
 
-### Stage 8（Spike）：Android P5 → HDR10（Media3 + GPU 实时重建）
+### Stage 8：Android P5 → HDR10（Media3 + GPU 实时重建）
 
-**前置**：Stage 5；D10 = A。代码在 `spike/dovi-hdr10` 分支，放在插件 `dovi/` 包内，只有 `adb shell setprop debug.nativeplayer.dovi 1` 时启用。
+**前置**：Stage 5；D10 = A。代码在 `spike/dovi-hdr10` 分支，放在插件 `dovi/` 包内。8.1–8.4 为 Spike，8.5 为正式接入。
 
 - [x] 8.1（止损点 1）自绘 HDR 管线：解码器输出到自建 SurfaceTexture，GL 线程用 `GL_EXT_YUV_target` 读原始 YUV，画到 SurfaceView，EGL 表面为 BT.2020 PQ 并带 HDR10 静态元数据；用 HDR10 样片对比直出。
 - [x] 8.2 RPU 提取与解析：libdovi（MIT）经 Rust JNI 编进插件，解封装时按样本时间保存每帧 RPU；封装声明 dvhe 的片源强制用 HEVC 解码器。
 - [x] 8.3（止损点 2）着色器重建：多项式 / MMR 重建 → L'M'S'（PQ）→ LMS → BT.2020 RGB → PQ；与 mpv（libplacebo）的 PQ 输出逐点对比。
 - [x] 8.4（止损点 3）逐帧同步与性能：seek 后元数据对齐；真实 4K P5 连续播放的掉帧、GPU 耗时、CPU、温度。
+- [x] 8.5 正式接入：`DoviSupport` 探测 GPU 能力（BT.2020 PQ 窗口表面、RGBA1010102、`GL_EXT_YUV_target`、libdovi）；没有 DV 解码器时封装声明的 P5 交给 HEVC 解码器；解析出第一个 P5 RPU 时播放中切到 GPU 重建、换片时切回直出；P8 等基础层可直接播放的 profile 停止捕获；一直解析失败或渲染器创建失败时回退 mpv；`tool/build_dovi_jni.sh` 构建三种架构；Rust 单元测试与 FFmpeg 对照；媒体信息显示处理方式和 HDR10 元数据。
 
 ### Stage 7：诊断与收尾
 
@@ -618,7 +620,7 @@ abstract class NativePlayerEventApi {
 | D7 | Apple 字幕渲染：AetherEngine 只发布字幕 cue（文本带粗体、斜体、颜色、位置等基础样式；PGS 为图片），由宿主绘制；完整 ASS 特效需要宿主开启 `preserveASSMarkup` 并自行接入 libass 渲染器 | A. 原生层绘制基础样式 cue（丢失卡拉 OK、动画、复杂定位等 ASS 特效）；B. 原生层接入 libass 渲染器（例如 swift-ass-renderer），效果与现在的 mpv 一致；C. cue 经 Pigeon 传回 Flutter 绘制（样式可跨引擎统一，同样丢失 ASS 特效） | 字幕组 ASS 是主要场景就选 B；否则先 A，再迭代到 B | 4 | **B（2026-10-13 用户确认）** |
 | D8 | Apple 音量上限：AVPlayer 最大 100%，现在的 mpv 可到 200% | A. 接受，Apple 上音量最大 100%；B. 自行实现音频增益 | A | 4 | **A（2026-10-13 用户确认）** |
 | D9 | 旧系统用户：iOS 18 以下 / macOS 15 以下的设备将无法安装新版本 | A. 不再支持；B. 保留旧版分支维护 | A（取决于 iOS / macOS 的实际用户和分发方式） | 4 | **A（2026-10-13 用户确认）** |
-| D10 | 没有杜比视界解码器的 Android 机型上 P5 怎么处理（S23U 这类机型不向第三方 App 开放 DV 解码器） | A. Media3 硬解基础层 + GPU 着色器按 RPU 重建颜色，输出 HDR10；B. 服务器实时转码成 HDR10；C. 离线把文件转成 HDR10；另有 Stage 6（mpv 软解，颜色正确但只有 SDR） | A（唯一能在 App 内得到真 HDR 的方案）；HDR10+ 没有可用的公开接口，目标是 HDR10 | 8 | **A，先做 Spike（2026-10-22 用户确认）** |
+| D10 | 没有杜比视界解码器的 Android 机型上 P5 怎么处理（S23U 这类机型不向第三方 App 开放 DV 解码器） | A. Media3 硬解基础层 + GPU 着色器按 RPU 重建颜色，输出 HDR10；B. 服务器实时转码成 HDR10；C. 离线把文件转成 HDR10；另有 Stage 6（mpv 软解，颜色正确但只有 SDR） | A（唯一能在 App 内得到真 HDR 的方案）；HDR10+ 没有可用的公开接口，目标是 HDR10 | 8 | **A，先做 Spike（2026-10-22 用户确认）**；Spike 通过后正式接入（Stage 8.5） |
 
 ---
 
@@ -725,6 +727,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-22 | Stage 8.3 着色器重建（Spike） | 通过 | `DoviUniforms.RESHAPE_SHADER`：原始 YCbCr（全范围归一化）→ 分段多项式 / MMR → L'M'S' → PQ EOTF → LMS→RGB → PQ OETF。参考实现：mpv 0.41.0 + libplacebo v7.360.1（`vo=gpu-next`、目标 BT.2020 PQ、峰值 10000、不做色调映射）截 16 位 PNG；手机端加了调试读回（`debug.nativeplayer.dovi.dump=1`，48×27 网格的 10 位 PQ 码值）。三帧（2.0 s、6.0 s、8.5 s）在平坦区域与 libplacebo 的平均绝对误差 0.26–0.53（满量程 1023），最大 2–10，无系统偏差；整体最大误差出现在文字和标志的锐利边缘，是 4K 缩到 1440 宽后采样位置不同所致。为装 mpv 执行了 `brew update`：本机 Homebrew 原来跟踪清华镜像的 `master`，上游已把 `master` 改成迁移引导分支，第一次 update 后 Homebrew 代码只剩引导脚本，第二次 update 才迁移到 `main`（5.0.5 → 7.0.10）；装 mpv 时连带升级了约 30 个依赖（其中 ffmpeg 7.0 → 9.0.2） |
 | 2026-10-22 | Stage 8.4 同步与性能（Spike，初步） | 初步通过，待真实片源 | 用 10 秒的 4K P5 样片（`test.mkv`）循环播放 10 分钟，对照组是同一码流去掉 RPU、标成 HDR10 后走系统直出（解码负载相同）；手机接 USB 充电、电量满，两组间等皮肤温度回落（对照组 31.4 °C 起，我们这组 32.0 °C 起）。结果：自绘管线 15069 帧全部画出（送显 = 绘制，0 丢帧），60 多次跳回开头后 `missingRpu=0`；GPU 每帧平均 1.77 ms、最大 4.40 ms，CPU 绘制 1.30 ms（24 fps 预算 41.7 ms）；两组解码器都没有丢帧，温控状态始终为 0。App CPU（`top` 每 30 秒采样，单核百分比）对照组平均 38.8%、我们 44.9%；10 分钟内皮肤温度都上升 1.4 °C，电池温度分别上升 1.2 / 1.0 °C。之前 40 秒内 6 次随机 seek 后同样没有缺失。**未覆盖**：真实片源（高码率、长片）、封装声明 dvhe 的 P5（会走自定义 `MediaCodecSelector`，还没有样片验证）、静态元数据目前固定 1000 nits（应改用 RPU 的 L6 / source_max_pq） |
 | 2026-10-22 | Stage 8.4 真实片源验证（Spike） | 通过 | 片源：《九门》S01E23 WEB-DL，47 分钟，3840×1608 60 fps，17.4 Mbps，**封装带 dvcC 的 P5**（Level 8），RPU 在码流内。**两个问题已修**：① 封装声明 dvcC（BlockAdditionMapping）时 Media3 给每个样本加 4 字节附加数据并计入 `sampleMetadata` 的 size，RPU 捕获要扣掉非主体数据；② RPU 缓存原来按解封装位置清理，60 fps 下 Media3 预读约 50 秒，会删掉还没播放的帧，改为按播放位置清理（保留当前帧前 2 秒，上限 6000 帧）。**颜色**：10:00、25:00 两帧与 mpv / libplacebo 对比，平坦区域平均误差 0.55–0.75（满量程 1023），最大 3–4；画面正常（含场景本身的绿色光效，与参考一致）。dvcC 片源由自定义 `MediaCodecSelector` 交给 `c2.qti.hevc.decoder` 硬解，DTS 走 FFmpeg 扩展。**HDR10 元数据**：改为来自 RPU，本片有 L6（母版 1000 / 0.0001 nits，MaxCLL 1455，MaxFALL 539）；没有 L6 时用 source_min/max_pq，MaxCLL / MaxFALL 记为未知；母版原色按 P3-D65。**10 分钟性能**（从 10:00 起的 11 分钟片段，两组都用 E-AC3 音轨；对照组用 FFmpeg 去掉 RPU 和 dvcC、标成 HDR10 的 MP4 走系统直出）：自绘管线 38172 帧全部画出、`missingRpu=0`，GPU 每帧平均 1.52 ms、最大 2.14 ms（60 fps 预算 16.7 ms），CPU 绘制 1.04 ms；两组解码器都没有丢帧，温控始终为 0；App CPU 对照组 44.9%、自绘管线 54.9%（多约 10 个百分点的单核，来自逐帧解析 RPU、复制样本和 GL 线程）；皮肤温度对照组 31.6 → 33.8 °C（+2.2），自绘管线 32.4 → 34.7 °C（+2.3）。**备注**：FFmpeg 9 对带 dvcC 的 HEVC 加位流过滤器后写 MKV 会失败，对照片段改用 MP4；第一次长测因缓存清理问题全程没匹配到 RPU，结果作废并重跑 |
+| 2026-10-22 | Stage 8.5 正式接入 | 完成 | **启用条件**：`DoviSupport.available`（S23U 通过）且片源为 P5。封装声明 P5 且没有 DV 解码器时，自定义 `MediaCodecSelector` 交给 HEVC 解码器并从第一帧捕获 RPU；封装没声明时由探测发现 RPU 的那一帧起捕获（探测期间同时缓存样本）。`DoviFrameStore` 每个片源一个，解析出第一个 P5 时在主线程切换：`clearVideoSurfaceView` → `setVideoSurface(renderer)` → 渲染器接管 SurfaceView（EGL 窗口创建失败时每 50 ms 重试，最多 20 次，等解码器断开）；打开新片源时切回直出。非 P5（如未声明的 P8，基础层就是 HDR10）解析后停止捕获，避免额外 CPU；30 次连续解析失败或渲染器初始化失败时请求回退 mpv。seek 后到新位置的第一帧显示前不清理缓存。能力：`dolbyVisionColor = 有 DV 解码器 || DoviSupport.available`。渲染器只在拿到参数后才画，不再调用 `eglTerminate`（默认 display 进程内共享）。**打包**：`tool/build_dovi_jni.sh` 构建 arm64-v8a（447 KB）、armeabi-v7a（325 KB）、x86_64（481 KB），`-z max-page-size=16384`；依赖均为宽松许可证。**测试**：Rust 4 个单元测试（两帧真实 RPU 与 FFmpeg 9 解码结果逐项对照、多项式改写成等价 MMR 后求值一致、非法数据报错）；Android 集成测试 8 项全部通过，新增封装带 dvcC 的 P5（含 seek），两种 P5 都断言“杜比视界处理：GPU 重建为 HDR10”。**真机**：正式路径 10:00 帧与 libplacebo 平坦区域误差 0.7；`debug.nativeplayer.dovi.mmr=1` 让着色器走 MMR 分支，输出与多项式路径逐值相同（两份样片都只用多项式，MMR 交叉项的运算仍只经过代码审查）；退到后台 6 秒再回来后 60 fps、无缺失；同一播放器从 P5 换到 HDR10 后图层从 `BT2020_PQ`（自绘）变回 `BT2020_ITU_PQ`（解码器直出）。**未覆盖**：没有 DV 解码器但 GPU 不支持的机型（回退路径只经代码审查）、有 DV 解码器机型上的未声明 P5、旋转（窗口尺寸变化已在启动时覆盖） |
 
 ---
 

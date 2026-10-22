@@ -11,6 +11,9 @@ crate-type = ["cdylib"]
 dolby_vision = "=3.4.0"
 jni = { version = "=0.21.1", default-features = false }
 
+[dev-dependencies]
+tinyvec = "1"
+
 [profile.release]
 opt-level = 3
 lto = true

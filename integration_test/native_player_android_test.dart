@@ -6,8 +6,8 @@ import 'package:native_player/native_player.dart';
 /// 样片的 HTTP 地址前缀，通过 --dart-define 传入；未传时全部跳过。测试时用
 /// `adb reverse` 把手机的端口转到电脑上的静态文件服务（需要支持 Range），目录中需要：
 /// hdr10.mkv（HDR10，音轨 chi，SRT“简体”）、subs.mkv（另有 ASS“特效”）、styled.ass、
-/// pgs.mkv（PGS“简体中字”，6 秒起）、test.mkv（杜比视界 P5），以及 dts.mkv、ac3.mkv、eac3.mkv、
-/// truehd.mkv（对应编码的音频）
+/// pgs.mkv（PGS“简体中字”，6 秒起）、test.mkv（杜比视界 P5，封装没有声明）、dv_p5_dvcc.mkv
+/// （封装带 dvcC 的杜比视界 P5），以及 dts.mkv、ac3.mkv、eac3.mkv、truehd.mkv（对应编码的音频）
 const _samples = String.fromEnvironment('NATIVE_PLAYER_ANDROID_SAMPLES');
 
 /// 为 true 时在关键画面打印 NP_HOLD 标记并停留，方便截图核对
@@ -232,9 +232,42 @@ void main() {
     expect(recorder.videoInfo?.dolbyVisionProfile, 5);
     if (caps.dolbyVisionColor) {
       await _waitFor(tester, () => recorder.positionMs > 3000, 'playback');
-      debugPrint('NP_DIAG ${await api.diagnostics(id)}');
+      final info = await api.diagnostics(id);
+      debugPrint('NP_DIAG $info');
       await _holdForScreenshot(tester, 'dv');
       expect(recorder.errors, isEmpty);
+      _expectGpuReshapingWithoutDecoder(info);
+    } else {
+      await _waitFor(tester, () => recorder.errors.isNotEmpty, 'fallback');
+      expect(recorder.errors.single.fallbackSuggested, isTrue);
+    }
+    await _close(tester, api, id);
+  }, skip: skip);
+
+  testWidgets('plays Dolby Vision P5 declared in the container', (
+    tester,
+  ) async {
+    final caps = await NativePlayerHostApi().capabilities();
+    final (api, recorder, id) = await _open(tester, 'dv_p5_dvcc.mkv');
+    await _waitFor(
+      tester,
+      () => recorder.videoInfo?.dynamicRange == NativeDynamicRange.dolbyVision,
+      'dolby vision info',
+    );
+    expect(recorder.videoInfo?.dolbyVisionProfile, 5);
+    if (caps.dolbyVisionColor) {
+      await _waitFor(tester, () => recorder.positionMs > 3000, 'playback');
+      await api.seek(id, 1000);
+      await _waitFor(
+        tester,
+        () => recorder.positionMs > 2500,
+        'playback after seek',
+      );
+      final info = await api.diagnostics(id);
+      debugPrint('NP_DIAG_DVCC $info');
+      expect(recorder.errors, isEmpty);
+      expect(info['视频编码'], startsWith('Dolby Vision (dvhe.05'));
+      _expectGpuReshapingWithoutDecoder(info);
     } else {
       await _waitFor(tester, () => recorder.errors.isNotEmpty, 'fallback');
       expect(recorder.errors.single.fallbackSuggested, isTrue);
@@ -285,3 +318,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.20,0:00:07.80,Default,,0,0,0,,{\c&H0000FF&\i1}外挂红色斜体字幕
 Dialogue: 0,0:00:00.20,0:00:07.80,Top,,0,0,0,,外挂顶部黄色样式
 ''';
+
+/// 没有杜比视界解码器时 P5 应由 GPU 重建为 HDR10
+void _expectGpuReshapingWithoutDecoder(Map<String, String> info) {
+  if (info['杜比视界解码器'] != '无') return;
+  expect(info['杜比视界处理'], 'GPU 重建为 HDR10');
+  expect(info['HDR10 元数据'], startsWith('母版'));
+}

@@ -1,6 +1,7 @@
 package com.mediaserver.nativeplayer
 
 import android.content.Context
+import com.mediaserver.nativeplayer.dovi.DoviSupport
 
 /** Pigeon HostApi 的实现：按 playerId 管理播放器实例；Pigeon 回调都在主线程 */
 class NativePlayerHost(private val context: Context, private val events: NativePlayerEventsApi) :
@@ -10,10 +11,10 @@ class NativePlayerHost(private val context: Context, private val events: NativeP
 
   fun backend(playerId: Long): Media3PlayerBackend? = players[playerId]
 
-  /** 有杜比视界解码器时 P5 颜色正确；没有时会回退到 mpv */
+  /** 有杜比视界解码器或 GPU 能重建时 P5 颜色正确；都没有时会回退到 mpv */
   override fun capabilities() =
     NativeCapabilities(
-      dolbyVisionColor = DeviceCapabilities.hasDolbyVisionDecoder,
+      dolbyVisionColor = DeviceCapabilities.hasDolbyVisionDecoder || DoviSupport.available,
       maxVolume = 1.0,
       maxRate = 3.0,
     )
