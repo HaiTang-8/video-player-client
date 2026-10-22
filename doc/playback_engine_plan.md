@@ -588,6 +588,15 @@ abstract class NativePlayerEventApi {
 - [ ] 6.1 换成带 libplacebo 的 libmpv（Predidit fork 或自行构建），只影响 Android。
 - [ ] 6.2 回退到 mpv 且识别为 DV P5 时，使用 `vo=gpu-next` + `hwdec=no` 还原颜色；在中低端机上验证性能、发热和掉帧，必要时只在设备性能足够时启用。
 
+### Stage 8（Spike）：Android P5 → HDR10（Media3 + GPU 实时重建）
+
+**前置**：Stage 5；D10 = A。代码在 `spike/dovi-hdr10` 分支，放在插件 `dovi/` 包内，只有 `adb shell setprop debug.nativeplayer.dovi 1` 时启用。
+
+- [x] 8.1（止损点 1）自绘 HDR 管线：解码器输出到自建 SurfaceTexture，GL 线程用 `GL_EXT_YUV_target` 读原始 YUV，画到 SurfaceView，EGL 表面为 BT.2020 PQ 并带 HDR10 静态元数据；用 HDR10 样片对比直出。
+- [x] 8.2 RPU 提取与解析：libdovi（MIT）经 Rust JNI 编进插件，解封装时按样本时间保存每帧 RPU；封装声明 dvhe 的片源强制用 HEVC 解码器。
+- [x] 8.3（止损点 2）着色器重建：多项式 / MMR 重建 → L'M'S'（PQ）→ LMS → BT.2020 RGB → PQ；与 mpv（libplacebo）的 PQ 输出逐点对比。
+- [ ] 8.4（止损点 3）逐帧同步与性能：seek 后元数据对齐；真实 4K P5 连续播放的掉帧、GPU 耗时、CPU、温度。
+
 ### Stage 7：诊断与收尾
 
 - [ ] 7.1 统一媒体信息面板：播放内核、解码器、动态范围、DV profile、HDR 送显状态、引擎选择原因。
@@ -609,6 +618,7 @@ abstract class NativePlayerEventApi {
 | D7 | Apple 字幕渲染：AetherEngine 只发布字幕 cue（文本带粗体、斜体、颜色、位置等基础样式；PGS 为图片），由宿主绘制；完整 ASS 特效需要宿主开启 `preserveASSMarkup` 并自行接入 libass 渲染器 | A. 原生层绘制基础样式 cue（丢失卡拉 OK、动画、复杂定位等 ASS 特效）；B. 原生层接入 libass 渲染器（例如 swift-ass-renderer），效果与现在的 mpv 一致；C. cue 经 Pigeon 传回 Flutter 绘制（样式可跨引擎统一，同样丢失 ASS 特效） | 字幕组 ASS 是主要场景就选 B；否则先 A，再迭代到 B | 4 | **B（2026-10-13 用户确认）** |
 | D8 | Apple 音量上限：AVPlayer 最大 100%，现在的 mpv 可到 200% | A. 接受，Apple 上音量最大 100%；B. 自行实现音频增益 | A | 4 | **A（2026-10-13 用户确认）** |
 | D9 | 旧系统用户：iOS 18 以下 / macOS 15 以下的设备将无法安装新版本 | A. 不再支持；B. 保留旧版分支维护 | A（取决于 iOS / macOS 的实际用户和分发方式） | 4 | **A（2026-10-13 用户确认）** |
+| D10 | 没有杜比视界解码器的 Android 机型上 P5 怎么处理（S23U 这类机型不向第三方 App 开放 DV 解码器） | A. Media3 硬解基础层 + GPU 着色器按 RPU 重建颜色，输出 HDR10；B. 服务器实时转码成 HDR10；C. 离线把文件转成 HDR10；另有 Stage 6（mpv 软解，颜色正确但只有 SDR） | A（唯一能在 App 内得到真 HDR 的方案）；HDR10+ 没有可用的公开接口，目标是 HDR10 | 8 | **A，先做 Spike（2026-10-22 用户确认）** |
 
 ---
 
@@ -710,6 +720,10 @@ abstract class NativePlayerEventApi {
 | 2026-10-21 | 修复：iOS 缓冲提示常驻、进度条无法拖动 | 完成，待真机验证 | 原因：AetherEngine 的 `open` 要等加载完成才返回，缓冲 `true → false`、时长、倍速等事件在 `CustomVideoControls` 挂载前已发完，`PlaybackStateHub` 只在变化时广播，控制层停在写死的初值（缓冲 `true`、时长 0 导致进度条拖动后总跳到 0）。修复：挂载时 `_syncFromEngineState` 从 `engine.state` 读取位置、时长、播放、缓冲、倍速、轨道和视频信息的初值（缓冲为 `true` 时同步开始网速轮询），之后再靠事件更新。mpv 端若挂载时尚未开始加载，加载提示会稍晚出现 |
 | 2026-10-22 | Stage 5.4 FFmpeg 音频扩展 | 完成 | `packages/native_player/android/tool/build_ffmpeg_extension.sh` 用 Media3 1.10.1 自带的 `build_ffmpeg.sh` 和 NDK 27 构建 FFmpeg n6.0.1（只开 ac3 / eac3 / dca / truehd 解码器，脚本校验 License 为 LGPL 2.1+），打成 AAR 放进插件内的本地 Maven 仓库 `android/maven/`（`com.mediaserver.media3:decoder-ffmpeg:1.10.1`，2.2 MB，四种架构，16KB 页对齐）并提交，CI 和 Windows 开发机不需要 NDK；插件把这个仓库加到所有工程（App 解析插件依赖时需要），`DefaultRenderersFactory` 开启 `EXTENSION_RENDERER_MODE_ON`（系统有解码器时仍优先用系统的）。构建脚本使用与 App 相同的腾讯 Maven 镜像（直连 Maven Central 时出现过 TLS 握手中断）。APK 每个架构增加约 1.1 MB；APK 里同时有 mpv 自带的 FFmpeg，`System.loadLibrary` 加载的库符号互不可见（arm64 另有 `-Bsymbolic`），不会串用。**真机验证（S23U）**：`native_player_android_test.dart` 7 项全部通过，原“DTS 请求回退”改为 AC3 / E-AC3 / DTS / TrueHD（5.1）都直接播放：AC3 / E-AC3 走系统的 `c2.dolby.eac3.decoder`，DTS / TrueHD 走 `ffmpegLavc60.3.100-dca` / `-truehd`；`playback_session_native_test.dart` 的端到端回退改用杜比视界 P5 样片，仍然通过。会话层“音频无法解码时回退到 mpv”的逻辑保留，但这台手机上已经没有能触发它的样片。**测试方式修正**：`flutter test` 和 `flutter drive` 结束时都会执行 `adb uninstall`（`integration_test_device.dart` 的 `kill()`，不带 `--user`，所有用户下的 App 都会被删），上一次 App 被删的真正原因是这个，而不是签名不同。改为 `flutter build apk -t <测试文件> --dart-define=...` → `adb install -r` → `am start`，从 logcat 的 `flutter` tag 读结果，测完再用 `adb install -r` 装回正常构建，数据保留 |
 | 2026-10-22 | Stage 5.7 播放内核偏好 | 完成 | 领域层新增 `EnginePreference`（自动 / 兼容模式），`EngineSelectionContext` 增加 `preference`；新增 `CompatibilityModeRule`（→ `[mpvTexture]`），规则顺序为 Apple → 兼容模式 → Android → 默认（Apple 不打包 mpv，偏好对它无效，§4.7 已同步）；`PlaybackSettings.enginePreference` 持久化（`playback_engine_preference`），`PlaybackSession` 创建时读取，下次打开视频生效。播放设置页新增“播放内核”分组，是否显示由 `enginePreferenceAvailableProvider` 决定（两种偏好选出的内核不同时才显示，目前只有 Android；Stage 2 加入 Windows 规则后会自动出现）。新增选择器、可用性、会话层单元测试。真机（S23U）检查了浅色 / 深色、切换选项、重启后保持，检查完已恢复为“自动” |
+| 2026-10-22 | Stage 8.1 自绘 HDR 管线（Spike） | 通过 | S23U 自带的 GPU（Adreno 740）具备所需的全部扩展：`EGL_EXT_gl_colorspace_bt2020_pq`、`EGL_EXT_surface_SMPTE2086_metadata` / `CTA861_3_metadata`、`GL_EXT_YUV_target`、半精度浮点渲染。`DoviGlRenderer`：Media3 输出到自建 SurfaceTexture，GL 线程用 `__samplerExternal2DY2YEXT` 读原始 YUV，画到 SurfaceView 的 RGBA1010102 窗口表面（BT.2020 PQ + HDR10 静态元数据）。HDR10 样片与系统直出相比：色条像素最多差 1/255；SurfaceFlinger 中图层为 `dataspace=BT2020_PQ`、`hdr metadata types=3`，显示进入 HDR（`numHdrLayers(1)`，HDR 余量 49.26，与直出相同） |
+| 2026-10-22 | Stage 8.2 RPU 提取与解析（Spike） | 通过 | libdovi `dolby_vision` 3.4.0（MIT，要求 Rust 1.88，本机另装 1.88 工具链，`rust-toolchain.toml` 固定）经 `rust/dovi_jni`（jni 0.21.1）编成 arm64 `libdovi_jni.so`（447 KB），把 RPU 直接转成着色器参数（节点按 BL 位深归一化、系数 int + frac / 2^denom、YCC→L'M'S' 矩阵 /2^13、偏移 /2^28、LMS→RGB = HPE 矩阵 × RPU 的 rgb_to_lms /2^14，对齐 FFmpeg / libplacebo 的语义）。注意 libdovi 的节点是增量，需要累加；它对线性插值语法直接 `unimplemented!()`，所以 JNI 层用 `catch_unwind`，不能 `panic=abort`。`DolbyVisionProbe` 增加捕获模式，在解封装的 Annex-B 样本里切出 NAL 62 按样本时间保存；`SurfaceTexture.getTimestamp()` 是送显时间而不是 PTS，用 Media3 的 `VideoFrameMetadataListener` 建立“送显时间 → PTS”的对应。`test.mkv`（FFmpeg 6.0 报 RPU 校验失败的那份）能正常解析为 Profile 5，逐帧都找到自己的 RPU，4K 仍由 `c2.qti.hevc.decoder` 硬解 |
+| 2026-10-22 | Stage 8.3 着色器重建（Spike） | 通过 | `DoviUniforms.RESHAPE_SHADER`：原始 YCbCr（全范围归一化）→ 分段多项式 / MMR → L'M'S' → PQ EOTF → LMS→RGB → PQ OETF。参考实现：mpv 0.41.0 + libplacebo v7.360.1（`vo=gpu-next`、目标 BT.2020 PQ、峰值 10000、不做色调映射）截 16 位 PNG；手机端加了调试读回（`debug.nativeplayer.dovi.dump=1`，48×27 网格的 10 位 PQ 码值）。三帧（2.0 s、6.0 s、8.5 s）在平坦区域与 libplacebo 的平均绝对误差 0.26–0.53（满量程 1023），最大 2–10，无系统偏差；整体最大误差出现在文字和标志的锐利边缘，是 4K 缩到 1440 宽后采样位置不同所致。为装 mpv 执行了 `brew update`：本机 Homebrew 原来跟踪清华镜像的 `master`，上游已把 `master` 改成迁移引导分支，第一次 update 后 Homebrew 代码只剩引导脚本，第二次 update 才迁移到 `main`（5.0.5 → 7.0.10）；装 mpv 时连带升级了约 30 个依赖（其中 ffmpeg 7.0 → 9.0.2） |
+| 2026-10-22 | Stage 8.4 同步与性能（Spike，初步） | 初步通过，待真实片源 | 用 10 秒的 4K P5 样片（`test.mkv`）循环播放 10 分钟，对照组是同一码流去掉 RPU、标成 HDR10 后走系统直出（解码负载相同）；手机接 USB 充电、电量满，两组间等皮肤温度回落（对照组 31.4 °C 起，我们这组 32.0 °C 起）。结果：自绘管线 15069 帧全部画出（送显 = 绘制，0 丢帧），60 多次跳回开头后 `missingRpu=0`；GPU 每帧平均 1.77 ms、最大 4.40 ms，CPU 绘制 1.30 ms（24 fps 预算 41.7 ms）；两组解码器都没有丢帧，温控状态始终为 0。App CPU（`top` 每 30 秒采样，单核百分比）对照组平均 38.8%、我们 44.9%；10 分钟内皮肤温度都上升 1.4 °C，电池温度分别上升 1.2 / 1.0 °C。之前 40 秒内 6 次随机 seek 后同样没有缺失。**未覆盖**：真实片源（高码率、长片）、封装声明 dvhe 的 P5（会走自定义 `MediaCodecSelector`，还没有样片验证）、静态元数据目前固定 1000 nits（应改用 RPU 的 L6 / source_max_pq） |
 
 ---
 

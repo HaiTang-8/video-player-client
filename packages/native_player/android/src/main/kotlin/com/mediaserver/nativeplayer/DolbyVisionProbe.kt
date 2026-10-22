@@ -18,6 +18,7 @@ import androidx.media3.extractor.PositionHolder
 import androidx.media3.extractor.SniffFailure
 import androidx.media3.extractor.TrackOutput
 import androidx.media3.extractor.text.SubtitleParser
+import java.io.ByteArrayOutputStream
 import java.io.EOFException
 
 /**
@@ -28,6 +29,8 @@ import java.io.EOFException
 class DolbyVisionProbeExtractorsFactory(
   private val delegate: ExtractorsFactory,
   private val onRpu: () -> Unit,
+  /** 非空时保存每个视频样本里的 RPU（NAL 62），参数为样本时间和完整 NAL */
+  private val onSampleRpu: ((Long, ByteArray) -> Unit)? = null,
 ) : ExtractorsFactory {
   override fun createExtractors(): Array<Extractor> =
     delegate.createExtractors().map(::wrap).toTypedArray()
@@ -57,7 +60,7 @@ class DolbyVisionProbeExtractorsFactory(
     return this
   }
 
-  private fun wrap(extractor: Extractor): Extractor = ProbingExtractor(extractor, onRpu)
+  private fun wrap(extractor: Extractor): Extractor = ProbingExtractor(extractor, onRpu, onSampleRpu)
 
   companion object {
     /** 视频格式没有颜色信息时（MKV 没写 Colour 元素），从 HEVC 的 SPS 取传输特性 */
@@ -92,13 +95,16 @@ class DolbyVisionProbeExtractorsFactory(
 }
 
 @OptIn(UnstableApi::class)
-private class ProbingExtractor(private val delegate: Extractor, private val onRpu: () -> Unit) :
-  Extractor {
+private class ProbingExtractor(
+  private val delegate: Extractor,
+  private val onRpu: () -> Unit,
+  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
+) : Extractor {
   override fun sniff(input: ExtractorInput): Boolean = delegate.sniff(input)
 
   override fun getSniffFailureDetails(): List<SniffFailure> = delegate.sniffFailureDetails
 
-  override fun init(output: ExtractorOutput) = delegate.init(ProbingOutput(output, onRpu))
+  override fun init(output: ExtractorOutput) = delegate.init(ProbingOutput(output, onRpu, onSampleRpu))
 
   override fun read(input: ExtractorInput, seekPosition: PositionHolder): Int =
     delegate.read(input, seekPosition)
@@ -111,24 +117,35 @@ private class ProbingExtractor(private val delegate: Extractor, private val onRp
 }
 
 @OptIn(UnstableApi::class)
-private class ProbingOutput(private val delegate: ExtractorOutput, private val onRpu: () -> Unit) :
-  ExtractorOutput by delegate {
+private class ProbingOutput(
+  private val delegate: ExtractorOutput,
+  private val onRpu: () -> Unit,
+  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
+) : ExtractorOutput by delegate {
   override fun track(id: Int, type: Int): TrackOutput {
     val output = delegate.track(id, type)
-    return if (type == C.TRACK_TYPE_VIDEO) RpuProbeTrackOutput(output, onRpu) else output
+    return if (type == C.TRACK_TYPE_VIDEO) RpuProbeTrackOutput(output, onRpu, onSampleRpu) else output
   }
 }
 
 @OptIn(UnstableApi::class)
-private class RpuProbeTrackOutput(delegate: TrackOutput, private val onRpu: () -> Unit) :
-  ForwardingTrackOutput(delegate) {
+private class RpuProbeTrackOutput(
+  delegate: TrackOutput,
+  private val onRpu: () -> Unit,
+  private val onSampleRpu: ((Long, ByteArray) -> Unit)?,
+) : ForwardingTrackOutput(delegate) {
   private var probing = false
+  private var capturing = false
+  private val pending = ByteArrayOutputStream()
   private var samples = 0
   private var zeros = 0
   private var expectHeader = false
 
   override fun format(format: Format) {
     probing = format.sampleMimeType == MimeTypes.VIDEO_H265 && samples < MAX_SAMPLES
+    capturing =
+      onSampleRpu != null &&
+        (format.sampleMimeType == MimeTypes.VIDEO_H265 || format.sampleMimeType == MimeTypes.VIDEO_DOLBY_VISION)
     super.format(format)
   }
 
@@ -141,14 +158,15 @@ private class RpuProbeTrackOutput(delegate: TrackOutput, private val onRpu: () -
     allowEndOfInput: Boolean,
     sampleDataPart: Int,
   ): Int {
-    if (!probing) return super.sampleData(input, length, allowEndOfInput, sampleDataPart)
+    if (!probing && !capturing) return super.sampleData(input, length, allowEndOfInput, sampleDataPart)
     val buffer = ByteArray(length)
     val read = input.read(buffer, 0, length)
     if (read == C.RESULT_END_OF_INPUT) {
       if (allowEndOfInput) return C.RESULT_END_OF_INPUT
       throw EOFException()
     }
-    scan(buffer, 0, read)
+    if (probing) scan(buffer, 0, read)
+    if (capturing && sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) pending.write(buffer, 0, read)
     super.sampleData(ParsableByteArray(buffer, read), read, sampleDataPart)
     return read
   }
@@ -158,6 +176,9 @@ private class RpuProbeTrackOutput(delegate: TrackOutput, private val onRpu: () -
 
   override fun sampleData(data: ParsableByteArray, length: Int, sampleDataPart: Int) {
     if (probing) scan(data.data, data.position, length)
+    if (capturing && sampleDataPart == TrackOutput.SAMPLE_DATA_PART_MAIN) {
+      pending.write(data.data, data.position, length)
+    }
     super.sampleData(data, length, sampleDataPart)
   }
 
@@ -170,6 +191,35 @@ private class RpuProbeTrackOutput(delegate: TrackOutput, private val onRpu: () -
   ) {
     super.sampleMetadata(timeUs, flags, size, offset, cryptoData)
     if (probing && ++samples >= MAX_SAMPLES) probing = false
+    if (capturing) capture(timeUs, size, offset)
+  }
+
+  /** 样本数据是 Annex-B 格式；offset 字节属于下一个样本，留到下次 */
+  private fun capture(timeUs: Long, size: Int, offset: Int) {
+    val bytes = pending.toByteArray()
+    pending.reset()
+    val end = bytes.size - offset
+    val start = end - size
+    if (offset > 0) pending.write(bytes, end, offset)
+    if (start < 0) return
+    var i = start
+    while (i + 3 < end) {
+      if (bytes[i].toInt() == 0 && bytes[i + 1].toInt() == 0 && bytes[i + 2].toInt() == 1) {
+        val header = i + 3
+        if ((bytes[header].toInt() shr 1) and 0x3F == RPU_NAL_TYPE) {
+          var next = header + 2
+          while (next + 2 < end && !(bytes[next].toInt() == 0 && bytes[next + 1].toInt() == 0 && bytes[next + 2].toInt() == 1)) {
+            next++
+          }
+          if (next + 2 >= end) next = end
+          onSampleRpu?.invoke(timeUs, bytes.copyOfRange(header, next))
+          return
+        }
+        i = header
+      } else {
+        i++
+      }
+    }
   }
 
   /** 找 00 00 01 起始码后的 NAL 头；起始码可能跨两次写入 */

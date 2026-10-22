@@ -28,6 +28,9 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.DefaultExtractorsFactory
+import com.mediaserver.nativeplayer.dovi.DoviFrameStore
+import com.mediaserver.nativeplayer.dovi.DoviGlRenderer
+import com.mediaserver.nativeplayer.dovi.DoviSpike
 import java.io.File
 import java.util.Locale
 import java.util.UUID
@@ -41,10 +44,19 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         context,
         DefaultRenderersFactory(context)
           .setEnableDecoderFallback(true)
-          .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON),
+          .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+          .apply { if (DoviSpike.enabled) setMediaCodecSelector(DoviSpike.hevcForDolbyVision) },
       )
       .build()
   private val handler = Handler(Looper.getMainLooper())
+  private val doviStore: DoviFrameStore? = if (DoviSpike.enabled) DoviFrameStore() else null
+  private val dovi: DoviGlRenderer? =
+    doviStore?.let { store ->
+      player.setVideoFrameMetadataListener { presentationUs, releaseNs, _, _ ->
+        store.onFrameReleased(presentationUs, releaseNs)
+      }
+      DoviGlRenderer(store).also { player.setVideoSurface(it.inputSurface) }
+    }
   private val positionTicker =
     object : Runnable {
       override fun run() {
@@ -93,6 +105,10 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
           videoDecoder = decoderName
         }
 
+        override fun onDroppedVideoFrames(eventTime: AnalyticsListener.EventTime, droppedFrames: Int, elapsedMs: Long) {
+          Log.i(DoviSpike.TAG, "decoder dropped $droppedFrames frames in ${elapsedMs}ms")
+        }
+
         override fun onAudioDecoderInitialized(
           eventTime: AnalyticsListener.EventTime,
           decoderName: String,
@@ -125,9 +141,11 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
       .firstOrNull { it.key.equals("User-Agent", ignoreCase = true) }
       ?.let { http.setUserAgent(it.value) }
     val extractors =
-      DolbyVisionProbeExtractorsFactory(DefaultExtractorsFactory()) {
-        handler.post { if (generation == openGeneration) onDolbyVisionRpu() }
-      }
+      DolbyVisionProbeExtractorsFactory(
+        DefaultExtractorsFactory(),
+        { handler.post { if (generation == openGeneration) onDolbyVisionRpu() } },
+        doviStore?.let { it::onSampleRpu },
+      )
     val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
     mediaSourceFactory = factory
     val uri = if (source.isLocalFile) Uri.fromFile(File(source.url)) else Uri.parse(source.url)
@@ -190,9 +208,9 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   }
 
   fun attach(view: NativeVideoView) {
-    this.view?.let { player.clearVideoSurfaceView(it.surfaceView) }
+    this.view?.let { if (dovi == null) player.clearVideoSurfaceView(it.surfaceView) }
     this.view = view
-    player.setVideoSurfaceView(view.surfaceView)
+    if (dovi != null) dovi.attach(view.surfaceView) else player.setVideoSurfaceView(view.surfaceView)
     view.setFit(fit)
     if (aspectRatio > 0) view.setAspectRatio(aspectRatio)
     view.subtitleView.setCues(player.currentCues.cues)
@@ -201,7 +219,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
 
   fun detach(view: NativeVideoView) {
     if (this.view !== view) return
-    player.clearVideoSurfaceView(view.surfaceView)
+    if (dovi != null) dovi.detach() else player.clearVideoSurfaceView(view.surfaceView)
     this.view = null
   }
 
@@ -231,6 +249,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.let { detach(it) }
     player.removeListener(this)
     player.release()
+    dovi?.release()
     clearSubtitleFiles()
   }
 
@@ -378,7 +397,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     reportVideoInfo(tracks)
     val format =
       tracks.groups.firstOrNull { it.type == C.TRACK_TYPE_VIDEO }?.getTrackFormat(0) ?: return
-    if (dolbyVisionProfile(format) != null) return
+    if (dolbyVisionProfile(format) != null || dovi != null) return
     val transfer = DolbyVisionProbeExtractorsFactory.colorTransfer(format)
     if (unsignaledProfile(transfer) != 5 || fallbackReported) return
     val reason =
@@ -401,7 +420,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
    * 所以有视频或音频轨但一条都放不了时主动请求换内核
    */
   private fun reportUnplayable(tracks: Tracks) {
-    if (fallbackReported) return
+    if (fallbackReported || dovi != null) return
     val reason =
       listOf(C.TRACK_TYPE_VIDEO to "视频", C.TRACK_TYPE_AUDIO to "音频").firstNotNullOfOrNull {
         (type, label) ->
