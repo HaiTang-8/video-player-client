@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'domain/playback_domain.dart';
@@ -21,10 +22,30 @@ final platformEnvironmentProvider = Provider<PlatformEnvironment>(
 final engineSelectorProvider = Provider<EngineSelector>(
   (ref) => const EngineSelector([
     AppleAetherRule(),
+    CompatibilityModeRule(),
     AndroidMedia3Rule(),
     DefaultMpvTextureRule(),
   ]),
 );
+
+/// 两种偏好选出的内核不同时才提供“播放内核”设置
+final enginePreferenceAvailableProvider = Provider<bool>((ref) {
+  final selector = ref.watch(engineSelectorProvider);
+  final environment = ref.watch(platformEnvironmentProvider);
+  List<PlaybackEngineKind> candidates(EnginePreference preference) =>
+      selector
+          .select(
+            EngineSelectionContext(
+              environment: environment,
+              preference: preference,
+            ),
+          )
+          .candidates;
+  return !listEquals(
+    candidates(EnginePreference.auto),
+    candidates(EnginePreference.compatibility),
+  );
+});
 
 final playbackEngineFactoryProvider = Provider<PlaybackEngineFactory>(
   (ref) => PlaybackEngineFactory({

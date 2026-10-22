@@ -1,4 +1,5 @@
 export 'engine_capabilities.dart';
+export 'engine_preference.dart';
 export 'media_track.dart';
 export 'playback_engine.dart';
 export 'playback_engine_kind.dart';

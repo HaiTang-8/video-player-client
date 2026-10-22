@@ -386,8 +386,8 @@ abstract class NativePlayerEventApi {
 
 | # | 规则 | 结果 |
 |---|---|---|
-| 1 | 用户偏好为“兼容模式”（Apple 不提供该选项，见 D1） | `[mpvTexture]` |
-| 2 | iOS / macOS | `[aether]`（Apple 不打包 libmpv，见 D1） |
+| 1 | iOS / macOS | `[aether]`（Apple 不打包 libmpv，见 D1；因此排在兼容模式之前，偏好对 Apple 无效） |
+| 2 | 用户偏好为“兼容模式” | `[mpvTexture]` |
 | 3 | Android | `[media3, mpvTexture]` |
 | 4 | Windows | `[mpvNativeWindow, mpvTexture]` |
 | 5 | 其他（Linux） | `[mpvTexture]` |
@@ -577,7 +577,7 @@ abstract class NativePlayerEventApi {
 - [x] 5.4 音频：按 D3 接入 LGPL 构建的 FFmpeg 扩展（AC3 / EAC3 / DTS / TrueHD）。不支持的音频返回 `fallbackSuggested`。
 - [x] 5.5 字幕：内嵌字幕；外挂字幕用 `SubtitleConfiguration` + 带请求头的数据源。ASS 特效字幕支持有限，记为已知限制，用户可以在设置里切到兼容模式。
 - [x] 5.6 选择规则加入第 3 条；无 DV 解码器的设备遇到 P5 时回退到 mpv 并提示。
-- [ ] 5.7 设置项“播放内核偏好”在 Android 上生效。
+- [x] 5.7 设置项“播放内核偏好”在 Android 上生效。
 
 **验收**：有 DV 解码器的机型上 P5 / P8.1 为真杜比视界；无 DV 解码器的机型上 P8.1 按 HDR10 播放，P5 回退到 mpv 并提示；HDR10 为真 HDR；MKV / MP4、各音频格式、字幕正常；§10 全部通过。
 
@@ -709,6 +709,7 @@ abstract class NativePlayerEventApi {
 | 2026-10-22 | Stage 5 第一批（5.1、5.2、5.3、5.5、5.6） | 完成 | **契约与会话层**：`NativeError` / `PlaybackError` 增加 `fallbackSuggested`；Pigeon 增加 Kotlin 输出；新增 `AndroidMedia3Rule`（Android → `[media3, mpvTexture]`）；`PlaybackSession` 支持运行中换内核：收到 `fallbackSuggested` 且有下一个候选时，记下位置、释放旧引擎、换新引擎并从原位置重新加载，提示“X 无法播放（原因），已切换到 Y”；`PlayerScreen` 的控制层以引擎为 key 随之重建。**Android 插件**（`packages/native_player/android`，Media3 **1.10.1**）：`Media3PlayerBackend`（ExoPlayer，请求头与 UA、跨协议重定向、音轨 / 字幕 `TrackSelectionOverride`、外挂字幕 `SubtitleConfiguration` 从当前位置重新准备、音频焦点与拔耳机暂停、倍速上限 3.0、音量上限 100%）；`NativeVideoView`（Hybrid Composition，SurfaceView 直接送显，字幕 `SubtitleView` 叠在 `AspectRatioFrameLayout` 视频区域内）；`DeviceCapabilities`（与 ExoPlayer 一致用 `ALL_CODECS` 查杜比视界解码器及 profile，屏幕 HDR 类型）。**主动回退**：没有解码器的轨道 ExoPlayer 不报错只是不播放，所以有视频 / 音频轨但一条都放不了时主动发 `fallbackSuggested`；另外很多 MKV 只在 HEVC 码流里带杜比视界 RPU、封装里没有 dvcC，Media3 会当普通 HEVC 解码（P5 偏色且不报错），新增 `DolbyVisionProbe`（在解封装输出上查看前 10 个视频样本里的 NAL 62），基础层不是 HDR10 / HLG 时判定为 P5 并请求回退；MKV 没有 Colour 元素时从 HEVC SPS 解析传输特性。**问题与处理**：① 准备阶段任意一次加载错误会走 Media3 的重试路径，MKV 轨道 format 被清掉后抛 NPE（`IO_UNSPECIFIED`），改为网络类错误最多重新准备 3 次；② Media3 1.11.x 有 MKV 嵌套章节 NPE（androidx/media#3438，修复未发布），所以用 1.10.1；③ Media3 走系统网络栈，受明文流量策略限制，App 增加 `usesCleartextTraffic`（以前 mpv / Dart 不受影响）。**真机验证（三星 S23U，Android 16）**：`integration_test/native_player_android_test.dart`（样片经 `adb reverse` 由电脑 HTTP 提供）6 项全部通过：HDR10 硬解（`c2.qti.hevc.decoder`）并识别为 HDR10、倍速 / 音量 / seek、内嵌 ASS / SRT、外挂 ASS、PGS、杜比视界 P5 请求回退、DTS 请求回退；`playback_session_native_test.dart` 新增用例验证 Media3 → mpv 端到端回退后继续播放；手势验证（`adb shell input` 注入单击、长按、横滑、回主屏）通过。**已知限制**：S23U 不向第三方 App 开放 `c2.qti.dv.decoder`，P5 在这台手机上只能回退到 mpv（颜色仍偏，Stage 6 解决）；有杜比视界解码器的机型上，封装未声明的 P5 也会回退（应改为改写 format 走 DV 解码器，待有设备验证）；Media3 的 ASS 不支持行内覆盖标签（颜色、斜体等）；PGS 一个显示集有多个对象时只显示一个且位置错误（可在第二批自定义 PGS 解析器）；Android 退到后台继续播放（与 mpv 一致）。**测试注意**：签名不同时 `flutter test` 会先卸载手机上已装的 App（本次误删了用户原有“观影”及数据，主用户和双开都被卸载）；Ruby WEBrick 对匹配的 If-Range 错误返回 304，测试服务器需忽略 If-Range |
 | 2026-10-21 | 修复：iOS 缓冲提示常驻、进度条无法拖动 | 完成，待真机验证 | 原因：AetherEngine 的 `open` 要等加载完成才返回，缓冲 `true → false`、时长、倍速等事件在 `CustomVideoControls` 挂载前已发完，`PlaybackStateHub` 只在变化时广播，控制层停在写死的初值（缓冲 `true`、时长 0 导致进度条拖动后总跳到 0）。修复：挂载时 `_syncFromEngineState` 从 `engine.state` 读取位置、时长、播放、缓冲、倍速、轨道和视频信息的初值（缓冲为 `true` 时同步开始网速轮询），之后再靠事件更新。mpv 端若挂载时尚未开始加载，加载提示会稍晚出现 |
 | 2026-10-22 | Stage 5.4 FFmpeg 音频扩展 | 完成 | `packages/native_player/android/tool/build_ffmpeg_extension.sh` 用 Media3 1.10.1 自带的 `build_ffmpeg.sh` 和 NDK 27 构建 FFmpeg n6.0.1（只开 ac3 / eac3 / dca / truehd 解码器，脚本校验 License 为 LGPL 2.1+），打成 AAR 放进插件内的本地 Maven 仓库 `android/maven/`（`com.mediaserver.media3:decoder-ffmpeg:1.10.1`，2.2 MB，四种架构，16KB 页对齐）并提交，CI 和 Windows 开发机不需要 NDK；插件把这个仓库加到所有工程（App 解析插件依赖时需要），`DefaultRenderersFactory` 开启 `EXTENSION_RENDERER_MODE_ON`（系统有解码器时仍优先用系统的）。构建脚本使用与 App 相同的腾讯 Maven 镜像（直连 Maven Central 时出现过 TLS 握手中断）。APK 每个架构增加约 1.1 MB；APK 里同时有 mpv 自带的 FFmpeg，`System.loadLibrary` 加载的库符号互不可见（arm64 另有 `-Bsymbolic`），不会串用。**真机验证（S23U）**：`native_player_android_test.dart` 7 项全部通过，原“DTS 请求回退”改为 AC3 / E-AC3 / DTS / TrueHD（5.1）都直接播放：AC3 / E-AC3 走系统的 `c2.dolby.eac3.decoder`，DTS / TrueHD 走 `ffmpegLavc60.3.100-dca` / `-truehd`；`playback_session_native_test.dart` 的端到端回退改用杜比视界 P5 样片，仍然通过。会话层“音频无法解码时回退到 mpv”的逻辑保留，但这台手机上已经没有能触发它的样片。**测试方式修正**：`flutter test` 和 `flutter drive` 结束时都会执行 `adb uninstall`（`integration_test_device.dart` 的 `kill()`，不带 `--user`，所有用户下的 App 都会被删），上一次 App 被删的真正原因是这个，而不是签名不同。改为 `flutter build apk -t <测试文件> --dart-define=...` → `adb install -r` → `am start`，从 logcat 的 `flutter` tag 读结果，测完再用 `adb install -r` 装回正常构建，数据保留 |
+| 2026-10-22 | Stage 5.7 播放内核偏好 | 完成 | 领域层新增 `EnginePreference`（自动 / 兼容模式），`EngineSelectionContext` 增加 `preference`；新增 `CompatibilityModeRule`（→ `[mpvTexture]`），规则顺序为 Apple → 兼容模式 → Android → 默认（Apple 不打包 mpv，偏好对它无效，§4.7 已同步）；`PlaybackSettings.enginePreference` 持久化（`playback_engine_preference`），`PlaybackSession` 创建时读取，下次打开视频生效。播放设置页新增“播放内核”分组，是否显示由 `enginePreferenceAvailableProvider` 决定（两种偏好选出的内核不同时才显示，目前只有 Android；Stage 2 加入 Windows 规则后会自动出现）。新增选择器、可用性、会话层单元测试。真机（S23U）检查了浅色 / 深色、切换选项、重启后保持，检查完已恢复为“自动” |
 
 ---
 

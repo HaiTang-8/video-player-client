@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
+import '../../playback/domain/engine_preference.dart';
+import '../../playback/playback_providers.dart';
 import '../../providers/providers.dart';
 
 class PlaybackSettingsScreen extends ConsumerWidget {
@@ -22,6 +24,11 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     2.5,
     3.0,
   ];
+
+  static const _enginePreferenceDescriptions = {
+    EnginePreference.auto: '优先使用系统解码，支持杜比视界和 HDR；无法播放时自动切换到兼容内核',
+    EnginePreference.compatibility: '始终使用 mpv，格式和特效字幕兼容性最好，但不支持杜比视界和 HDR 输出',
+  };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -135,6 +142,39 @@ class PlaybackSettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
+          if (ref.watch(enginePreferenceAvailableProvider)) ...[
+            const SizedBox(height: 24),
+            _buildSectionHeader('播放内核', theme),
+            _buildSettingsCard(
+              isDark,
+              children: [
+                _buildListTile(
+                  context,
+                  theme,
+                  isDark,
+                  icon: CupertinoIcons.play_rectangle,
+                  iconColor: Colors.teal,
+                  title: '内核偏好',
+                  subtitle: settings.enginePreference.label,
+                  onTap:
+                      () => _showEnginePreferencePicker(
+                        context,
+                        ref,
+                        settings.enginePreference,
+                      ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+              child: Text(
+                '遇到无法播放或画面、声音异常时可切换到兼容模式，下次打开视频时生效',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -375,6 +415,110 @@ class PlaybackSettingsScreen extends ConsumerWidget {
               ],
             ),
           ),
+    );
+  }
+
+  void _showEnginePreferencePicker(
+    BuildContext context,
+    WidgetRef ref,
+    EnginePreference current,
+  ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder:
+          (context) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    '内核偏好',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  color: theme.dividerColor.withValues(alpha: 0.3),
+                ),
+                for (final preference in EnginePreference.values)
+                  _buildEnginePreferenceOption(
+                    context,
+                    ref,
+                    theme,
+                    preference,
+                    preference == current,
+                  ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildEnginePreferenceOption(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeData theme,
+    EnginePreference preference,
+    bool isSelected,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          ref
+              .read(playbackSettingsProvider.notifier)
+              .setEnginePreference(preference);
+          Navigator.pop(context);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      preference.label,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight:
+                            isSelected ? FontWeight.w500 : FontWeight.normal,
+                        color: isSelected ? theme.colorScheme.primary : null,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _enginePreferenceDescriptions[preference]!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 12),
+                Icon(
+                  CupertinoIcons.checkmark,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 

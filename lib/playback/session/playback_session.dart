@@ -49,13 +49,15 @@ class PlaybackSession extends ChangeNotifier {
     required PlaybackSourceGateway sourceGateway,
     required WatchProgressGateway progressGateway,
     required double Function() defaultRate,
+    EnginePreference enginePreference = EnginePreference.auto,
   }) : _selector = selector,
        _factory = factory,
        _environment = environment,
        _progressGateway = progressGateway,
        _resolver = resolver,
        _sourceGateway = sourceGateway,
-       _defaultRate = defaultRate {
+       _defaultRate = defaultRate,
+       _enginePreference = enginePreference {
     _attach(_factory.create(_selectKind()!));
   }
 
@@ -66,6 +68,7 @@ class PlaybackSession extends ChangeNotifier {
   final PlaybackSourceResolver _resolver;
   final PlaybackSourceGateway _sourceGateway;
   final double Function() _defaultRate;
+  final EnginePreference _enginePreference;
   final Set<PlaybackEngineKind> _failedKinds = {};
   late PlaybackEngine _engine;
   late PlaybackProgressTracker _tracker;
@@ -243,6 +246,7 @@ class PlaybackSession extends ChangeNotifier {
       EngineSelectionContext(
         environment: _environment,
         failedKinds: _failedKinds,
+        preference: _enginePreference,
       ),
     );
     if (decision.candidates.isEmpty) return null;

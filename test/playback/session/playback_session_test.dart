@@ -195,6 +195,30 @@ void main() {
     },
   );
 
+  test('compatibility preference starts with mpv on Android', () {
+    final mpv = FakePlaybackEngine();
+    final android = PlaybackSession(
+      selector: const EngineSelector([
+        CompatibilityModeRule(),
+        AndroidMedia3Rule(),
+        DefaultMpvTextureRule(),
+      ]),
+      factory: PlaybackEngineFactory({
+        PlaybackEngineKind.media3:
+            () => FakePlaybackEngine(kind: PlaybackEngineKind.media3),
+        PlaybackEngineKind.mpvTexture: () => mpv,
+      }),
+      environment: const PlatformEnvironment(platform: TargetPlatform.android),
+      resolver: resolver,
+      sourceGateway: sourceGateway,
+      progressGateway: progressGateway,
+      defaultRate: () => 1.0,
+      enginePreference: EnginePreference.compatibility,
+    );
+    addTearDown(android.dispose);
+    expect(android.engine, same(mpv));
+  });
+
   test('falls back to the next engine from the same position', () async {
     final media3 = FakePlaybackEngine(kind: PlaybackEngineKind.media3);
     final mpv = FakePlaybackEngine();

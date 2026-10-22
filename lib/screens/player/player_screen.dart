@@ -83,6 +83,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       sourceGateway: gateway,
       progressGateway: gateway,
       defaultRate: () => ref.read(playbackSettingsProvider).playbackSpeed,
+      enginePreference: ref.read(playbackSettingsProvider).enginePreference,
     );
   }
 

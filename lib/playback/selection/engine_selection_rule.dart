@@ -9,9 +9,12 @@ class EngineSelectionContext {
   /// 本次会话中已经失败的内核，选择时会被剔除
   final Set<PlaybackEngineKind> failedKinds;
 
+  final EnginePreference preference;
+
   const EngineSelectionContext({
     required this.environment,
     this.failedKinds = const {},
+    this.preference = EnginePreference.auto,
   });
 }
 
@@ -42,6 +45,17 @@ class AppleAetherRule implements EngineSelectionRule {
       PlaybackEngineKind.aether,
     ], 'Apple 平台使用 AetherEngine');
   }
+}
+
+/// 用户选择兼容模式时只用 mpv；Apple 不打包 mpv，需排在 [AppleAetherRule] 之后
+class CompatibilityModeRule implements EngineSelectionRule {
+  const CompatibilityModeRule();
+
+  @override
+  EngineDecision? evaluate(EngineSelectionContext context) =>
+      context.preference == EnginePreference.compatibility
+          ? const EngineDecision([PlaybackEngineKind.mpvTexture], '用户选择了兼容模式')
+          : null;
 }
 
 /// Android 优先 Media3（系统解码器，支持杜比视界 / HDR），无法播放时回退到 mpv
