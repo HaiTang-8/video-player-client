@@ -159,7 +159,9 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         store?.let { it::onSampleRpu },
         reshapeDeclaredProfile5,
       )
-    val factory = DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
+    val factory =
+      DefaultMediaSourceFactory(DefaultDataSource.Factory(context, http), extractors)
+        .setSubtitleParserFactory(PgsSubtitleParserFactory())
     mediaSourceFactory = factory
     val uri = if (source.isLocalFile) Uri.fromFile(File(source.url)) else Uri.parse(source.url)
     player.setMediaSource(factory.createMediaSource(MediaItem.fromUri(uri)))
