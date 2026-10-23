@@ -15,6 +15,8 @@ class FakeSourceGateway implements PlaybackSourceGateway {
   StreamInfo? streamInfo;
   Storage? storage;
   List<SubtitleInfo> subtitles = const [];
+  List<SubtitleInfo> cached = const [];
+  Object? streamInfoError;
   final List<PlaybackItem> streamRequests = [];
 
   @override
@@ -23,8 +25,13 @@ class FakeSourceGateway implements PlaybackSourceGateway {
   @override
   Future<StreamInfo?> fetchStreamInfo(PlaybackItem item) async {
     streamRequests.add(item);
+    final error = streamInfoError;
+    if (error != null) throw error;
     return streamInfo;
   }
+
+  @override
+  Future<List<SubtitleInfo>> cachedSubtitles(PlaybackItem item) async => cached;
 
   @override
   Future<Storage?> findStorage(int storageId) async => storage;

@@ -123,6 +123,21 @@ class RiverpodPlaybackGateway
   }
 
   @override
+  Future<List<SubtitleInfo>> cachedSubtitles(PlaybackItem item) async {
+    final state = _ref.read(downloadManagerProvider);
+    final task = switch (item) {
+      MoviePlaybackItem(:final movieId) => state.getTaskByMovieId(movieId),
+      EpisodePlaybackItem(:final episodeId) => state.getTaskByEpisodeId(
+        episodeId,
+      ),
+    };
+    return [
+      for (final subtitle in task?.cachedSubtitles ?? const <SubtitleInfo>[])
+        if (await File(subtitle.localPath!).exists()) subtitle,
+    ];
+  }
+
+  @override
   bool get isAvailable => _mediaService != null;
 
   @override

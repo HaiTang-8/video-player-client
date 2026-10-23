@@ -44,3 +44,25 @@ class SubtitleSettingsNotifier extends Notifier<SubtitleStyle> {
 
   Future<void> reset() => update(SubtitleStyle.defaults);
 }
+
+/// 下载视频完成时自动缓存匹配的外挂字幕，默认开启
+final subtitleAutoCacheProvider =
+    NotifierProvider<SubtitleAutoCacheNotifier, bool>(
+      SubtitleAutoCacheNotifier.new,
+    );
+
+class SubtitleAutoCacheNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref
+          .watch(sharedPreferencesProvider)
+          .getBool(AppConstants.subtitleAutoCacheKey) ??
+      true;
+
+  Future<void> set(bool enabled) async {
+    state = enabled;
+    await ref
+        .read(sharedPreferencesProvider)
+        .setBool(AppConstants.subtitleAutoCacheKey, enabled);
+  }
+}

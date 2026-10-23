@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -186,6 +187,39 @@ class SubtitleSettingsPanel extends ConsumerWidget {
                           if (v.abs() <= _maxDelay) onDelayChanged(v);
                         },
                       ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '字幕自动缓存',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            '下载视频时自动缓存匹配的外挂字幕，断网仍可使用',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white38,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    CupertinoSwitch(
+                      value: ref.watch(subtitleAutoCacheProvider),
+                      onChanged:
+                          ref.read(subtitleAutoCacheProvider.notifier).set,
+                    ),
+                  ],
                 ),
               ],
             ),

@@ -247,11 +247,8 @@ class PlaybackSession extends ChangeNotifier {
 
       _tracker.start(item);
       if (start != null) _tracker.markControlledSeek(start);
-      if (resolved.source.isLocalFile) {
-        _notify('正在使用本地缓存播放');
-      } else {
-        unawaited(_loadExternalSubtitles(resolved, generation));
-      }
+      if (resolved.source.isLocalFile) _notify('正在使用本地缓存播放');
+      unawaited(_loadExternalSubtitles(item, resolved, generation));
       if (waitForView) _armPendingStart();
       _setStatus(const PlaybackSessionReady());
     } on PlaybackSourceUnavailable catch (e) {
@@ -620,18 +617,13 @@ class PlaybackSession extends ChangeNotifier {
   }
 
   Future<void> _loadExternalSubtitles(
+    PlaybackItem item,
     ResolvedPlayback resolved,
     int generation,
   ) async {
-    final storageId = resolved.storageId;
-    final filePath = resolved.filePath;
-    if (storageId == null || filePath == null) return;
     try {
-      final subtitles = await _sourceGateway.listSubtitles(
-        storageId: storageId,
-        filePath: filePath,
-      );
-      if (_isStale(generation)) return;
+      final subtitles = await _listExternalSubtitles(item, resolved);
+      if (_isStale(generation) || subtitles.isEmpty) return;
       _externalSubtitles = subtitles;
       notifyListeners();
 
@@ -647,6 +639,30 @@ class PlaybackSession extends ChangeNotifier {
         'Failed to load external subtitles: $e',
       );
     }
+  }
+
+  /// 本地文件优先用随下载缓存的字幕；没有缓存时向服务器查询（断网时失败，静默跳过）
+  Future<List<SubtitleInfo>> _listExternalSubtitles(
+    PlaybackItem item,
+    ResolvedPlayback resolved,
+  ) async {
+    final local = resolved.source.isLocalFile;
+    if (local) {
+      final cached = await _sourceGateway.cachedSubtitles(item);
+      if (cached.isNotEmpty) return cached;
+    }
+    var storageId = resolved.storageId;
+    var filePath = resolved.filePath;
+    if (local && (storageId == null || filePath == null)) {
+      final info = await _sourceGateway.fetchStreamInfo(item);
+      storageId = info?.storageId;
+      filePath = info?.filePath;
+    }
+    if (storageId == null || filePath == null) return const [];
+    return _sourceGateway.listSubtitles(
+      storageId: storageId,
+      filePath: filePath,
+    );
   }
 
   static String? _formatHint(String path) {

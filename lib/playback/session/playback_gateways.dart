@@ -16,6 +16,9 @@ abstract interface class PlaybackSourceGateway {
     required int storageId,
     required String filePath,
   });
+
+  /// 随下载缓存在本机、文件仍存在的外挂字幕
+  Future<List<SubtitleInfo>> cachedSubtitles(PlaybackItem item);
 }
 
 /// 字幕偏移的本地保存：剧集按整部剧共用，电影按单部保存

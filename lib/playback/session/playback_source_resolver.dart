@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../../core/utils/http_utils.dart';
@@ -96,6 +98,8 @@ class PlaybackSourceResolver {
   }
 
   Future<String?> fetchSubtitleText(SubtitleInfo subtitle) async {
+    final localPath = subtitle.localPath;
+    if (localPath != null) return File(localPath).readAsString();
     final token = _gateway.accessToken;
     final url =
         subtitle.url.startsWith('http')

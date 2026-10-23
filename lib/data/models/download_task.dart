@@ -1,3 +1,5 @@
+import 'subtitle_info.dart';
+
 enum DownloadStatus {
   pending,
   downloading,
@@ -41,6 +43,9 @@ class DownloadTask {
   final DateTime? completedAt;
   final String? aria2Gid;
 
+  /// 下载完成后缓存到视频旁边的外挂字幕
+  final List<SubtitleInfo> cachedSubtitles;
+
   DownloadTask({
     required this.id,
     required this.type,
@@ -67,6 +72,7 @@ class DownloadTask {
     required this.createdAt,
     this.completedAt,
     this.aria2Gid,
+    this.cachedSubtitles = const [],
   });
 
   DownloadTask copyWith({
@@ -95,6 +101,7 @@ class DownloadTask {
     DateTime? createdAt,
     DateTime? completedAt,
     String? aria2Gid,
+    List<SubtitleInfo>? cachedSubtitles,
   }) {
     return DownloadTask(
       id: id ?? this.id,
@@ -122,6 +129,7 @@ class DownloadTask {
       createdAt: createdAt ?? this.createdAt,
       completedAt: completedAt ?? this.completedAt,
       aria2Gid: aria2Gid ?? this.aria2Gid,
+      cachedSubtitles: cachedSubtitles ?? this.cachedSubtitles,
     );
   }
 
@@ -150,6 +158,8 @@ class DownloadTask {
         'created_at': createdAt.toIso8601String(),
         'completed_at': completedAt?.toIso8601String(),
         'aria2_gid': aria2Gid,
+        if (cachedSubtitles.isNotEmpty)
+          'cached_subtitles': [for (final s in cachedSubtitles) s.toJson()],
       };
 
   factory DownloadTask.fromJson(Map<String, dynamic> json) {
@@ -183,6 +193,10 @@ class DownloadTask {
           ? DateTime.parse(json['completed_at'] as String)
           : null,
       aria2Gid: json['aria2_gid'] as String?,
+      cachedSubtitles: [
+        for (final s in json['cached_subtitles'] as List? ?? const [])
+          SubtitleInfo.fromJson(s as Map<String, dynamic>),
+      ],
     );
   }
 

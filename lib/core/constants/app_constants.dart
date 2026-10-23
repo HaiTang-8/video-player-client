@@ -52,6 +52,7 @@ class AppConstants {
   static const String subtitleBackgroundOpacityKey =
       'subtitle_background_opacity';
   static const String subtitleBottomMarginKey = 'subtitle_bottom_margin';
+  static const String subtitleAutoCacheKey = 'subtitle_auto_cache';
 
   /// 字幕偏移（毫秒），[scope] 形如 `tv_12`、`movie_34`
   static String subtitleDelayKey(String serverId, String scope) =>

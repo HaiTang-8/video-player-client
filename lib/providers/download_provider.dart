@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +18,7 @@ import 'aria2_provider.dart';
 import 'download_settings_provider.dart';
 import 'auth_provider.dart';
 import 'server_provider.dart';
+import 'subtitle_settings_provider.dart';
 
 class DownloadManagerState {
   final List<DownloadTask> tasks;
@@ -380,6 +383,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
             completedAt: DateTime.now(),
           );
           _updateTask(updatedTask, forceSave: true);
+          _cacheSubtitles(updatedTask);
           _processQueue();
           break;
         } else if (aria2Status == 'error' || aria2Status == 'removed') {
@@ -411,6 +415,34 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
     }
   }
 
+  /// 下载完成后在后台缓存外挂字幕，失败不影响下载结果
+  void _cacheSubtitles(DownloadTask task) {
+    final service = _service;
+    if (service == null || !ref.read(subtitleAutoCacheProvider)) return;
+    unawaited(() async {
+      try {
+        final subtitles = await service.cacheSubtitles(task);
+        if (subtitles.isEmpty) return;
+        final current = state.tasks.where((t) => t.id == task.id).firstOrNull;
+        if (current == null) {
+          // 缓存期间任务已被删除
+          await service.deleteCachedSubtitles(subtitles);
+          return;
+        }
+        _updateTask(
+          current.copyWith(cachedSubtitles: subtitles),
+          forceSave: true,
+        );
+        LogService.instance.info(
+          'Download',
+          'Cached ${subtitles.length} subtitle(s) for ${task.id}',
+        );
+      } catch (e) {
+        LogService.instance.warn('Download', 'Subtitle caching failed: $e');
+      }
+    }());
+  }
+
   void _startDioDownload(DownloadTask task) {
     final service = _service;
     if (service == null) {
@@ -433,6 +465,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
             (completed) {
               _startingTaskIds.remove(completed.id);
               _updateTask(completed, forceSave: true);
+              _cacheSubtitles(completed);
               _processQueue();
             },
             (failed, error) {

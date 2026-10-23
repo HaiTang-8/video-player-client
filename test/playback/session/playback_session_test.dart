@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_player/data/models/stream_info.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
 import 'package:media_player/playback/domain/playback_domain.dart';
 import 'package:media_player/playback/engines/playback_engine_factory.dart';
@@ -734,7 +735,7 @@ void main() {
     expect(notices, ['已自动选择内嵌字幕: 简体']);
   });
 
-  test('local cache shows a notice and skips external subtitles', () async {
+  test('local cache shows a notice and has nothing to load offline', () async {
     resolver.result = const ResolvedPlayback(
       PlaybackSource.localFile('/downloads/a.mkv'),
     );
@@ -744,6 +745,53 @@ void main() {
 
     expect(notices, ['正在使用本地缓存播放']);
     expect(session.externalSubtitles, isEmpty);
+  });
+
+  group('local playback subtitles', () {
+    setUp(() {
+      resolver.result = const ResolvedPlayback(
+        PlaybackSource.localFile('/downloads/a.mkv'),
+      );
+    });
+
+    test('uses subtitles cached with the download', () async {
+      final cached = subtitleInfo(
+        'chs.srt',
+        95,
+      ).withLocalPath('/downloads/a.1.chs.srt');
+      sourceGateway
+        ..cached = [cached]
+        ..subtitles = [subtitleInfo('server', 99)];
+      await session.load(movie);
+      await pumpEventQueue();
+
+      expect(session.externalSubtitles, [cached]);
+      expect(sourceGateway.streamRequests, isEmpty);
+      expect(engine.calls, contains('external ${cached.displayName}'));
+    });
+
+    test('falls back to the server list when nothing is cached', () async {
+      sourceGateway
+        ..streamInfo = StreamInfo(
+          url: '/stream',
+          storageId: 1,
+          filePath: '/movies/a.mkv',
+        )
+        ..subtitles = [subtitleInfo('chs', 95)];
+      await session.load(movie);
+      await pumpEventQueue();
+
+      expect(session.externalSubtitles.map((s) => s.name), ['chs']);
+    });
+
+    test('offline without cache plays without external subtitles', () async {
+      sourceGateway.streamInfoError = Exception('offline');
+      await session.load(movie);
+      await pumpEventQueue();
+
+      expect(session.status, isA<PlaybackSessionReady>());
+      expect(session.externalSubtitles, isEmpty);
+    });
   });
 
   test('restores the session volume after opening', () async {

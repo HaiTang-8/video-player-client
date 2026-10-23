@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -15,6 +16,7 @@ import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
 import '../models/storage.dart';
+import '../models/subtitle_info.dart';
 import 'aria2_manager.dart';
 import 'log_service.dart';
 import 'multi_thread_downloader.dart';
@@ -916,6 +918,88 @@ class DownloadService {
     _cancelTokens.remove(taskId);
   }
 
+  static const maxCachedSubtitles = 10;
+
+  /// 把服务器匹配到的外挂字幕保存到视频旁边（`<视频名>.<序号>[.<语言>].<扩展名>`，
+  /// 外部播放器也能识别）；视频不在本机（如远程 aria2）时跳过。单条失败不影响其余
+  Future<List<SubtitleInfo>> cacheSubtitles(DownloadTask task) async {
+    if (!await File(task.localPath).exists()) return const [];
+    final location = await _fetchSourceLocation(task);
+    if (location == null) return const [];
+    final response = await _dio.get(
+      '$_serverUrl${ApiConstants.subtitles}',
+      queryParameters: {'storage_id': location.$1, 'file_path': location.$2},
+    );
+    final subtitles = [
+      for (final e in response.data?['data'] as List? ?? const [])
+        SubtitleInfo.fromJson(e as Map<String, dynamic>),
+    ]..sort((a, b) => b.score.compareTo(a.score));
+
+    final base = p.withoutExtension(task.localPath);
+    final cached = <SubtitleInfo>[];
+    for (final (index, subtitle) in subtitles.take(maxCachedSubtitles).indexed) {
+      try {
+        final url = subtitle.url.startsWith('http')
+            ? subtitle.url
+            : '$_serverUrl${subtitle.url}';
+        final text = await _dio.get<String>(
+          url,
+          options: Options(responseType: ResponseType.plain),
+        );
+        final body = text.data;
+        if (body == null || body.isEmpty) continue;
+        final language = subtitle.language;
+        final extension = p.extension(subtitle.path).toLowerCase();
+        final name = [
+          base,
+          '${index + 1}',
+          if (language != null && language.isNotEmpty) sanitizeFileName(language),
+        ].join('.');
+        final file = File('$name${extension.isEmpty ? '.srt' : extension}');
+        await file.writeAsString(body);
+        cached.add(subtitle.withLocalPath(file.path));
+      } catch (e) {
+        LogService.instance.warn(
+          'DownloadService',
+          'Failed to cache subtitle ${subtitle.name}: $e',
+        );
+      }
+    }
+    return cached;
+  }
+
+  Future<void> deleteCachedSubtitles(List<SubtitleInfo> subtitles) async {
+    for (final subtitle in subtitles) {
+      final path = subtitle.localPath;
+      if (path == null) continue;
+      try {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      } catch (e) {
+        LogService.instance.warn(
+          'DownloadService',
+          'Failed to delete cached subtitle: $e',
+        );
+      }
+    }
+  }
+
+  /// 视频在存储源中的位置，用于查询匹配的字幕
+  Future<(int, String)?> _fetchSourceLocation(DownloadTask task) async {
+    final path = task.isMovie
+        ? ApiConstants.movieStream(task.movieId!)
+        : ApiConstants.episodeStream(
+            task.tvShowId!,
+            task.seasonId!,
+            task.episodeId!,
+          );
+    final response = await _dio.get('$_serverUrl$path');
+    final data = response.data?['data'] as Map<String, dynamic>?;
+    final storageId = data?['storage_id'] as int?;
+    final filePath = data?['file_path'] as String?;
+    return storageId == null || filePath == null ? null : (storageId, filePath);
+  }
+
   Future<void> deleteDownload(DownloadTask task) async {
     cancelDownload(task.id);
     // 等待文件流关闭
@@ -935,6 +1019,8 @@ class DownloadService {
         }
       }
     }
+
+    await deleteCachedSubtitles(task.cachedSubtitles);
 
     // 删除多线程下载的临时分片目录
     final partsDir = Directory('${task.localPath}.parts');
