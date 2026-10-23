@@ -13,6 +13,7 @@ class PlaybackStateHub {
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
   final _firstFrameRendered = StreamController<bool>.broadcast();
+  final _videoViewAttached = StreamController<bool>.broadcast();
   final _rate = StreamController<double>.broadcast();
   final _volume = StreamController<double>.broadcast();
   final _tracks = StreamController<MediaTracks>.broadcast();
@@ -30,6 +31,7 @@ class PlaybackStateHub {
     buffering: _buffering.stream,
     completed: _completed.stream,
     firstFrameRendered: _firstFrameRendered.stream,
+    videoViewAttached: _videoViewAttached.stream,
     rate: _rate.stream,
     volume: _volume.stream,
     tracks: _tracks.stream,
@@ -47,6 +49,7 @@ class PlaybackStateHub {
     bool? buffering,
     bool? completed,
     bool? firstFrameRendered,
+    bool? videoViewAttached,
     double? rate,
     double? volume,
     MediaTracks? tracks,
@@ -65,6 +68,11 @@ class PlaybackStateHub {
         firstFrameRendered,
         s.firstFrameRendered,
         _firstFrameRendered,
+      ),
+      videoViewAttached: _apply(
+        videoViewAttached,
+        s.videoViewAttached,
+        _videoViewAttached,
       ),
       rate: _apply(rate, s.rate, _rate),
       volume: _apply(volume, s.volume, _volume),
@@ -99,6 +107,7 @@ class PlaybackStateHub {
       _buffering.close(),
       _completed.close(),
       _firstFrameRendered.close(),
+      _videoViewAttached.close(),
       _rate.close(),
       _volume.close(),
       _tracks.close(),

@@ -53,6 +53,7 @@ class PlaybackSession extends ChangeNotifier {
     required WatchProgressGateway progressGateway,
     required double Function() defaultRate,
     EnginePreference enginePreference = EnginePreference.auto,
+    Duration videoViewTimeout = const Duration(seconds: 2),
   }) : _selector = selector,
        _factory = factory,
        _environment = environment,
@@ -60,7 +61,8 @@ class PlaybackSession extends ChangeNotifier {
        _resolver = resolver,
        _sourceGateway = sourceGateway,
        _defaultRate = defaultRate,
-       _enginePreference = enginePreference {
+       _enginePreference = enginePreference,
+       _videoViewTimeout = videoViewTimeout {
     _attach(_factory.create(_selectKind()!));
   }
 
@@ -72,6 +74,10 @@ class PlaybackSession extends ChangeNotifier {
   final PlaybackSourceGateway _sourceGateway;
   final double Function() _defaultRate;
   final EnginePreference _enginePreference;
+
+  /// 暂停打开后等画面视图挂载的最长时间，超时照常开始播放
+  final Duration _videoViewTimeout;
+  Timer? _pendingStart;
   final Set<PlaybackEngineKind> _failedKinds = {};
   String _engineReason = '';
   late PlaybackEngine _engine;
@@ -140,6 +146,7 @@ class PlaybackSession extends ChangeNotifier {
 
   /// 切换剧集前调用：保存当前进度并进入加载态
   Future<void> prepareSwitch() async {
+    _cancelPendingStart();
     await _seek.awaitActive();
     await engine.pause();
     _reportProgress(engine.state.position, force: true);
@@ -152,6 +159,7 @@ class PlaybackSession extends ChangeNotifier {
     if (_disposed) return;
     await _seek.awaitActive();
     final generation = ++_loadGeneration;
+    _cancelPendingStart();
     _tracker
       ..stop()
       ..resetErrorTracking();
@@ -179,7 +187,14 @@ class PlaybackSession extends ChangeNotifier {
       _filePath = resolved.filePath;
       _setStatus(const PlaybackSessionLoading(resolvingSource: false));
 
-      await engine.open(resolved.source, startPosition: start);
+      // 画面在原生视图里的内核先暂停打开，视图挂载后再播放：
+      // 页面在 Ready 之后才创建视图，自动播放会在画面显示前先出声（命中缓存时缓冲瞬间完成，尤其明显）
+      final waitForView = engine.capabilities.reportsVideoView;
+      await engine.open(
+        resolved.source,
+        autoPlay: !waitForView,
+        startPosition: start,
+      );
       if (_isStale(generation)) return;
       _startup?.markOpened();
       final volume = _sessionVolume;
@@ -193,6 +208,7 @@ class PlaybackSession extends ChangeNotifier {
       } else {
         unawaited(_loadExternalSubtitles(resolved, generation));
       }
+      if (waitForView) _armPendingStart();
       _setStatus(const PlaybackSessionReady());
     } on PlaybackSourceUnavailable catch (e) {
       if (!_isStale(generation)) _setStatus(PlaybackSessionFailed('$e'));
@@ -248,6 +264,7 @@ class PlaybackSession extends ChangeNotifier {
 
   /// 退出播放页前调用：等待 seek 结束、暂停并保存进度
   Future<void> prepareExit() async {
+    _cancelPendingStart();
     await _seek.awaitActive();
     await engine.pause();
     _reportProgress(engine.state.position, force: true);
@@ -258,6 +275,7 @@ class PlaybackSession extends ChangeNotifier {
   void dispose() {
     if (_disposed) return;
     _disposed = true;
+    _cancelPendingStart();
     _tracker.stop();
     for (final sub in _subscriptions) {
       sub.cancel();
@@ -343,7 +361,13 @@ class PlaybackSession extends ChangeNotifier {
           _checkStartup();
         }),
       )
-      ..add(streams.playing.listen((_) => _checkStartup()))
+      ..add(
+        streams.playing.listen((playing) {
+          // 用户在等待期间自己点了播放
+          if (playing) _cancelPendingStart();
+          _checkStartup();
+        }),
+      )
       ..add(streams.buffering.listen((_) => _checkStartup()))
       ..add(
         streams.firstFrameRendered.listen((rendered) {
@@ -351,6 +375,12 @@ class PlaybackSession extends ChangeNotifier {
             _firstFrameNotified = true;
             _observer?.onFirstFrame();
           }
+          _checkStartup();
+        }),
+      )
+      ..add(
+        streams.videoViewAttached.listen((attached) {
+          if (attached) _startPendingPlayback();
           _checkStartup();
         }),
       )
@@ -393,6 +423,28 @@ class PlaybackSession extends ChangeNotifier {
       'duration=${duration.inSeconds}s, startAt=${_startAt?.inSeconds}',
     );
     _startAt = null;
+  }
+
+  void _armPendingStart() {
+    _pendingStart = Timer(_videoViewTimeout, () {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'video view not attached within ${_videoViewTimeout.inMilliseconds}ms, starting anyway',
+      );
+      _startPendingPlayback();
+    });
+    if (engine.state.videoViewAttached) _startPendingPlayback();
+  }
+
+  void _startPendingPlayback() {
+    if (_pendingStart == null || _disposed) return;
+    _cancelPendingStart();
+    if (!engine.state.playing) unawaited(engine.play());
+  }
+
+  void _cancelPendingStart() {
+    _pendingStart?.cancel();
+    _pendingStart = null;
   }
 
   /// 每 5 秒把播放位置告诉片源一侧（缓存据此估算续播点）；[force] 用于退出和切换剧集

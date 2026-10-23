@@ -117,6 +117,13 @@ void main() {
           '$label startup',
         );
         final report = session.lastStartup!;
+        // 先暂停打开、画面视图挂载后才播放：声音不能早于视图出现
+        expect(report.viewAttached, isNotNull, reason: label);
+        expect(
+          report.viewAttached!,
+          lessThanOrEqualTo(report.firstPlaying!),
+          reason: '$label: $report',
+        );
         final startupServed = (serverUp ? server.bytesServed : 0) - served;
         final startupStats = await proxy.stats();
         await _waitFor(

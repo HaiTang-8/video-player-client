@@ -465,6 +465,7 @@ abstract interface class PlaybackSourceObserver {
 5. 暂停后切到后台超过 15 秒再回来，继续播放是否正常；退出后看 `stats` 里的 `rebinds`（大于 0 说明系统回收过监听 socket，重新绑定生效）。
 6. 拖动进度条到未播放过的位置，以及切换剧集，各试几次。
 7. （Stage 4 起，同一个构建已经带缓存）同一部片子播放一会儿退出，再从“继续观看”进入：日志里第二次的 `PlaybackSession startup ... firstFrame=` 应该明显小于第一次，退出后的 `PlaybackProxy stats` 里 `cacheBytes` 增加。可以开飞行模式再进一次，看已缓存的部分能否播放。
+8. 打开缓存过的视频：开头不应再出现“只有声音、画面黑”；日志里 `startup ... view=… playing=… firstFrame=…` 应满足 view ≤ playing。
 
 ### Stage 3：缓存存储（纯 Dart）
 
@@ -592,6 +593,19 @@ abstract interface class PlaybackSourceObserver {
   - 代理 2 项：上游待定时读缓存并等待缺口、上游失败只影响缺口；
   - 存储 1 项：按媒体查找最近条目并能持久化。
   - 全量 182 项通过，`flutter analyze` 无问题。
+
+#### Stage 6 之后：打开缓存过的视频先出声后出画面（2026-10-23 修复）
+
+- **现象**（用户真机反馈）：打开缓存过的视频，开头黑屏但有声音。
+- **原因**：会话以 `autoPlay = true` 打开，`open` 返回后进入 Ready，播放页这时才创建画面视图（iOS 的 UiKitView）。命中缓存时缓冲瞬间完成，AVPlayer 立刻开始播放，声音在视图显示之前就出来了；不走缓存时，网络缓冲正好盖住了这段时间。
+- **修复**：
+  - 画面在原生视图里的内核（`reportsVideoView`：Aether / Media3）先暂停打开，视图挂载（`videoViewAttached`）后再播放；
+  - 2 秒内视图没挂载则照常播放，并打一条 `video view not attached` 警告；
+  - 用户在等待期间操作过播放 / 暂停，就不再自动开始；
+  - mpv 仍然自动播放。
+- **没有采用“等首帧再播放”**：Aether 软件路径在 `autoplay=false` 加载时不会先出首帧，模拟器上只能等到 2 秒超时。
+- **iOS 模拟器验证**：`startup` 日志新增 `view=`。命中缓存时 MKV 为 `view=48ms playing=49ms firstFrame=88ms`、MP4 为 `view=58ms playing=58ms firstFrame=102ms`；冷启动、源站不可用、代理透传都满足“开始播放不早于视图挂载”，首帧只比修复前多约 10ms。
+- **真机待确认**：日志里 `view` ≤ `playing`，开头不再“只有声音”。如果仍有黑屏，看 `playing` 和 `firstFrame` 的差值：差值大说明 AVPlayer 显示画面本身慢，需要再查。
 
 ### Stage 7（可选，D3）：“继续观看”预取（P3）
 

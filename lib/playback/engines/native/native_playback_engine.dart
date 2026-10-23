@@ -28,6 +28,10 @@ class NativePlaybackEngine
   final PlaybackStateHub _hub = PlaybackStateHub();
   MediaTracks _tracks = const MediaTracks();
   int? _playerId;
+
+  /// 原生首帧和画面视图都就绪才算上屏：原生侧在视图挂进窗口前就可能出首帧
+  bool _nativeFirstFrame = false;
+  bool _viewCreated = false;
   bool _disposed = false;
 
   @override
@@ -54,6 +58,7 @@ class NativePlaybackEngine
       dolbyVisionColor: caps.dolbyVisionColor,
       maxVolume: caps.maxVolume,
       maxRate: caps.maxRate,
+      reportsVideoView: true,
     );
     if (subtitleFontAssets.isNotEmpty) {
       await _api.configureSubtitleFonts(subtitleFontAssets);
@@ -74,6 +79,7 @@ class NativePlaybackEngine
     Duration? startPosition,
   }) {
     _tracks = const MediaTracks();
+    _nativeFirstFrame = false;
     _hub.resetForNewMedia();
     return _api.open(
       _id,
@@ -143,6 +149,15 @@ class NativePlaybackEngine
       playerId: id,
       fit: fit == BoxFit.cover ? NativeVideoFit.cover : NativeVideoFit.contain,
       onFitChanged: (value) => _api.setVideoFit(id, value),
+      onCreated: () {
+        _viewCreated = true;
+        _hub.update(videoViewAttached: true);
+        _publishFirstFrame();
+      },
+      onDisposed: () {
+        _viewCreated = false;
+        _hub.update(videoViewAttached: false);
+      },
     );
   }
 
@@ -172,7 +187,16 @@ class NativePlaybackEngine
   void onPlaying(int playerId, bool playing) => _hub.update(playing: playing);
 
   @override
-  void onFirstFrame(int playerId) => _hub.update(firstFrameRendered: true);
+  void onFirstFrame(int playerId) {
+    _nativeFirstFrame = true;
+    _publishFirstFrame();
+  }
+
+  void _publishFirstFrame() {
+    if (_nativeFirstFrame && _viewCreated) {
+      _hub.update(firstFrameRendered: true);
+    }
+  }
 
   @override
   void onBuffering(int playerId, bool buffering) =>

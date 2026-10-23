@@ -12,6 +12,8 @@ class NativeVideoView extends StatefulWidget {
     required this.playerId,
     required this.fit,
     required this.onFitChanged,
+    this.onCreated,
+    this.onDisposed,
   });
 
   static const viewType = 'native_player/video';
@@ -20,11 +22,23 @@ class NativeVideoView extends StatefulWidget {
   final NativeVideoFit fit;
   final ValueChanged<NativeVideoFit> onFitChanged;
 
+  /// 原生视图已创建（下一帧即参与合成）
+  final VoidCallback? onCreated;
+  final VoidCallback? onDisposed;
+
   @override
   State<NativeVideoView> createState() => _NativeVideoViewState();
 }
 
 class _NativeVideoViewState extends State<NativeVideoView> {
+  @override
+  void dispose() {
+    widget.onDisposed?.call();
+    super.dispose();
+  }
+
+  void _created(int _) => widget.onCreated?.call();
+
   @override
   void didUpdateWidget(covariant NativeVideoView oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -44,11 +58,13 @@ class _NativeVideoViewState extends State<NativeVideoView> {
         viewType: NativeVideoView.viewType,
         creationParams: params,
         creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: _created,
       ),
       TargetPlatform.macOS => AppKitView(
         viewType: NativeVideoView.viewType,
         creationParams: params,
         creationParamsCodec: const StandardMessageCodec(),
+        onPlatformViewCreated: _created,
       ),
       // Hybrid Composition：SurfaceView 直接送显，HDR 输出需要这种方式
       TargetPlatform.android => PlatformViewLink(
@@ -67,6 +83,7 @@ class _NativeVideoViewState extends State<NativeVideoView> {
                 creationParamsCodec: const StandardMessageCodec(),
               )
               ..addOnPlatformViewCreatedListener(creation.onPlatformViewCreated)
+              ..addOnPlatformViewCreatedListener(_created)
               ..create(),
       ),
       _ => const SizedBox.expand(),

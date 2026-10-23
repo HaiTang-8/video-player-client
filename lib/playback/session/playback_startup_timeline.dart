@@ -11,6 +11,7 @@ final class PlaybackStartupReport {
     required this.firstPlaying,
     required this.firstFrame,
     required this.ready,
+    this.viewAttached,
   });
 
   final PlaybackEngineKind engine;
@@ -23,6 +24,9 @@ final class PlaybackStartupReport {
   /// 第一帧画面上屏；内核不支持首帧事件时为 null
   final Duration? firstFrame;
 
+  /// 原生画面视图挂载；不使用原生视图的内核为 null
+  final Duration? viewAttached;
+
   /// 在起播位置（没有起播位置时为开头）不缓冲地播放了 300ms
   final Duration ready;
 
@@ -30,8 +34,9 @@ final class PlaybackStartupReport {
   String toString() =>
       'engine=${engine.name} source=${localFile ? 'file' : 'network'} '
       'target=${target?.inSeconds ?? 0}s resolve=${_ms(resolved)} '
-      'open=${_ms(opened)} playing=${_ms(firstPlaying)} '
-      'firstFrame=${_ms(firstFrame)} ready=${_ms(ready)}';
+      'open=${_ms(opened)} view=${_ms(viewAttached)} '
+      'playing=${_ms(firstPlaying)} firstFrame=${_ms(firstFrame)} '
+      'ready=${_ms(ready)}';
 
   static String _ms(Duration? d) => d == null ? '-' : '${d.inMilliseconds}ms';
 }
@@ -54,6 +59,7 @@ class PlaybackStartupTimeline {
   Duration? _opened;
   Duration? _firstPlaying;
   Duration? _firstFrame;
+  Duration? _viewAttached;
   Duration? _anchor;
 
   void markResolved({required bool localFile}) {
@@ -68,6 +74,9 @@ class PlaybackStartupTimeline {
     // 解析完成前快照里还是上一个媒体的状态；解析后会同步调用 open 重置
     if (_resolved != null && state.firstFrameRendered) {
       _firstFrame ??= _watch.elapsed;
+    }
+    if (_resolved != null && state.videoViewAttached) {
+      _viewAttached ??= _watch.elapsed;
     }
     if (!state.playing) return null;
     _firstPlaying ??= _watch.elapsed;
@@ -86,6 +95,7 @@ class PlaybackStartupTimeline {
       opened: _opened,
       firstPlaying: _firstPlaying,
       firstFrame: _firstFrame,
+      viewAttached: _viewAttached,
       ready: _watch.elapsed,
     );
   }

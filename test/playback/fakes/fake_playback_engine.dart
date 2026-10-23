@@ -11,6 +11,7 @@ class FakePlaybackEngine implements PlaybackEngine {
   final List<String> calls = [];
   PlaybackSource? openedSource;
   Duration? openedStartPosition;
+  bool? openedAutoPlay;
   Object? openError;
 
   /// 设置后 seek 会等待它完成，用于模拟慢 seek
@@ -49,6 +50,7 @@ class FakePlaybackEngine implements PlaybackEngine {
     );
     openedSource = source;
     openedStartPosition = startPosition;
+    openedAutoPlay = autoPlay;
     final error = openError;
     if (error != null) throw error;
     hub.resetForNewMedia();

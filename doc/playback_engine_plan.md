@@ -239,6 +239,7 @@ class EngineCapabilities {
   final bool dolbyVisionColor;       // 能否正确还原 DV 颜色（含 P5）
   final double maxVolume;            // 1.0 = 100%；mpv 为 2.0，原生引擎为 1.0
   final double maxRate;              // mpv 100，Aether 2.0，Media3 3.0
+  final bool reportsVideoView;       // 画面在原生视图里并上报挂载状态（Aether / Media3）：会话先暂停打开，视图挂载后再播放
 }
 
 class PlaybackSource {               // PlaybackSource.network(url, httpHeaders:) / PlaybackSource.localFile(path)
@@ -257,7 +258,9 @@ class PlaybackError {
   final bool fallbackSuggested;      // 当前内核放不了，会话换下一个候选内核
 }
 
-class PlaybackSnapshot { position, duration, playing, buffering, completed, firstFrameRendered, rate, volume, tracks, selectedTracks, videoInfo }  // firstFrameRendered：本次 open 后第一帧已上屏，内核不支持时始终为 false
+class PlaybackSnapshot { position, duration, playing, buffering, completed, firstFrameRendered, videoViewAttached, rate, volume, tracks, selectedTracks, videoInfo }
+// firstFrameRendered：本次 open 后第一帧已上屏（原生首帧 + 画面视图已创建），内核不支持时始终为 false
+// videoViewAttached：原生画面视图（PlatformView）已挂载，NativeVideoView 的 onCreated / onDisposed 驱动
 class PlaybackStreams  { 上述各项对应的 Stream，另加 Stream<PlaybackError> errors }
 class SelectedTracks   { AudioTrackInfo? audio; SubtitleTrackInfo? subtitle; bool subtitleOff; }  // subtitleOff 区分“关闭”和“引擎自动选择”
 
@@ -749,6 +752,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-23 | 播放缓存 Stage 4：代理接入缓存（另一份任务） | 完成（模拟器），待真机 | 会话层新增 `PlaybackSourceObserver`（`ResolvedPlayback.observer`）：解析出地址后、`open` 之前调用 `onOpening`；首帧时调用 `onFirstFrame` 一次；用户 seek 时调用 `onSeek`；每 5 秒以及退出、切换剧集时调用 `onProgress`。内核不受影响。缓存仍然只在 `PLAYBACK_PROXY=true` 时启用；详见 `doc/playback_cache_plan.md` Stage 4 |
 | 2026-10-23 | 播放缓存 Stage 5：设置与默认开启（另一份任务） | 完成（模拟器），待真机 | `player_screen` 的解析器改为 `ProxiedSourceResolver.wrapIfEnabled(…, quotaGb: 播放设置里的缓存上限)`：iOS 上默认经过本机缓存代理（2GB），上限选“关闭”或其他平台时直连。内核不受影响；详见 `doc/playback_cache_plan.md` Stage 5 |
 | 2026-10-23 | 播放缓存 Stage 6：命中缓存时延迟解析上游（另一份任务） | 完成（模拟器），待真机 | 命中缓存时会话的 `resolve` 不再等流地址 API 和 302，直接拿到本机代理地址（字幕、媒体信息用缓存里记下的 `filePath` / `storageId`），上游在后台解析；`player_screen` 额外传入 `findDownloadedFile`，保证已下载文件优先。会话层和内核没有改动；详见 `doc/playback_cache_plan.md` Stage 6 |
+| 2026-10-23 | 修复：打开视频先出声后出画面 | 完成（模拟器），待真机 | 用户反馈打开缓存过的视频开头黑屏但有声音。原因：会话以 `autoPlay = true` 打开，页面在 Ready 之后才创建画面视图（UiKitView），命中缓存时缓冲瞬间完成，声音在视图显示前就出来了。修复：`EngineCapabilities.reportsVideoView` 的内核（Aether / Media3）先暂停打开，`PlaybackSnapshot.videoViewAttached` 变为 true 后再 `play()`，2 秒内视图没挂载则照常播放并打警告日志；用户在等待期间操作过播放 / 暂停时不再自动开始；mpv 仍然自动播放。最初按方案“等首帧再播放”实现，但 Aether 软件路径在 `autoplay=false` 加载时不会先出首帧，只能等到超时，改为等视图挂载。`firstFrameRendered` 改为“原生首帧 + 视图已创建”；`startup` 日志新增 `view=`。iOS 模拟器：命中缓存 view 48ms → playing 49ms → firstFrame 88ms，开始播放都在视图挂载之后 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---

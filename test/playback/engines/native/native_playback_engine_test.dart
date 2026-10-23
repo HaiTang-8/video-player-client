@@ -164,6 +164,28 @@ void main() {
     expect(api.opened!.startPositionMs, 360040);
   });
 
+  test('first frame counts only once the video view exists', () async {
+    await engine.initialize();
+    expect(engine.capabilities.reportsVideoView, isTrue);
+    final view =
+        engine.buildVideoView(_FakeContext(), fit: BoxFit.contain)
+            as NativeVideoView;
+
+    engine.onFirstFrame(7);
+    expect(engine.state.firstFrameRendered, isFalse, reason: '视图还没创建');
+    view.onCreated!();
+    expect(engine.state.firstFrameRendered, isTrue);
+    expect(engine.state.videoViewAttached, isTrue);
+
+    view.onDisposed!();
+    expect(engine.state.videoViewAttached, isFalse);
+    await engine.open(const PlaybackSource.localFile('/movies/b.mkv'));
+    engine.onFirstFrame(7);
+    expect(engine.state.firstFrameRendered, isFalse, reason: '切换后视图被销毁');
+    view.onCreated!();
+    expect(engine.state.firstFrameRendered, isTrue);
+  });
+
   test('maps native events into the playback state', () async {
     await engine.initialize();
     engine
@@ -184,6 +206,10 @@ void main() {
         ),
       );
 
+    final view =
+        engine.buildVideoView(_FakeContext(), fit: BoxFit.contain)
+            as NativeVideoView;
+    view.onCreated!();
     expect(engine.state.firstFrameRendered, isFalse);
     engine.onFirstFrame(7);
 
@@ -267,3 +293,5 @@ void main() {
     expect(api.calls, ['fonts fonts/a.ttf,fonts/b.ttf', 'create', 'dispose 7']);
   });
 }
+
+class _FakeContext extends Fake implements BuildContext {}

@@ -232,6 +232,104 @@ void main() {
     expect(session.lastStartup, isNull);
   });
 
+  group('start once the video view is attached', () {
+    late PlaybackSession framed;
+
+    setUp(() {
+      engine.capabilities = const EngineCapabilities(
+        dolbyVisionColor: false,
+        maxVolume: 2.0,
+        maxRate: 100,
+        reportsVideoView: true,
+      );
+      framed = PlaybackSession(
+        selector: const EngineSelector([DefaultMpvTextureRule()]),
+        factory: PlaybackEngineFactory({
+          PlaybackEngineKind.mpvTexture: () => engine,
+        }),
+        environment: const PlatformEnvironment(platform: TargetPlatform.macOS),
+        resolver: resolver,
+        sourceGateway: sourceGateway,
+        progressGateway: progressGateway,
+        defaultRate: () => 1.0,
+        videoViewTimeout: const Duration(milliseconds: 100),
+      );
+      addTearDown(framed.dispose);
+    });
+
+    int plays() => engine.calls.where((c) => c == 'play').length;
+
+    test('opens paused and plays once the view is attached', () async {
+      await framed.load(movie, startAt: const Duration(minutes: 3));
+      expect(engine.openedAutoPlay, isFalse);
+      expect(framed.status, isA<PlaybackSessionReady>());
+      expect(plays(), 0);
+
+      engine.hub.update(videoViewAttached: true);
+      await pumpEventQueue();
+      expect(plays(), 1);
+
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(plays(), 1);
+
+      engine.hub.update(playing: true);
+      await pumpEventQueue();
+      engine.hub.update(position: const Duration(minutes: 3, seconds: 1));
+      await pumpEventQueue();
+      engine.hub.update(position: const Duration(minutes: 3, seconds: 2));
+      await pumpEventQueue();
+      final report = framed.lastStartup!;
+      expect(report.viewAttached!, lessThanOrEqualTo(report.firstPlaying!));
+      expect(report.toString(), contains('view='));
+    });
+
+    test('plays at once when the view is already attached', () async {
+      engine.hub.update(videoViewAttached: true);
+      await pumpEventQueue();
+      await framed.load(movie);
+      expect(plays(), 1);
+    });
+
+    test('plays after the timeout when the view never attaches', () async {
+      await framed.load(movie);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(plays(), 0);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(plays(), 1);
+    });
+
+    test('a user who played and paused while waiting is left paused', () async {
+      await framed.load(movie);
+      engine.hub.update(playing: true);
+      await pumpEventQueue();
+      engine.hub.update(playing: false);
+      await pumpEventQueue();
+      engine.hub.update(videoViewAttached: true);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(plays(), 0);
+    });
+
+    test('leaving before the view attaches does not start playback', () async {
+      await framed.load(movie);
+      await framed.prepareExit();
+      engine.hub.update(videoViewAttached: true);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(plays(), 0);
+    });
+
+    test('engines rendering without a native view still autoplay', () async {
+      engine.capabilities = const EngineCapabilities(
+        dolbyVisionColor: false,
+        maxVolume: 2.0,
+        maxRate: 100,
+      );
+      await framed.load(movie);
+      expect(engine.openedAutoPlay, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(plays(), 0);
+    });
+  });
+
   group('source observer', () {
     late _RecordingObserver observer;
 

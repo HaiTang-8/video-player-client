@@ -10,8 +10,11 @@ class PlaybackSnapshot {
   final bool buffering;
   final bool completed;
 
-  /// 本次打开后第一帧画面已上屏；内核不支持时始终为 false
+  /// 本次打开后第一帧画面已上屏（画面视图也已创建）；内核不支持时始终为 false
   final bool firstFrameRendered;
+
+  /// 原生画面视图已挂载；不使用原生视图的内核始终为 false
+  final bool videoViewAttached;
   final double rate;
   final double volume;
   final MediaTracks tracks;
@@ -25,6 +28,7 @@ class PlaybackSnapshot {
     this.buffering = false,
     this.completed = false,
     this.firstFrameRendered = false,
+    this.videoViewAttached = false,
     this.rate = 1.0,
     this.volume = 1.0,
     this.tracks = const MediaTracks(),
@@ -40,6 +44,7 @@ class PlaybackStreams {
   final Stream<bool> buffering;
   final Stream<bool> completed;
   final Stream<bool> firstFrameRendered;
+  final Stream<bool> videoViewAttached;
   final Stream<double> rate;
   final Stream<double> volume;
   final Stream<MediaTracks> tracks;
@@ -54,6 +59,7 @@ class PlaybackStreams {
     required this.buffering,
     required this.completed,
     required this.firstFrameRendered,
+    required this.videoViewAttached,
     required this.rate,
     required this.volume,
     required this.tracks,
