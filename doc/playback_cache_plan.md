@@ -1,6 +1,6 @@
 # 播放缓存任务文档（续播秒开）
 
-> 状态：**Stage 0、0.4、1 完成；Stage 2 模拟器部分通过，等待用户真机验证（2.3）；之后进入 Stage 3（需要先决策 D1、D2、D7）**
+> 状态：**Stage 0、0.4、1 完成；Stage 2 模拟器部分通过，等待用户真机验证（2.3）；D1、D2、D7 已决策，Stage 3 可以开始（真机结果不达标时回到 D5）**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/playback/`（新增 `cache/`）、`client/packages/native_player/`、`client/lib/screens/settings/`、iOS / macOS 工程配置
 >
@@ -474,13 +474,13 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 
 | # | 问题 | 选项 | 建议 | 影响阶段 | 结论 |
 |---|---|---|---|---|---|
-| D1 | 缓存目标 | A. 只保留续播集（占用小）；B. 看过的部分尽量都留着（占用大）；C. 两级淘汰兼顾 | C | 3 | 待定 |
-| D2 | 默认配额 | 移动端 2GB / 桌面端 10GB；或默认关闭 | 移动端 2GB、桌面端 10GB | 5 | 待定 |
+| D1 | 缓存目标 | A. 只保留续播集（占用小）；B. 看过的部分尽量都留着（占用大）；C. 两级淘汰兼顾 | C | 3 | **C（2026-10-23 用户确认）**：两级淘汰，超出配额时先把久未访问的条目瘦身为续播集，仍超出再按 LRU 整条删除 |
+| D2 | 默认配额 | 移动端 2GB / 桌面端 10GB；或默认关闭 | 移动端 2GB、桌面端 10GB | 5 | **移动端 2GB、桌面端 10GB，默认开启（2026-10-23 用户确认）**；可在播放设置中改为关闭 / 1 / 2 / 5 / 10 / 20 GB，实际上限受剩余空间限制（至少保留 1GB） |
 | D3 | 是否做“继续观看”预取 | 做（只在 Wi-Fi 下）/ 不做 | 先不做，Stage 6 验收后再定 | 7 | 待定 |
 | D4 | 首个落地平台 | iOS / Android | — | 全部 | **iOS（2026-10-22 用户确认）** |
 | D5 | 代理用什么实现 | A. Dart 隔离区（跨平台一套）；B. iOS 用 Swift 原生实现 | A，Stage 2 压测不达标再考虑 B | 2, 4 | 待 Stage 2 结论 |
 | D6 | 移动网络下是否写缓存 | 写（不额外消耗流量，只是把看过的数据留下）/ 不写 | 写 | 4 | 待定 |
-| D7 | 如何对待 `feature/playback-cache-settings` 的已有实现（§1.5） | A. 合并后修补；B. 缓存核心（存储、代理）按 §4 重写，设置 / 明细 / 存储管理 UI、缓存键规则、403 / 429 重试从分支移植；C. 完全重写 | B（核心问题是结构性的：区间命中、并发、背压、目录；UI 部分基本可以直接用） | 3, 4, 5 | 待定 |
+| D7 | 如何对待 `feature/playback-cache-settings` 的已有实现（§1.5） | A. 合并后修补；B. 缓存核心（存储、代理）按 §4 重写，设置 / 明细 / 存储管理 UI、缓存键规则、403 / 429 重试从分支移植；C. 完全重写 | B（核心问题是结构性的：区间命中、并发、背压、目录；UI 部分基本可以直接用） | 3, 4, 5 | **B（2026-10-23 用户确认）**：存储与代理按 §4 重写；设置项、缓存明细页、存储管理入口、缓存键规则、403 / 429 退避重试从分支移植。分支本身不合并 |
 
 ---
 
@@ -523,4 +523,5 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 | 2026-10-22 | Stage 1 起播位置交给内核 | 完成，待真机确认 | 见 §6 Stage 1 结论。单测：会话新增 3 项（打开时带起播位置、起播位置防止网络错误后的异常片尾进度、非正数从头播放；反向验证：去掉 `markControlledSeek` 后用例失败），原生引擎新增 1 项（毫秒数透传），全量 108 项通过；`flutter analyze` 无问题；Android `:native_player:compileDebugKotlin` 通过；iOS 模拟器 `playback_session_native_test` 通过。测试源站新增 `timeline`（每个请求的开始 / 结束时间和已发送字节数），基准新增 `BENCH_SCENARIO` 过滤和 `NP_BENCH_TIMELINE` 输出。~~另一个发现：Aether 两次打开时各发出的 `bytes=0-33554431` 请求会一直下载~~（**已被 Stage 2 更正**：是测试源站的假象，见 §6 Stage 2 结论第 3 条） |
 | 2026-10-22 | Stage 0.4 首帧指标 | 完成 | 见 §6 Stage 0.4。单测新增 4 项（hub 重置首帧标志、原生事件映射、会话记录首帧、上一集的首帧不计入；反向验证：去掉 `markResolved` 前提后用例失败），全量 111 项通过；`flutter analyze` 无问题；Android Kotlin 编译通过；iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。基准第一次跑 MP4 时测试 App 连不上调试连接（`The log reader failed unexpectedly`，当时 Claude 应用的模拟器面板也在监听这台模拟器），重跑通过 |
 | 2026-10-22 | Stage 2 iOS 代理 Spike（模拟器） | 通过，待真机 | 见 §6 Stage 2 结论。iOS Info.plist 加了 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`（正式构建也生效；它同时放开了对局域网 IP 的 http 访问，iOS 17 起默认会拦截）。单测：代理 10 项（Range / HEAD / 鉴权头 / 重定向保留头 / 未知条目 / 并发 / 播放器断开时取消上游 / 同端口重新绑定 / 解析器装饰器），测试源站 9 项。iOS 模拟器：代理功能测试（含前后台切换）通过；直连 / 代理基准各 2 组。更正了 Stage 1 关于开头请求的结论 |
+| 2026-10-23 | 决策 D1 / D2 / D7 | 完成 | D1 = C（两级淘汰）；D2 = 移动端 2GB、桌面端 10GB，默认开启；D7 = B（核心重写，从分支移植 UI、缓存键规则和 403 / 429 重试） |
 | 2026-10-22 | 任务文档 | 完成 | 本文；补充 iOS 约束：iOS 17+ ATS 默认拦截 IP 地址，需要 `NSAllowsLocalNetworking`；回前台时 Aether 用原 URL 重建，代理必须在同一端口恢复；macOS Release 版缺少 `network.server` 权限 |
