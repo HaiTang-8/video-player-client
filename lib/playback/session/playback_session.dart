@@ -42,6 +42,8 @@ final class PlaybackSessionFailed extends PlaybackSessionStatus {
 
 /// 播放会话门面：管理引擎生命周期与加载流程，UI 只与它和 [engine] 交互
 class PlaybackSession extends ChangeNotifier {
+  static const _progressInterval = Duration(seconds: 5);
+
   PlaybackSession({
     required EngineSelector selector,
     required PlaybackEngineFactory factory,
@@ -99,6 +101,9 @@ class PlaybackSession extends ChangeNotifier {
   double? _sessionVolume;
   PlaybackStartupTimeline? _startup;
   PlaybackStartupReport? _lastStartup;
+  PlaybackSourceObserver? _observer;
+  bool _firstFrameNotified = false;
+  DateTime? _lastProgressReport;
   bool _disposed = false;
 
   PlaybackSessionStatus get status => _status;
@@ -137,6 +142,7 @@ class PlaybackSession extends ChangeNotifier {
   Future<void> prepareSwitch() async {
     await _seek.awaitActive();
     await engine.pause();
+    _reportProgress(engine.state.position, force: true);
     await _tracker.save();
     _setStatus(const PlaybackSessionLoading(resolvingSource: true));
   }
@@ -158,6 +164,9 @@ class PlaybackSession extends ChangeNotifier {
     _currentUrl = null;
     _filePath = null;
     _externalSubtitles = const [];
+    _observer = null;
+    _firstFrameNotified = false;
+    _lastProgressReport = null;
     _startup = PlaybackStartupTimeline(engine: engine.kind, target: start);
     _setStatus(const PlaybackSessionLoading(resolvingSource: true));
 
@@ -165,6 +174,7 @@ class PlaybackSession extends ChangeNotifier {
       final resolved = await _resolver.resolve(item);
       if (_isStale(generation)) return;
       _startup?.markResolved(localFile: resolved.source.isLocalFile);
+      _observer = resolved.observer?..onOpening(start);
       _currentUrl = resolved.source.url;
       _filePath = resolved.filePath;
       _setStatus(const PlaybackSessionLoading(resolvingSource: false));
@@ -207,6 +217,7 @@ class PlaybackSession extends ChangeNotifier {
   /// 用户发起的 seek，会取消尚未生效的起播位置
   Future<void> seek(Duration position) {
     _startAt = null;
+    _observer?.onSeek(position);
     return _seek.seek(position);
   }
 
@@ -239,6 +250,7 @@ class PlaybackSession extends ChangeNotifier {
   Future<void> prepareExit() async {
     await _seek.awaitActive();
     await engine.pause();
+    _reportProgress(engine.state.position, force: true);
     await _tracker.save();
   }
 
@@ -327,12 +339,21 @@ class PlaybackSession extends ChangeNotifier {
         streams.position.listen((position) {
           if (_disposed) return;
           _tracker.onPosition(position);
+          _reportProgress(position);
           _checkStartup();
         }),
       )
       ..add(streams.playing.listen((_) => _checkStartup()))
       ..add(streams.buffering.listen((_) => _checkStartup()))
-      ..add(streams.firstFrameRendered.listen((_) => _checkStartup()))
+      ..add(
+        streams.firstFrameRendered.listen((rendered) {
+          if (rendered && !_firstFrameNotified) {
+            _firstFrameNotified = true;
+            _observer?.onFirstFrame();
+          }
+          _checkStartup();
+        }),
+      )
       ..add(streams.duration.listen(_onDuration))
       ..add(streams.completed.listen(_onCompleted))
       ..add(streams.tracks.listen(_onTracks));
@@ -372,6 +393,20 @@ class PlaybackSession extends ChangeNotifier {
       'duration=${duration.inSeconds}s, startAt=${_startAt?.inSeconds}',
     );
     _startAt = null;
+  }
+
+  /// 每 5 秒把播放位置告诉片源一侧（缓存据此估算续播点）；[force] 用于退出和切换剧集
+  void _reportProgress(Duration position, {bool force = false}) {
+    final observer = _observer;
+    final duration = engine.state.duration;
+    if (observer == null || duration <= Duration.zero) return;
+    final now = DateTime.now();
+    final last = _lastProgressReport;
+    if (!force && last != null && now.difference(last) < _progressInterval) {
+      return;
+    }
+    _lastProgressReport = now;
+    observer.onProgress(position, duration);
   }
 
   void _checkStartup() {

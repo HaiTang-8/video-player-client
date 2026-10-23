@@ -1,21 +1,46 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math' as math;
+
+import 'byte_range.dart';
+import 'cache_eviction.dart';
+import 'cache_store.dart';
 
 /// 代理隔离区的入口参数
 final class CacheProxyBoot {
-  const CacheProxyBoot(this.reply, this.token);
+  const CacheProxyBoot(
+    this.reply,
+    this.token, {
+    this.events,
+    this.cacheRoot,
+    this.blockSize = 4 << 20,
+  });
 
   final SendPort reply;
   final String token;
+
+  /// 代理请求主隔离区的通道（例如刷新上游地址）
+  final SendPort? events;
+
+  /// 为空时只透传、不缓存
+  final String? cacheRoot;
+  final int blockSize;
 }
 
-/// 代理隔离区：只监听本机回环地址，按 Range 透传到上游（Stage 2 Spike，不写盘）
+/// 代理隔离区：只监听本机回环地址。登记为可缓存的条目，已缓存的部分直接读盘，
+/// 缺失的部分按缺口向上游请求、边转发边写入；其余条目透传
 ///
-/// 用 addStream 转发：播放器读得慢时上游读取也随之变慢；播放器断开后，
+/// 转发都经过 addStream：播放器读得慢时上游读取也随之变慢；播放器断开后，
 /// 下一次写入失败时会取消上游订阅并关闭上游连接
 Future<void> cacheProxyMain(CacheProxyBoot boot) async {
-  final server = _CacheProxyServer(boot.token);
+  final root = boot.cacheRoot;
+  CacheStore? store;
+  if (root != null) {
+    store = CacheStore(Directory(root), blockSize: boot.blockSize);
+    await store.open();
+  }
+  final server = _CacheProxyServer(boot.token, store, boot.events);
   final commands = ReceivePort();
   final port = await server.bind();
   boot.reply.send(<String, Object>{
@@ -25,19 +50,66 @@ Future<void> cacheProxyMain(CacheProxyBoot boot) async {
   await for (final message in commands) {
     final map = message as Map<String, Object?>;
     final reply = map['reply'] as SendPort?;
-    reply?.send(await server.command(map));
+    final result = await server.command(map);
+    reply?.send(result);
   }
 }
 
 class _Entry {
-  _Entry(this.url, this.headers);
+  _Entry(
+    this.id,
+    this.url,
+    this.headers, {
+    this.cacheId,
+    this.refreshable = false,
+  });
 
-  final Uri url;
-  final Map<String, String> headers;
+  final String id;
+  Uri url;
+  Map<String, String> headers;
+  final String? cacheId;
+  final bool refreshable;
+
+  /// 打开阶段截止时间：期间文件首尾的读取记为固定区间
+  DateTime? openingUntil;
+
+  /// 等待与下一次读取偏移配对的播放位置（打开时的起播位置或 seek 目标）
+  int? pendingSampleMs;
+}
+
+/// 上游响应的关键信息
+final class _UpstreamInfo {
+  _UpstreamInfo(HttpClientResponse response)
+    : status = response.statusCode,
+      contentType = response.headers.value(HttpHeaders.contentTypeHeader),
+      etag = response.headers.value(HttpHeaders.etagHeader),
+      lastModified = response.headers.value(HttpHeaders.lastModifiedHeader),
+      contentLength = response.contentLength {
+    final match = RegExp(
+      r'bytes (\d+)-(\d+)/(\d+)',
+    ).firstMatch(response.headers.value(HttpHeaders.contentRangeHeader) ?? '');
+    if (status == HttpStatus.partialContent && match != null) {
+      start = int.parse(match.group(1)!);
+      size = int.parse(match.group(3)!);
+    } else if (status == HttpStatus.ok && contentLength >= 0) {
+      start = 0;
+      size = contentLength;
+    }
+  }
+
+  final int status;
+  final String? contentType;
+  final String? etag;
+  final String? lastModified;
+  final int contentLength;
+  int? start;
+  int? size;
+
+  bool get usable => start != null && size != null && size! > 0;
 }
 
 class _CacheProxyServer {
-  _CacheProxyServer(this._token);
+  _CacheProxyServer(this._token, this._store, this._events);
 
   static const _forwardedHeaders = [
     HttpHeaders.contentTypeHeader,
@@ -47,7 +119,14 @@ class _CacheProxyServer {
     HttpHeaders.lastModifiedHeader,
   ];
 
+  /// 打开阶段只把文件首尾这些范围内的读取记为固定区间（封装头、索引），避免固定住续播点本身
+  static const _pinZone = 64 << 20;
+  static const _openingTimeout = Duration(seconds: 15);
+  static const _enforceInterval = Duration(seconds: 1);
+
   final String _token;
+  final CacheStore? _store;
+  final SendPort? _events;
   final Map<String, _Entry> _entries = {};
   final HttpClient _client =
       HttpClient()
@@ -63,11 +142,21 @@ class _CacheProxyServer {
                     : HttpClient.findProxyFromEnvironment(uri);
   HttpServer? _server;
   int _port = 0;
-  int _requests = 0;
-  int _bytes = 0;
-  int _active = 0;
-  int _cancelledUpstreams = 0;
-  int _rebinds = 0;
+  int _quota = 0;
+
+  /// 实际上限：写入只是把剩余空间换成已用空间，两者之和不变，所以收到新配额或剩余空间时算一次即可
+  int _limit = 0;
+  DateTime _lastEnforce = DateTime.fromMillisecondsSinceEpoch(0);
+  final Map<String, int> _stats = {
+    'requests': 0,
+    'bytes': 0,
+    'cacheBytes': 0,
+    'upstreamBytes': 0,
+    'active': 0,
+    'cancelledUpstreams': 0,
+    'rebinds': 0,
+    'refreshes': 0,
+  };
 
   Future<int> bind() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
@@ -81,15 +170,69 @@ class _CacheProxyServer {
   }
 
   Future<Object?> command(Map<String, Object?> message) async {
+    final id = message['id'] as String?;
+    final entry = id == null ? null : _entries[id];
+    final cacheId = entry?.cacheId;
     switch (message['cmd']) {
       case 'register':
-        _entries[message['id'] as String] = _Entry(
+        _entries[id!] = _Entry(
+          id,
           Uri.parse(message['url'] as String),
           Map<String, String>.from(message['headers'] as Map),
+          cacheId: _store == null ? null : message['cacheId'] as String?,
+          refreshable: message['refreshable'] == true,
         );
         return true;
       case 'unregister':
-        _entries.remove(message['id']);
+        _entries.remove(id);
+        return true;
+      case 'opening':
+        entry
+          ?..openingUntil = DateTime.now().add(_openingTimeout)
+          ..pendingSampleMs = message['positionMs'] as int?;
+        return true;
+      case 'opened':
+        entry?.openingUntil = null;
+        return true;
+      case 'seek':
+        entry?.pendingSampleMs = message['positionMs'] as int?;
+        return true;
+      case 'progress':
+        if (cacheId != null) {
+          _store!
+            ..reportPlayback(
+              cacheId,
+              positionMs: message['positionMs'] as int,
+              durationMs: message['durationMs'] as int?,
+            )
+            ..touch(cacheId);
+        }
+        return true;
+      case 'limits':
+        _quota = message['quotaBytes'] as int;
+        final free = message['freeBytes'] as int?;
+        // 剩余空间未知（桌面端没有查询接口）时只按配额
+        _limit =
+            free == null || free <= 0
+                ? _quota
+                : effectiveCacheLimit(
+                  quotaBytes: _quota,
+                  usedBytes: _store?.usedBytes ?? 0,
+                  freeBytes: free,
+                );
+        await _store?.enforce(_limit, force: true);
+        return true;
+      case 'usage':
+        return <String, int>{
+          'bytes': _store?.usedBytes ?? 0,
+          'entries': _store?.entries.length ?? 0,
+          'limit': _limit,
+        };
+      case 'clear':
+        await _store?.clear();
+        return true;
+      case 'flush':
+        await _store?.flush();
         return true;
       case 'ensure':
         return _ensureListening();
@@ -98,13 +241,7 @@ class _CacheProxyServer {
         _server = null;
         return true;
       case 'stats':
-        return <String, int>{
-          'requests': _requests,
-          'bytes': _bytes,
-          'active': _active,
-          'cancelledUpstreams': _cancelledUpstreams,
-          'rebinds': _rebinds,
-        };
+        return Map<String, int>.from(_stats);
     }
     return null;
   }
@@ -117,7 +254,7 @@ class _CacheProxyServer {
     for (var attempt = 0; attempt < 5; attempt++) {
       try {
         await bind();
-        _rebinds++;
+        _count('rebinds');
         return true;
       } on SocketException {
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -140,8 +277,11 @@ class _CacheProxyServer {
     }
   }
 
+  void _count(String name, [int by = 1]) =>
+      _stats[name] = (_stats[name] ?? 0) + by;
+
   Future<void> _handle(HttpRequest request) async {
-    _requests++;
+    _count('requests');
     final response = request.response;
     final segments = request.uri.pathSegments;
     final entry =
@@ -161,61 +301,387 @@ class _CacheProxyServer {
       return;
     }
 
-    _active++;
-    HttpClientResponse? upstream;
-    var finished = false;
+    _count('active');
+    final cacheId = entry.cacheId;
+    final store = _store;
     try {
-      upstream = await _openUpstream(
-        request.method,
-        entry,
-        request.headers.value(HttpHeaders.rangeHeader),
-      );
+      if (cacheId != null && store != null && _quota > 0) {
+        store.acquire(cacheId);
+        try {
+          await _serveCached(request, entry, cacheId, store);
+        } finally {
+          store.release(cacheId);
+        }
+      } else {
+        await _passThrough(request, entry);
+      }
+    } catch (_) {
+      await response.close().catchError((_) {});
+    } finally {
+      _count('active', -1);
+    }
+  }
 
-      response.statusCode = upstream.statusCode;
-      for (final name in _forwardedHeaders) {
-        final value = upstream.headers.value(name);
-        if (value != null) response.headers.set(name, value);
-      }
-      if (upstream.contentLength >= 0) {
-        response.contentLength = upstream.contentLength;
-      }
-      if (request.method == 'HEAD') {
-        await upstream.drain<void>();
-        finished = true;
+  Future<void> _passThrough(HttpRequest request, _Entry entry) async {
+    final response = request.response;
+    final upstream = await _openUpstream(
+      request.method,
+      entry,
+      request.headers.value(HttpHeaders.rangeHeader),
+    );
+    if (upstream == null) {
+      response.statusCode = HttpStatus.badGateway;
+      await response.close();
+      return;
+    }
+    _copyUpstreamHeaders(upstream, response);
+    if (request.method == 'HEAD') {
+      await upstream.drain<void>();
+      await response.close();
+      return;
+    }
+    var forwarded = 0;
+    await response.addStream(
+      upstream.map((chunk) {
+        forwarded += chunk.length;
+        _count('bytes', chunk.length);
+        return chunk;
+      }),
+    );
+    if (upstream.contentLength >= 0 && forwarded < upstream.contentLength) {
+      _count('cancelledUpstreams');
+    }
+    await response.close();
+  }
+
+  Future<void> _serveCached(
+    HttpRequest request,
+    _Entry entry,
+    String id,
+    CacheStore store,
+  ) async {
+    final response = request.response;
+    final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+    final meta = store[id];
+    if (meta == null) {
+      await _firstContact(request, entry, id, store, rangeHeader);
+      return;
+    }
+
+    final size = meta.size;
+    var start = 0;
+    var end = size;
+    if (rangeHeader != null) {
+      final parsed = _parseRange(rangeHeader, size);
+      if (parsed == null) {
+        response
+          ..statusCode = HttpStatus.requestedRangeNotSatisfiable
+          ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */$size');
         await response.close();
         return;
       }
-      var forwarded = 0;
+      (start, end) = parsed;
+      response
+        ..statusCode = HttpStatus.partialContent
+        ..headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes $start-${end - 1}/$size',
+        );
+    }
+    response.headers
+      ..set(HttpHeaders.acceptRangesHeader, 'bytes')
+      ..set(
+        HttpHeaders.contentTypeHeader,
+        meta.contentType ?? 'application/octet-stream',
+      );
+    if (meta.etag != null) {
+      response.headers.set(HttpHeaders.etagHeader, meta.etag!);
+    }
+    if (meta.lastModified != null) {
+      response.headers.set(HttpHeaders.lastModifiedHeader, meta.lastModified!);
+    }
+    response.contentLength = end - start;
+    if (request.method == 'HEAD') {
+      await response.close();
+      return;
+    }
+
+    _recordStart(entry, id, store, start);
+    var delivered = 0;
+    try {
       await response.addStream(
-        upstream.map((chunk) {
-          forwarded += chunk.length;
-          _bytes += chunk.length;
+        _assemble(entry, id, store, start, end).map((chunk) {
+          delivered += chunk.length;
+          _count('bytes', chunk.length);
           return chunk;
         }),
       );
-      // 播放器断开时 addStream 会在下一次写入时结束并取消上游，但不会报错
-      if (upstream.contentLength >= 0 && forwarded < upstream.contentLength) {
-        _cancelledUpstreams++;
-      }
-      finished = true;
-      await response.close();
-    } catch (_) {
-      if (upstream == null) {
-        try {
-          response.statusCode = HttpStatus.badGateway;
-        } catch (_) {}
-      } else if (!finished) {
-        _cancelledUpstreams++;
-      }
-      await response.close().catchError((_) {});
     } finally {
-      _active--;
+      if (delivered < end - start) _count('cancelledUpstreams');
+      _recordRead(entry, id, store, ByteRange(start, start + delivered));
     }
+    await response.close();
+  }
+
+  /// 还不知道文件大小：按播放器的原始 Range 请求上游，拿到大小后建立条目并边转发边写入
+  Future<void> _firstContact(
+    HttpRequest request,
+    _Entry entry,
+    String id,
+    CacheStore store,
+    String? rangeHeader,
+  ) async {
+    final response = request.response;
+    final upstream = await _openUpstream(request.method, entry, rangeHeader);
+    if (upstream == null) {
+      response.statusCode = HttpStatus.badGateway;
+      await response.close();
+      return;
+    }
+    final info = _UpstreamInfo(upstream);
+    _copyUpstreamHeaders(upstream, response);
+    if (info.usable) {
+      await store.prepare(
+        id,
+        size: info.size!,
+        contentType: info.contentType,
+        etag: info.etag,
+        lastModified: info.lastModified,
+      );
+    }
+    if (request.method == 'HEAD' || !info.usable) {
+      if (request.method == 'HEAD') {
+        await upstream.drain<void>();
+      } else {
+        await response.addStream(upstream);
+      }
+      await response.close();
+      return;
+    }
+
+    final start = info.start!;
+    _recordStart(entry, id, store, start);
+    final writer = _writable ? store.writer(id, start) : null;
+    var delivered = 0;
+    try {
+      await response.addStream(
+        upstream.asyncMap((chunk) async {
+          await writer?.add(chunk);
+          delivered += chunk.length;
+          _count('bytes', chunk.length);
+          _count('upstreamBytes', chunk.length);
+          return chunk;
+        }),
+      );
+    } finally {
+      await writer?.close();
+      if (info.contentLength >= 0 && delivered < info.contentLength) {
+        _count('cancelledUpstreams');
+      }
+      _recordRead(entry, id, store, ByteRange(start, start + delivered));
+      _maybeEnforce(store);
+    }
+    await response.close();
+  }
+
+  /// 按顺序拼出 [start, end)：已缓存的部分读盘，缺口向上游请求并写入
+  Stream<List<int>> _assemble(
+    _Entry entry,
+    String id,
+    CacheStore store,
+    int start,
+    int end,
+  ) async* {
+    var cursor = start;
+    while (cursor < end) {
+      final meta = store[id];
+      if (meta == null) throw StateError('cache entry $id was invalidated');
+      final run = math.min(meta.cachedRunFrom(cursor), end - cursor);
+      if (run > 0) {
+        await for (final chunk in store.openRead(
+          id,
+          ByteRange(cursor, cursor + run),
+        )) {
+          _count('cacheBytes', chunk.length);
+          yield chunk;
+        }
+        cursor += run;
+        continue;
+      }
+      final gap = meta.missing(ByteRange(cursor, end)).first;
+      yield* _fetchGap(entry, id, store, gap);
+      cursor = gap.end;
+    }
+  }
+
+  Stream<List<int>> _fetchGap(
+    _Entry entry,
+    String id,
+    CacheStore store,
+    ByteRange gap,
+  ) async* {
+    final meta = store[id]!;
+    final upstream = await _openUpstream(
+      'GET',
+      entry,
+      'bytes=${gap.start}-${gap.end - 1}',
+    );
+    if (upstream == null) throw const HttpException('upstream unavailable');
+    final info = _UpstreamInfo(upstream);
+    final changed =
+        info.size != null && info.size != meta.size ||
+        info.etag != null && meta.etag != null && info.etag != meta.etag;
+    if (changed) {
+      await upstream.drain<void>().catchError((_) {});
+      // 上游文件已变化：作废旧缓存，本次请求失败，播放器重试时按新条目处理
+      await store.prepare(
+        id,
+        size: info.size ?? meta.size,
+        contentType: info.contentType,
+        etag: info.etag,
+        lastModified: info.lastModified,
+      );
+      throw const HttpException('upstream file changed');
+    }
+    if (info.status != HttpStatus.partialContent || info.start != gap.start) {
+      await upstream.drain<void>().catchError((_) {});
+      throw HttpException('unexpected upstream status ${info.status}');
+    }
+
+    final writer = _writable ? store.writer(id, gap.start) : null;
+    var received = 0;
+    try {
+      await for (final chunk in upstream) {
+        final take = math.min(chunk.length, gap.length - received);
+        final piece = take == chunk.length ? chunk : chunk.sublist(0, take);
+        await writer?.add(piece);
+        received += take;
+        _count('upstreamBytes', take);
+        yield piece;
+        if (received >= gap.length) break;
+      }
+    } finally {
+      await writer?.close();
+      _maybeEnforce(store);
+    }
+    if (received < gap.length) {
+      throw const HttpException('upstream ended early');
+    }
+  }
+
+  bool get _writable => _limit > 0;
+
+  /// 有待配对的播放位置时，把这次读取的起点记为采样；文件首尾的读取（封装头、索引）不算
+  void _recordStart(_Entry entry, String id, CacheStore store, int start) {
+    final position = entry.pendingSampleMs;
+    final size = store[id]?.size;
+    if (position == null || size == null || _inPinZone(start, size)) return;
+    entry.pendingSampleMs = null;
+    if (position > 0) store.addSample(id, position, start);
+  }
+
+  /// 打开阶段把文件首尾的读取记为固定区间
+  void _recordRead(_Entry entry, String id, CacheStore store, ByteRange read) {
+    final until = entry.openingUntil;
+    final size = store[id]?.size;
+    if (until == null || size == null || read.isEmpty) return;
+    if (DateTime.now().isAfter(until)) {
+      entry.openingUntil = null;
+      return;
+    }
+    if (read.start < _pinZone || read.end > size - _pinZone) {
+      store.pin(id, read);
+    }
+  }
+
+  bool _inPinZone(int offset, int size) =>
+      offset < _pinZone || offset >= size - _pinZone;
+
+  void _maybeEnforce(CacheStore store) {
+    final now = DateTime.now();
+    if (now.difference(_lastEnforce) < _enforceInterval) return;
+    _lastEnforce = now;
+    unawaited(
+      store.enforce(_limit).catchError((Object _) => const EvictionPlan([], 0)),
+    );
+  }
+
+  void _copyUpstreamHeaders(
+    HttpClientResponse upstream,
+    HttpResponse response,
+  ) {
+    response.statusCode = upstream.statusCode;
+    for (final name in _forwardedHeaders) {
+      final value = upstream.headers.value(name);
+      if (value != null) response.headers.set(name, value);
+    }
+    if (upstream.contentLength >= 0) {
+      response.contentLength = upstream.contentLength;
+    }
+  }
+
+  /// 请求上游：401 / 403 / 410 时请主隔离区刷新一次地址；403 / 429 时退避重试。
+  /// 拿不到可用响应时返回 null
+  Future<HttpClientResponse?> _openUpstream(
+    String method,
+    _Entry entry,
+    String? range,
+  ) async {
+    var refreshed = false;
+    for (var attempt = 0; attempt < 4; attempt++) {
+      final HttpClientResponse response;
+      try {
+        response = await _request(method, entry, range);
+      } on IOException {
+        if (attempt == 3) return null;
+        await Future<void>.delayed(Duration(milliseconds: 300 << attempt));
+        continue;
+      }
+      final status = response.statusCode;
+      final expired =
+          status == HttpStatus.unauthorized ||
+          status == HttpStatus.forbidden ||
+          status == HttpStatus.gone;
+      if (expired && !refreshed && entry.refreshable) {
+        refreshed = true;
+        await response.drain<void>().catchError((_) {});
+        if (await _refresh(entry)) continue;
+        return null;
+      }
+      final throttled =
+          status == HttpStatus.forbidden ||
+          status == HttpStatus.tooManyRequests;
+      if (throttled && attempt < 3) {
+        await response.drain<void>().catchError((_) {});
+        await Future<void>.delayed(Duration(milliseconds: 500 << attempt));
+        continue;
+      }
+      return response;
+    }
+    return null;
+  }
+
+  Future<bool> _refresh(_Entry entry) async {
+    final events = _events;
+    if (events == null) return false;
+    final reply = ReceivePort();
+    events.send({'event': 'refresh', 'id': entry.id, 'reply': reply.sendPort});
+    final result = await reply.first.timeout(
+      const Duration(seconds: 20),
+      onTimeout: () => null,
+    );
+    reply.close();
+    if (result is! Map) return false;
+    entry
+      ..url = Uri.parse(result['url'] as String)
+      ..headers = Map<String, String>.from(result['headers'] as Map);
+    _count('refreshes');
+    return true;
   }
 
   /// 手动跟随重定向：HttpClient 自动跟随时会丢掉自定义请求头。
   /// 跳到其他源时去掉 Authorization，避免把存储的凭据交给直链所在的主机
-  Future<HttpClientResponse> _openUpstream(
+  Future<HttpClientResponse> _request(
     String method,
     _Entry entry,
     String? range,
@@ -242,5 +708,22 @@ class _CacheProxyServer {
       }
       url = next;
     }
+  }
+
+  /// 单段 Range，返回半开区间；不合法或越界时返回 null
+  static (int, int)? _parseRange(String header, int size) {
+    final match = RegExp(r'^bytes=(\d*)-(\d*)$').firstMatch(header.trim());
+    if (match == null || size <= 0) return null;
+    final first = match.group(1)!;
+    final last = match.group(2)!;
+    if (first.isEmpty) {
+      final suffix = int.tryParse(last);
+      if (suffix == null || suffix <= 0) return null;
+      return (math.max(0, size - suffix), size);
+    }
+    final start = int.parse(first);
+    if (start >= size) return null;
+    final end = last.isEmpty ? size : math.min(int.parse(last) + 1, size);
+    return end <= start ? null : (start, end);
   }
 }

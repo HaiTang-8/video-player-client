@@ -15,6 +15,24 @@ import 'package:media_player/playback/session/playback_source_resolver.dart';
 import '../fakes/fake_gateways.dart';
 import '../fakes/fake_playback_engine.dart';
 
+class _RecordingObserver implements PlaybackSourceObserver {
+  final List<String> events = [];
+
+  @override
+  void onOpening(Duration? startAt) =>
+      events.add('opening ${startAt?.inSeconds}');
+
+  @override
+  void onFirstFrame() => events.add('firstFrame');
+
+  @override
+  void onSeek(Duration position) => events.add('seek ${position.inSeconds}');
+
+  @override
+  void onProgress(Duration position, Duration duration) =>
+      events.add('progress ${position.inSeconds}/${duration.inSeconds}');
+}
+
 class _FakeResolver implements PlaybackSourceResolver {
   ResolvedPlayback? result;
   Object? error;
@@ -95,33 +113,39 @@ void main() {
     expect(session.filePath, '/movies/a.mkv');
   });
 
-  test('opens at the start position and applies rate once duration is known', () async {
-    await session.load(movie, startAt: const Duration(seconds: 120));
-    engine.hub.update(duration: hour);
-    await pumpEventQueue();
+  test(
+    'opens at the start position and applies rate once duration is known',
+    () async {
+      await session.load(movie, startAt: const Duration(seconds: 120));
+      engine.hub.update(duration: hour);
+      await pumpEventQueue();
 
-    expect(engine.calls, ['open http://media.local/a.mkv @120', 'rate 1.25']);
-    expect(engine.openedStartPosition, const Duration(seconds: 120));
-  });
+      expect(engine.calls, ['open http://media.local/a.mkv @120', 'rate 1.25']);
+      expect(engine.openedStartPosition, const Duration(seconds: 120));
+    },
+  );
 
-  test('start position guards progress against a bogus jump to the end', () async {
-    await session.load(movie, startAt: const Duration(minutes: 50));
-    engine.hub
-      ..update(duration: hour)
-      ..addError(
-        const PlaybackError(
-          kind: PlaybackErrorKind.network,
-          message: 'reset',
-          recoverable: true,
-        ),
-      );
-    await pumpEventQueue();
-    engine.hub.update(position: const Duration(minutes: 59));
-    await pumpEventQueue();
-    await session.prepareExit();
+  test(
+    'start position guards progress against a bogus jump to the end',
+    () async {
+      await session.load(movie, startAt: const Duration(minutes: 50));
+      engine.hub
+        ..update(duration: hour)
+        ..addError(
+          const PlaybackError(
+            kind: PlaybackErrorKind.network,
+            message: 'reset',
+            recoverable: true,
+          ),
+        );
+      await pumpEventQueue();
+      engine.hub.update(position: const Duration(minutes: 59));
+      await pumpEventQueue();
+      await session.prepareExit();
 
-    expect(progressGateway.uploads, isEmpty);
-  });
+      expect(progressGateway.uploads, isEmpty);
+    },
+  );
 
   test('non-positive start position opens from the beginning', () async {
     await session.load(movie, startAt: Duration.zero);
@@ -186,16 +210,19 @@ void main() {
     expect(session.lastStartup!.firstFrame, isNull);
   });
 
-  test('startup without a start position waits for playback progress', () async {
-    await session.load(movie);
-    engine.hub.update(playing: true);
-    await pumpEventQueue();
-    expect(session.lastStartup, isNull);
+  test(
+    'startup without a start position waits for playback progress',
+    () async {
+      await session.load(movie);
+      engine.hub.update(playing: true);
+      await pumpEventQueue();
+      expect(session.lastStartup, isNull);
 
-    engine.hub.update(position: const Duration(milliseconds: 500));
-    await pumpEventQueue();
-    expect(session.lastStartup!.target, isNull);
-  });
+      engine.hub.update(position: const Duration(milliseconds: 500));
+      await pumpEventQueue();
+      expect(session.lastStartup!.target, isNull);
+    },
+  );
 
   test('failed load does not report startup', () async {
     engine.openError = Exception('boom');
@@ -203,6 +230,60 @@ void main() {
     engine.hub.update(playing: true, position: const Duration(seconds: 5));
     await pumpEventQueue();
     expect(session.lastStartup, isNull);
+  });
+
+  group('source observer', () {
+    late _RecordingObserver observer;
+
+    setUp(() {
+      observer = _RecordingObserver();
+      resolver.result = ResolvedPlayback(
+        const PlaybackSource.network('http://127.0.0.1:1/t/e/r1'),
+        observer: observer,
+      );
+    });
+
+    test(
+      'hears opening before the engine opens and the first frame once',
+      () async {
+        resolver.gate = Completer<void>();
+        final loading = session.load(
+          movie,
+          startAt: const Duration(seconds: 90),
+        );
+        await pumpEventQueue();
+        expect(observer.events, isEmpty);
+        resolver.gate!.complete();
+        await loading;
+        expect(observer.events, ['opening 90']);
+        expect(engine.calls.first, 'open http://127.0.0.1:1/t/e/r1 @90');
+
+        engine.hub.update(firstFrameRendered: true);
+        await pumpEventQueue();
+        engine.hub
+          ..update(firstFrameRendered: false)
+          ..update(firstFrameRendered: true);
+        await pumpEventQueue();
+        expect(observer.events, ['opening 90', 'firstFrame']);
+      },
+    );
+
+    test('hears user seeks and throttled progress', () async {
+      await session.load(movie);
+      engine.hub.update(duration: hour, position: const Duration(seconds: 10));
+      await pumpEventQueue();
+      engine.hub.update(position: const Duration(seconds: 11));
+      await pumpEventQueue();
+      await session.seek(const Duration(minutes: 5));
+      await session.prepareExit();
+
+      expect(observer.events, [
+        'opening null',
+        'progress 10/3600',
+        'seek 300',
+        'progress 300/3600',
+      ]);
+    });
   });
 
   test('user rate overrides default rate on next load', () async {

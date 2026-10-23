@@ -1,6 +1,6 @@
 # 播放缓存任务文档（续播秒开）
 
-> 状态：**Stage 0、0.4、1、3 完成；Stage 2 模拟器部分通过，等待用户真机验证（2.3）；下一步 Stage 4（代理接入缓存）**
+> 状态：**Stage 0、0.4、1、3、4 完成（iOS 模拟器）；Stage 2.3 / 4.7 等待用户真机验证；下一步 Stage 5（设置与存储管理 UI，完成后缓存才默认开启）**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/playback/`（新增 `cache/`）、`client/packages/native_player/`、`client/lib/screens/settings/`、iOS / macOS 工程配置
 >
@@ -181,20 +181,38 @@ final class CacheEntryKey {
   String get id;                   // sha1，用作目录名和代理路径
 }
 
-abstract interface class PlaybackCache {
-  Future<void> start();                                    // 幂等；启动代理隔离区
-  bool get enabled;                                        // 配额为 0 时关闭，直接返回上游地址
-  Future<Uri> proxyUri(CacheEntryKey key, UpstreamResolver upstream);
-  Future<CachedEntryInfo?> lookup(CacheEntryKey key);      // Stage 6：命中判断，返回大小、filePath、storageId
-  void reportPlayback(CacheEntryKey key, Duration position, Duration duration);  // 用于记录续播点
-  Future<CacheUsage> usage();
-  Future<void> setQuota(int bytes);
-  Future<void> clear();
+// 门面（Stage 4 实现，主隔离区）
+class PlaybackProxy {
+  PlaybackProxy({bool watchLifecycle, Future<Directory?> Function()? cacheDirectory,
+                 int? quotaBytes /* 默认 D2 */, Future<int?> Function()? freeSpace, int blockSize});
+  Future<Uri> register(Uri upstream, Map<String, String> headers,
+                       {String? cacheId /* 为空时只透传 */, UpstreamRefresher? refresh});
+  Future<void> unregister(Uri proxyUri);
+  void opening(Uri proxyUri, Duration? startAt);           // 以下四个由会话经 PlaybackSourceObserver 调用，不等回复
+  void opened(Uri proxyUri);
+  void seek(Uri proxyUri, Duration position);
+  void progress(Uri proxyUri, Duration position, Duration duration);
+  Future<void> setQuota(int bytes);                        // 0 = 只透传
+  Future<Map<String, int>> usage();                        // bytes / entries / limit
+  Future<void> clearCache();
+  Future<void> flush();
+  Future<bool> ensureListening();
+  Future<Map<String, int>> stats();
 }
 
-typedef UpstreamResolver = Future<UpstreamSource> Function({required bool forceRefresh});
-final class UpstreamSource { final Uri url; final Map<String, String> headers; }
+typedef UpstreamRefresher = Future<({Uri url, Map<String, String> headers})?> Function();
+
+// 会话层（playback_source_resolver.dart）：ResolvedPlayback.observer
+abstract interface class PlaybackSourceObserver {
+  void onOpening(Duration? startAt);
+  void onFirstFrame();
+  void onSeek(Duration position);                          // 用户 seek
+  void onProgress(Duration position, Duration duration);   // 每 5 秒一次；退出、切换剧集时强制一次
+}
 ```
+
+- `ProxiedSourceResolver` 用“服务器 + 媒体 + 文件路径”生成 `cacheId`；每次登记都分配独立的代理条目 id（`r<n>`），与缓存键分开，两个会话先后打开同一部片子时不会互相注销。
+- Stage 6 的 `lookup`（命中时跳过上游解析）尚未实现。
 
 - 代理隔离区不能直接调用 Riverpod / Dio 闭包：需要上游地址时，通过 SendPort 发消息给主隔离区，由主隔离区调用 `UpstreamResolver` 后回复。
 - 代理地址格式：`http://127.0.0.1:<port>/<launchToken>/e/<entryId>`。`launchToken` 是每次启动随机生成的，防止本机其他 App 借代理读取需要鉴权的内容。
@@ -247,10 +265,15 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 ### 4.6 代理行为
 
 - 支持 `GET` / `HEAD`、单段 `Range`（`bytes=a-`、`bytes=a-b`）；多段 Range 返回 416（目前三种内核都不发多段 Range）。
-- 响应时，已缓存的块直接读盘返回，遇到缺失块就从这个偏移向上游发 Range 请求，边转发边写入，直到连接断开或遇到下一段已缓存区间（遇到后切回读盘）。
-- 同一条目可以有多路并发连接（Aether 的独立 reader、拖动预览）。各连接各自拉取上游；块写入加锁，重复下载可以接受。
-- 上游返回 401 / 403 / 410 或连接失败：用 `forceRefresh: true` 重新解析一次上游地址再重试；仍然失败就返回 502，交给内核走现有的网络错误映射。
-- 没有缓存配额时完全透传（只转发不写盘），行为与直连一致。
+- **还不知道文件大小（第一次访问）**：按播放器的原始 Range 请求上游，转发上游的状态码和响应头，拿到大小后建立条目，边转发边写入。
+- **已知大小**：按条目大小解析 Range 并回 206 / 200（响应头来自元数据，不访问上游，所以断网时 HEAD 和已缓存区间都能用）。响应体按顺序拼接：已缓存的部分读盘；每遇到一个缺口，就对这个缺口单独向上游发一次闭区间 Range 请求，边转发边写入。上游必须回 206 且起点一致，否则本次响应提前结束。
+- **文件变化**：回源时如果上游的大小或 ETag 和元数据不一致，作废整条缓存，本次响应提前结束，播放器重试时按新条目处理。
+- 同一条目可以有多路并发连接（Aether 的独立 reader、拖动预览），各自回源；每个连接 `acquire` 条目，使用中不会被淘汰。
+- **上游出错**：401 / 403 / 410 时请主隔离区刷新一次地址（重新走解析器）；403 / 429 退避重试（500ms 起，最多 3 次）；连接失败退避重试。拿不到可用响应时返回 502；响应头已发出时提前结束连接，交给内核走现有的网络错误映射。
+- **固定区间和采样**：
+  - 会话通知“开始打开”后，打开阶段（到首帧为止，最长 15 秒，所以没有首帧事件的 mpv 也会结束）实际交付的字节区间，只要落在文件首尾各 64MiB 内，就记为固定区间。
+  - 起播位置和用户 seek 的位置，与下一次落在首尾 64MiB 之外的读取起点配对，记为采样。
+- **配额**：配额为 0 时完全透传。实际上限为 0（剩余空间不足）时照常读取已缓存的部分，但不再写入。回源结束后最多每秒检查一次淘汰。
 
 ---
 
@@ -436,6 +459,7 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 4. 续播一部 HEVC 片子：开头是否还会先闪一下 0 秒的画面（Stage 1.7）；日志里 `PlaybackSession startup ... firstFrame=` 的数值。
 5. 暂停后切到后台超过 15 秒再回来，继续播放是否正常；退出后看 `stats` 里的 `rebinds`（大于 0 说明系统回收过监听 socket，重新绑定生效）。
 6. 拖动进度条到未播放过的位置，以及切换剧集，各试几次。
+7. （Stage 4 起，同一个构建已经带缓存）同一部片子播放一会儿退出，再从“继续观看”进入：日志里第二次的 `PlaybackSession startup ... firstFrame=` 应该明显小于第一次，退出后的 `PlaybackProxy stats` 里 `cacheBytes` 增加。可以开飞行模式再进一次，看已缓存的部分能否播放。
 
 ### Stage 3：缓存存储（纯 Dart）
 
@@ -467,13 +491,37 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 
 **前置**：Stage 1、3。
 
-- [ ] 4.1 `cache_proxy_server`：§4.6 的全部行为；隔离区间的上游解析协议；`launchToken`。
-- [ ] 4.2 `PlaybackCache` 门面和 Provider；App 启动时延迟启动代理（第一次播放网络片源时再启动）。
-- [ ] 4.3 `PlaybackSourceResolver`：网络片源产出代理地址，上游解析逻辑抽成 `UpstreamResolver`；本地文件和缓存关闭时保持原样。
-- [ ] 4.4 会话层：打开阶段通知缓存记录 `pinnedRanges`（`open` 到第一帧之间）；定期把播放位置报给 `reportPlayback`。
-- [ ] 4.5 iOS 前后台：同端口重新绑定和自检（§5.2）。
-- [ ] 4.6 iOS 集成测试：同一样片第二次续播时命中缓存（代理统计显示上游字节数接近 0）；拖动到未缓存区间正常；回看不走网络；断网时已缓存区间可以播放，未缓存区间按现有网络错误处理。
-- [ ] 4.7 真机验证（用户手动）：按 §8 的验收清单执行。
+- [x] 4.1 `cache_proxy_server`：§4.6 的全部行为；隔离区间的上游解析协议（`refresh` 事件）；`launchToken`。
+- [x] 4.2 门面沿用 `PlaybackProxy`（不另建 `PlaybackCache` 和 Provider）：第一次登记网络片源时才启动代理隔离区，缓存目录为 `getApplicationCacheDirectory()/playback_cache`。**设置界面完成前（Stage 5），仍然只在 `PLAYBACK_PROXY=true` 构建时启用**，正式构建不经过代理、不写缓存。
+- [x] 4.3 解析器：`ProxiedSourceResolver` 产出代理地址，`refresh` 回调重新走内层解析器；本地文件、没有服务器地址时（只透传）保持原样。
+- [x] 4.4 会话层：`PlaybackSourceObserver`（开始打开 / 首帧 / 用户 seek / 每 5 秒的进度）。
+- [x] 4.5 iOS 前后台：同端口重新绑定和自检（§5.2，Stage 2 已实现并验证）；进入后台时额外保存缓存元数据。
+- [x] 4.6 iOS 集成测试：同一样片第二次续播时命中缓存；拖动到未缓存区间正常；源站关闭后已缓存区间可以播放（见下方结论）。
+- [ ] 4.7 真机验证（用户手动）：按 §8 的验收清单执行；步骤见 Stage 2 的真机验证清单第 7 步。
+
+#### Stage 4 结论（2026-10-23，iPhone 17 Pro Max 模拟器）
+
+`playback_cache_native_test`：测试源站每个请求延迟 300ms、单连接 6MiB/s、经过 302、需要鉴权头；流地址 API 没有加延迟，所以 resolve 只包含一次 HEAD（约 300ms）。样片同 Stage 0。
+
+| 封装 | 轮次 | resolve | firstFrame | 启动期间从源站拉取 |
+|---|---|---|---|---|
+| MKV | 冷启动，续播 400 秒 | 366ms | 1728ms | 7.9MiB |
+| MKV | 热启动，续播 404 秒（命中缓存） | 317ms | **393ms** | 2.9MiB |
+| MKV | 源站已关闭，续播 405 秒 | 6ms | **79ms** | 0 |
+| MP4 | 冷启动 | 373ms | 2787ms | 9.7MiB |
+| MP4 | 热启动 | 309ms | **406ms** | 2.8MiB |
+| MP4 | 源站已关闭 | 7ms | **107ms** | 0 |
+
+1. **命中缓存后，首帧只比 resolve 晚 50–100ms**，和 `lan` 场景（约 100–150ms）同一量级。剩下的大头是 resolve（API + 302 解析），由 Stage 6 去掉；去掉后预计能达到 §8 的目标（≤ `lan` + 200ms）。
+2. **MP4 的第一次播放也变快了**：Aether 打开时会把同一组请求发两遍，第二遍直接命中第一遍写入的缓存。冷启动时已经有 6.1MiB 是从磁盘读的，首帧从直连的约 4.9 秒降到 2.8 秒。
+3. 热启动时仍会从源站拉约 2.9MiB：冷启动那次，Aether 读开头 32MiB 读到一部分就取消了，没缓存到的部分在热启动时补回源。但这些回源发生在首帧之后，不影响首帧。
+4. seek 到未缓存的 100 秒正常；源站关闭后，从缓存续播成功，HEAD 也由缓存回答。
+5. 回归：Stage 2 的透传功能测试（含后台 20 秒再回来）重新跑过，通过。
+
+**单测**：
+- 缓存代理 10 项：二次读取不回源、部分命中时只回源缺口、开区间和后缀 Range、源站关闭后读缓存、文件变化作废、401 时刷新地址、配额调小后淘汰和清空、配额为 0 时透传、播放器断开时保留已写满的块、打开阶段只固定首尾并记录采样；
+- 会话观察者 2 项。
+全量 165 项通过，`flutter analyze` 无问题。
 
 ### Stage 5：设置与存储管理 UI
 
@@ -557,6 +605,7 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 | 2026-10-22 | Stage 1 起播位置交给内核 | 完成，待真机确认 | 见 §6 Stage 1 结论。单测：会话新增 3 项（打开时带起播位置、起播位置防止网络错误后的异常片尾进度、非正数从头播放；反向验证：去掉 `markControlledSeek` 后用例失败），原生引擎新增 1 项（毫秒数透传），全量 108 项通过；`flutter analyze` 无问题；Android `:native_player:compileDebugKotlin` 通过；iOS 模拟器 `playback_session_native_test` 通过。测试源站新增 `timeline`（每个请求的开始 / 结束时间和已发送字节数），基准新增 `BENCH_SCENARIO` 过滤和 `NP_BENCH_TIMELINE` 输出。~~另一个发现：Aether 两次打开时各发出的 `bytes=0-33554431` 请求会一直下载~~（**已被 Stage 2 更正**：是测试源站的假象，见 §6 Stage 2 结论第 3 条） |
 | 2026-10-22 | Stage 0.4 首帧指标 | 完成 | 见 §6 Stage 0.4。单测新增 4 项（hub 重置首帧标志、原生事件映射、会话记录首帧、上一集的首帧不计入；反向验证：去掉 `markResolved` 前提后用例失败），全量 111 项通过；`flutter analyze` 无问题；Android Kotlin 编译通过；iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。基准第一次跑 MP4 时测试 App 连不上调试连接（`The log reader failed unexpectedly`，当时 Claude 应用的模拟器面板也在监听这台模拟器），重跑通过 |
 | 2026-10-22 | Stage 2 iOS 代理 Spike（模拟器） | 通过，待真机 | 见 §6 Stage 2 结论。iOS Info.plist 加了 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`（正式构建也生效；它同时放开了对局域网 IP 的 http 访问，iOS 17 起默认会拦截）。单测：代理 10 项（Range / HEAD / 鉴权头 / 重定向保留头 / 未知条目 / 并发 / 播放器断开时取消上游 / 同端口重新绑定 / 解析器装饰器），测试源站 9 项。iOS 模拟器：代理功能测试（含前后台切换）通过；直连 / 代理基准各 2 组。更正了 Stage 1 关于开头请求的结论 |
+| 2026-10-23 | Stage 4 代理接入缓存 | 完成（模拟器），待真机 | 见 §6 Stage 4 结论。代理隔离区持有 `CacheStore`：命中读盘、按缺口回源并写入、文件变化作废、401 / 403 / 410 时刷新地址、403 / 429 退避、打开阶段固定首尾、采样、配额淘汰。会话层新增 `PlaybackSourceObserver`。仍然只在 `PLAYBACK_PROXY=true` 时启用 |
 | 2026-10-23 | Stage 3 缓存存储 | 完成 | 见 §6 Stage 3 结论；§4.4 改为每块一个文件 + 块内有效区间，取消 `index.json`，默认块大小 4MiB。全量单测 153 项通过，`flutter analyze` 无问题 |
 | 2026-10-23 | 决策 D1 / D2 / D7 | 完成 | D1 = C（两级淘汰）；D2 = 移动端 2GB、桌面端 10GB，默认开启；D7 = B（核心重写，从分支移植 UI、缓存键规则和 403 / 429 重试） |
 | 2026-10-22 | 任务文档 | 完成 | 本文；补充 iOS 约束：iOS 17+ ATS 默认拦截 IP 地址，需要 `NSAllowsLocalNetworking`；回前台时 Aether 用原 URL 重建，代理必须在同一端口恢复；macOS Release 版缺少 `network.server` 权限 |

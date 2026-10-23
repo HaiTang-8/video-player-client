@@ -8,14 +8,32 @@ import '../domain/playback_domain.dart';
 import 'playback_gateways.dart';
 import 'playback_item.dart';
 
+/// 片源一侧关心的播放事件（例如本机缓存代理据此记录封装头和续播点），由会话在对应时机调用
+abstract interface class PlaybackSourceObserver {
+  void onOpening(Duration? startAt);
+
+  void onFirstFrame();
+
+  /// 用户发起的 seek
+  void onSeek(Duration position);
+
+  void onProgress(Duration position, Duration duration);
+}
+
 class ResolvedPlayback {
   final PlaybackSource source;
   final int? storageId;
 
   /// 文件在存储源中的路径，用于媒体信息展示和查找外挂字幕
   final String? filePath;
+  final PlaybackSourceObserver? observer;
 
-  const ResolvedPlayback(this.source, {this.storageId, this.filePath});
+  const ResolvedPlayback(
+    this.source, {
+    this.storageId,
+    this.filePath,
+    this.observer,
+  });
 }
 
 class PlaybackSourceUnavailable implements Exception {
