@@ -874,6 +874,9 @@ abstract class NativePlayerEventsApi {
 
   void onDuration(int playerId, int durationMs);
 
+  /// 不用再取数据就能播到的位置，与 onPosition 同一时间轴
+  void onBufferedPosition(int playerId, int bufferedMs);
+
   void onPlaying(int playerId, bool playing);
 
   void onBuffering(int playerId, bool buffering);
@@ -954,6 +957,32 @@ abstract class NativePlayerEventsApi {
           final int arg_durationMs = args[1]! as int;
           try {
             api.onDuration(arg_playerId, arg_durationMs);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBufferedPosition$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_playerId = args[0]! as int;
+          final int arg_bufferedMs = args[1]! as int;
+          try {
+            api.onBufferedPosition(arg_playerId, arg_bufferedMs);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

@@ -258,7 +258,8 @@ class PlaybackError {
   final bool fallbackSuggested;      // 当前内核放不了，会话换下一个候选内核
 }
 
-class PlaybackSnapshot { position, duration, playing, buffering, completed, firstFrameRendered, videoViewAttached, rate, volume, tracks, selectedTracks, videoInfo }
+class PlaybackSnapshot { position, duration, bufferedPosition, playing, buffering, completed, firstFrameRendered, videoViewAttached, rate, volume, tracks, selectedTracks, videoInfo }
+// bufferedPosition：不用再取数据就能播到的位置（与 position 同一时间轴），resetForNewMedia 时清零；进度条据此画缓冲段
 // firstFrameRendered：本次 open 后第一帧已上屏（原生首帧 + 画面视图已创建），内核不支持时始终为 false
 // videoViewAttached：原生画面视图（PlatformView）已挂载，NativeVideoView 的 onCreated / onDisposed 驱动
 class PlaybackStreams  { 上述各项对应的 Stream，另加 Stream<PlaybackError> errors }
@@ -372,6 +373,7 @@ abstract class NativePlayerHostApi {
 abstract class NativePlayerEventsApi {                // 每类事件一个方法，均带 playerId
   void onPosition(int playerId, int positionMs);
   void onDuration(int playerId, int durationMs);
+  void onBufferedPosition(int playerId, int bufferedMs); // Aether 250ms 节流、Media3 每 500ms，值变化才上报
   void onPlaying(int playerId, bool playing);
   void onBuffering(int playerId, bool buffering);
   void onCompleted(int playerId, bool completed);
@@ -754,6 +756,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-23 | 播放缓存 Stage 6：命中缓存时延迟解析上游（另一份任务） | 完成（模拟器），待真机 | 命中缓存时会话的 `resolve` 不再等流地址 API 和 302，直接拿到本机代理地址（字幕、媒体信息用缓存里记下的 `filePath` / `storageId`），上游在后台解析；`player_screen` 额外传入 `findDownloadedFile`，保证已下载文件优先。会话层和内核没有改动；详见 `doc/playback_cache_plan.md` Stage 6 |
 | 2026-10-23 | 修复：打开视频先出声后出画面 | 完成（模拟器），待真机 | 用户反馈打开缓存过的视频开头黑屏但有声音。原因：会话以 `autoPlay = true` 打开，页面在 Ready 之后才创建画面视图（UiKitView），命中缓存时缓冲瞬间完成，声音在视图显示前就出来了。修复：`EngineCapabilities.reportsVideoView` 的内核（Aether / Media3）先暂停打开，`PlaybackSnapshot.videoViewAttached` 变为 true 后再 `play()`，2 秒内视图没挂载则照常播放并打警告日志；用户在等待期间操作过播放 / 暂停时不再自动开始；mpv 仍然自动播放。最初按方案“等首帧再播放”实现，但 Aether 软件路径在 `autoplay=false` 加载时不会先出首帧，只能等到超时，改为等视图挂载。`firstFrameRendered` 改为“原生首帧 + 视图已创建”；`startup` 日志新增 `view=`。iOS 模拟器：命中缓存 view 48ms → playing 49ms → firstFrame 88ms，开始播放都在视图挂载之后 |
 | 2026-10-23 | 播放缓存 Stage 8：全平台开启（另一份任务） | 完成（iOS 模拟器），其他平台待用户验证 | `PlaybackCacheConfig.supported` 改为 `!kIsWeb`，Android（Media3 / mpv）、macOS（Aether）、Windows（mpv）默认经过本机缓存代理，去掉 `PLAYBACK_PROXY` 开关。**macOS Info.plist 新增 `NSAllowsLocalNetworking`**（与 iOS 相同），macOS 存储通道补 `getAvailableSpace`。内核和会话层没有改动；mpv 仍没有首帧事件（缓存打开阶段按 15 秒超时结束）。缓存上限改为滑块。详见 `doc/playback_cache_plan.md` Stage 8 |
+| 2026-10-23 | 进度条显示缓冲进度 | 完成（iOS 模拟器），其他平台待用户验证 | 契约变化：`PlaybackSnapshot` / `PlaybackStreams` 增加 `bufferedPosition`（`resetForNewMedia` 时清零），Pigeon 事件增加 `onBufferedPosition`（已重新生成三端代码；`NativePlayerEventDispatcher` 和集成测试的事件记录器同步实现）。Aether 订阅 `clock.bufferedPosition`（AVPlayer 路径 = 已取到的部分 + Aether 磁盘分片缓存；软件路径 = 已解出的最新时间点，模拟器上只领先约 0.2 秒），Media3 用 `bufferedPosition`（独立定时器，暂停时也更新），mpv 用 media_kit 的 `stream.buffer`。进度条用 `Slider.secondaryTrackValue` 画缓冲段（`white70`，已播放白色、未缓冲 `white38` 不变）。iOS 模拟器 `native_player_channel_test` 新增“缓冲位置领先播放位置”并通过；界面用假引擎截图确认 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---

@@ -72,6 +72,26 @@ void main() {
     expect(frames, [true, false, true]);
   });
 
+  test('buffered position is kept per media', () async {
+    final hub = PlaybackStateHub();
+    final buffered = <Duration>[];
+    hub.streams.bufferedPosition.listen(buffered.add);
+
+    hub
+      ..update(bufferedPosition: const Duration(seconds: 30))
+      ..update(bufferedPosition: const Duration(seconds: 30))
+      ..resetForNewMedia();
+    expect(hub.state.bufferedPosition, Duration.zero);
+    hub.update(bufferedPosition: const Duration(seconds: 30));
+    await pumpEventQueue();
+
+    expect(buffered, [
+      const Duration(seconds: 30),
+      Duration.zero,
+      const Duration(seconds: 30),
+    ]);
+  });
+
   test('stops emitting after close', () async {
     final hub = PlaybackStateHub();
     var done = false;

@@ -37,6 +37,10 @@ class NativePlayerEventDispatcher
       _listeners[playerId]?.onDuration(playerId, durationMs);
 
   @override
+  void onBufferedPosition(int playerId, int bufferedMs) =>
+      _listeners[playerId]?.onBufferedPosition(playerId, bufferedMs);
+
+  @override
   void onPlaying(int playerId, bool playing) =>
       _listeners[playerId]?.onPlaying(playerId, playing);
 

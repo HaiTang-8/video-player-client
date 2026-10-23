@@ -191,6 +191,7 @@ void main() {
     engine
       ..onDuration(7, 5400000)
       ..onPosition(7, 1500)
+      ..onBufferedPosition(7, 31500)
       ..onPlaying(7, true)
       ..onTracks(
         7,
@@ -217,6 +218,7 @@ void main() {
     expect(state.firstFrameRendered, isTrue);
     expect(state.duration, const Duration(minutes: 90));
     expect(state.position, const Duration(milliseconds: 1500));
+    expect(state.bufferedPosition, const Duration(milliseconds: 31500));
     expect(state.playing, isTrue);
     expect(state.tracks.subtitle.single.title, '简体');
     expect(state.selectedTracks.audio?.language, 'chi');

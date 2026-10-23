@@ -78,6 +78,18 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         handler.postDelayed(this, POSITION_INTERVAL_MS)
       }
     }
+  /** 暂停时也会继续缓冲，所以独立于 [positionTicker] 一直运行，值变化才上报 */
+  private val bufferedTicker =
+    object : Runnable {
+      override fun run() {
+        val buffered = player.bufferedPosition
+        if (buffered != lastBufferedMs) {
+          lastBufferedMs = buffered
+          events.bufferedPosition(buffered)
+        }
+        handler.postDelayed(this, BUFFERED_INTERVAL_MS)
+      }
+    }
   private val retryPrepare = Runnable { player.prepare() }
   private var mediaSourceFactory: DefaultMediaSourceFactory? = null
   private var view: NativeVideoView? = null
@@ -89,6 +101,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   private var aspectRatio = 0f
   private var playing = false
   private var lastDurationMs = C.TIME_UNSET
+  private var lastBufferedMs = -1L
   private var videoDecoder: String? = null
   private var audioDecoder: String? = null
   private var dynamicRange = NativeDynamicRange.UNKNOWN
@@ -155,6 +168,9 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     videoDecoder = null
     audioDecoder = null
     lastDurationMs = C.TIME_UNSET
+    lastBufferedMs = -1L
+    handler.removeCallbacks(bufferedTicker)
+    handler.post(bufferedTicker)
     clearSubtitleFiles()
     deactivateReshaping()
     val store =
@@ -388,6 +404,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
 
   fun dispose() {
     handler.removeCallbacks(positionTicker)
+    handler.removeCallbacks(bufferedTicker)
     handler.removeCallbacks(retryPrepare)
     view?.let { detach(it) }
     player.removeListener(this)
@@ -613,6 +630,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   private companion object {
     const val TAG = "NativePlayer"
     const val POSITION_INTERVAL_MS = 250L
+    const val BUFFERED_INTERVAL_MS = 500L
     const val MIN_RATE = 0.25
     const val MAX_RATE = 3.0
     const val MAX_NETWORK_RETRIES = 3

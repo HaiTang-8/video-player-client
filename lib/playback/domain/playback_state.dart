@@ -6,6 +6,9 @@ import 'video_info.dart';
 class PlaybackSnapshot {
   final Duration position;
   final Duration duration;
+
+  /// 不用再取数据就能播到的位置；内核不支持时为 0
+  final Duration bufferedPosition;
   final bool playing;
   final bool buffering;
   final bool completed;
@@ -24,6 +27,7 @@ class PlaybackSnapshot {
   const PlaybackSnapshot({
     this.position = Duration.zero,
     this.duration = Duration.zero,
+    this.bufferedPosition = Duration.zero,
     this.playing = false,
     this.buffering = false,
     this.completed = false,
@@ -40,6 +44,7 @@ class PlaybackSnapshot {
 class PlaybackStreams {
   final Stream<Duration> position;
   final Stream<Duration> duration;
+  final Stream<Duration> bufferedPosition;
   final Stream<bool> playing;
   final Stream<bool> buffering;
   final Stream<bool> completed;
@@ -55,6 +60,7 @@ class PlaybackStreams {
   const PlaybackStreams({
     required this.position,
     required this.duration,
+    required this.bufferedPosition,
     required this.playing,
     required this.buffering,
     required this.completed,

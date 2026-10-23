@@ -151,6 +151,9 @@ abstract class NativePlayerEventsApi {
 
   void onDuration(int playerId, int durationMs);
 
+  /// 不用再取数据就能播到的位置，与 onPosition 同一时间轴
+  void onBufferedPosition(int playerId, int bufferedMs);
+
   void onPlaying(int playerId, bool playing);
 
   void onBuffering(int playerId, bool buffering);

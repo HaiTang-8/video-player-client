@@ -184,6 +184,10 @@ class NativePlaybackEngine
       _hub.update(duration: Duration(milliseconds: durationMs));
 
   @override
+  void onBufferedPosition(int playerId, int bufferedMs) =>
+      _hub.update(bufferedPosition: Duration(milliseconds: bufferedMs));
+
+  @override
   void onPlaying(int playerId, bool playing) => _hub.update(playing: playing);
 
   @override

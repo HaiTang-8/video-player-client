@@ -189,6 +189,12 @@ final class AetherPlayerBackend: PlayerBackend {
         MainActor.assumeIsolated { self?.reportPosition(Self.milliseconds(time)) }
       }
       .store(in: &subscriptions)
+    engine.clock.$bufferedPosition
+      .throttle(for: .milliseconds(250), scheduler: DispatchQueue.main, latest: true)
+      .map { Self.milliseconds($0) }
+      .removeDuplicates()
+      .sink { [events] in events.bufferedPosition(ms: $0) }
+      .store(in: &subscriptions)
     engine.$hasFirstFrameReadyForDisplay
       .removeDuplicates()
       .filter { $0 }

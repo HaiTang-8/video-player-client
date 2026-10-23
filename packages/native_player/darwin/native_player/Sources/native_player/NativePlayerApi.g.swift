@@ -886,6 +886,8 @@ class NativePlayerHostApiSetup {
 protocol NativePlayerEventsApiProtocol {
   func onPosition(playerId playerIdArg: Int64, positionMs positionMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onDuration(playerId playerIdArg: Int64, durationMs durationMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// 不用再取数据就能播到的位置，与 onPosition 同一时间轴
+  func onBufferedPosition(playerId playerIdArg: Int64, bufferedMs bufferedMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPlaying(playerId playerIdArg: Int64, playing playingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onBuffering(playerId playerIdArg: Int64, buffering bufferingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCompleted(playerId playerIdArg: Int64, completed completedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -931,6 +933,25 @@ class NativePlayerEventsApi: NativePlayerEventsApiProtocol {
     let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onDuration\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([playerIdArg, durationMsArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// 不用再取数据就能播到的位置，与 onPosition 同一时间轴
+  func onBufferedPosition(playerId playerIdArg: Int64, bufferedMs bufferedMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBufferedPosition\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([playerIdArg, bufferedMsArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

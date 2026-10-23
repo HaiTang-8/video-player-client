@@ -131,6 +131,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   double _panAccumulatedDy = 0;
 
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
+  final ValueNotifier<Duration> _buffered = ValueNotifier(Duration.zero);
   Duration _duration = Duration.zero;
   Duration _lastTrustedPosition = Duration.zero;
   int _seekRequestVersion = 0;
@@ -241,6 +242,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     final state = widget.engine.state;
     _position.value = state.position;
     _lastTrustedPosition = state.position;
+    _buffered.value = state.bufferedPosition;
     _duration = state.duration;
     _playing = state.playing;
     _buffering = state.buffering;
@@ -275,6 +277,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           _lastTrustedPosition = p;
         }
         if (seekReached) setState(_clearManualSeekPending);
+      }),
+    );
+    _subscriptions.add(
+      streams.bufferedPosition.listen((b) {
+        if (mounted) _buffered.value = b;
       }),
     );
     _subscriptions.add(
@@ -388,6 +395,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     WidgetsBinding.instance.removeObserver(this);
     _notchOnRight.dispose();
     _position.dispose();
+    _buffered.dispose();
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
@@ -1354,14 +1362,21 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       left: horizontalPadding + padding.left,
       right: horizontalPadding + padding.right,
       bottom: _isLocked ? (padding.bottom + 16) : (56 + bottomPadding),
-      child: ValueListenableBuilder<Duration>(
-        valueListenable: _position,
-        builder: (context, position, _) => _buildProgressRow(position),
+      child: ListenableBuilder(
+        listenable: Listenable.merge([_position, _buffered]),
+        builder: (context, _) => _buildProgressRow(_position.value),
       ),
     );
   }
 
   Widget _buildProgressRow(Duration position) {
+    final total = _duration.inMilliseconds;
+    final played =
+        total > 0 ? (position.inMilliseconds / total).clamp(0.0, 1.0) : 0.0;
+    final buffered =
+        total > 0
+            ? (_buffered.value.inMilliseconds / total).clamp(played, 1.0)
+            : played;
     return Row(
       children: [
         Text(
@@ -1385,11 +1400,8 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
               ),
               child: Slider(
-                value:
-                    _duration.inMilliseconds > 0
-                        ? (position.inMilliseconds / _duration.inMilliseconds)
-                            .clamp(0.0, 1.0)
-                        : 0,
+                value: played,
+                secondaryTrackValue: buffered,
                 onChangeStart: (_) {
                   _dragging = true;
                   _hideTimer?.cancel();
@@ -1407,6 +1419,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   unawaited(_commitSeek(target, restartHideTimer: true));
                 },
                 activeColor: Colors.white,
+                secondaryActiveColor: Colors.white70,
                 inactiveColor: Colors.white38,
               ),
             ),

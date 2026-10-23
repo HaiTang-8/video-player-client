@@ -32,6 +32,8 @@ class _Events implements NativePlayerEventsApi {
   @override
   void onDuration(int playerId, int durationMs) {}
   @override
+  void onBufferedPosition(int playerId, int bufferedMs) {}
+  @override
   void onPlaying(int playerId, bool playing) => this.playing = playing;
   @override
   void onBuffering(int playerId, bool buffering) {}

@@ -158,6 +158,7 @@ abstract class MpvEngineBase
     _subscriptions
       ..add(s.position.listen((v) => _hub.update(position: v)))
       ..add(s.duration.listen((v) => _hub.update(duration: v)))
+      ..add(s.buffer.listen((v) => _hub.update(bufferedPosition: v)))
       ..add(s.playing.listen((v) => _hub.update(playing: v)))
       ..add(s.buffering.listen((v) => _hub.update(buffering: v)))
       ..add(s.completed.listen((v) => _hub.update(completed: v)))

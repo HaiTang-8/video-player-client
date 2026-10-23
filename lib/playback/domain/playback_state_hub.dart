@@ -9,6 +9,7 @@ import 'video_info.dart';
 class PlaybackStateHub {
   final _position = StreamController<Duration>.broadcast();
   final _duration = StreamController<Duration>.broadcast();
+  final _bufferedPosition = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();
   final _completed = StreamController<bool>.broadcast();
@@ -27,6 +28,7 @@ class PlaybackStateHub {
   late final PlaybackStreams streams = PlaybackStreams(
     position: _position.stream,
     duration: _duration.stream,
+    bufferedPosition: _bufferedPosition.stream,
     playing: _playing.stream,
     buffering: _buffering.stream,
     completed: _completed.stream,
@@ -45,6 +47,7 @@ class PlaybackStateHub {
   void update({
     Duration? position,
     Duration? duration,
+    Duration? bufferedPosition,
     bool? playing,
     bool? buffering,
     bool? completed,
@@ -61,6 +64,11 @@ class PlaybackStateHub {
     _state = PlaybackSnapshot(
       position: _apply(position, s.position, _position),
       duration: _apply(duration, s.duration, _duration),
+      bufferedPosition: _apply(
+        bufferedPosition,
+        s.bufferedPosition,
+        _bufferedPosition,
+      ),
       playing: _apply(playing, s.playing, _playing),
       buffering: _apply(buffering, s.buffering, _buffering),
       completed: _apply(completed, s.completed, _completed),
@@ -87,6 +95,7 @@ class PlaybackStateHub {
   void resetForNewMedia() => update(
     position: Duration.zero,
     duration: Duration.zero,
+    bufferedPosition: Duration.zero,
     completed: false,
     firstFrameRendered: false,
     tracks: const MediaTracks(),
@@ -103,6 +112,7 @@ class PlaybackStateHub {
     await Future.wait([
       _position.close(),
       _duration.close(),
+      _bufferedPosition.close(),
       _playing.close(),
       _buffering.close(),
       _completed.close(),

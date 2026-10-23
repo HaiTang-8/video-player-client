@@ -27,6 +27,7 @@ const _hold = bool.fromEnvironment('NATIVE_PLAYER_HOLD');
 class _Recorder implements NativePlayerEventsApi {
   int durationMs = 0;
   int positionMs = 0;
+  int bufferedMs = 0;
   bool playing = false;
   double? rate;
   double? volume;
@@ -40,6 +41,9 @@ class _Recorder implements NativePlayerEventsApi {
   void onPosition(int playerId, int positionMs) => this.positionMs = positionMs;
   @override
   void onDuration(int playerId, int durationMs) => this.durationMs = durationMs;
+  @override
+  void onBufferedPosition(int playerId, int bufferedMs) =>
+      this.bufferedMs = bufferedMs;
   @override
   void onPlaying(int playerId, bool playing) => this.playing = playing;
   @override
@@ -211,6 +215,11 @@ void main() {
     await _waitFor(tester, () => recorder.playing, 'playing');
     await _waitFor(tester, () => recorder.firstFrames > 0, 'first frame');
     await _waitFor(tester, () => recorder.positionMs > 500, 'position');
+    await _waitFor(
+      tester,
+      () => recorder.bufferedMs > recorder.positionMs,
+      'buffered ahead of position',
+    );
     await _waitFor(
       tester,
       () => recorder.videoInfo?.dynamicRange == NativeDynamicRange.hdr10,

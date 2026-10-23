@@ -12,6 +12,9 @@ final class PlayerEventSink {
 
   func position(ms: Int64) { api.onPosition(playerId: playerId, positionMs: ms) { _ in } }
   func duration(ms: Int64) { api.onDuration(playerId: playerId, durationMs: ms) { _ in } }
+  func bufferedPosition(ms: Int64) {
+    api.onBufferedPosition(playerId: playerId, bufferedMs: ms) { _ in }
+  }
   func playing(_ value: Bool) { api.onPlaying(playerId: playerId, playing: value) { _ in } }
   func buffering(_ value: Bool) { api.onBuffering(playerId: playerId, buffering: value) { _ in } }
   func completed(_ value: Bool) { api.onCompleted(playerId: playerId, completed: value) { _ in } }

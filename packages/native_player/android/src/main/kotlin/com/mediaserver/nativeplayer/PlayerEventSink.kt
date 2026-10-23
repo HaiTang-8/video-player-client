@@ -6,6 +6,8 @@ class PlayerEventSink(private val playerId: Long, private val api: NativePlayerE
 
   fun duration(ms: Long) = api.onDuration(playerId, ms) {}
 
+  fun bufferedPosition(ms: Long) = api.onBufferedPosition(playerId, ms) {}
+
   fun playing(value: Boolean) = api.onPlaying(playerId, value) {}
 
   fun buffering(value: Boolean) = api.onBuffering(playerId, value) {}
