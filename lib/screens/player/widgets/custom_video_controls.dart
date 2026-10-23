@@ -18,7 +18,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart'
         ThemeData,
         showDropdown;
 import 'package:shadcn_flutter/shadcn_flutter.dart'
-    show LucideIcons, BootstrapIcons;
+    show LucideIcons;
 import '../../../core/widgets/dialog_utils.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
@@ -26,7 +26,9 @@ import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
 import '../../../playback/domain/playback_domain.dart';
 import 'media_info_rows.dart';
+import 'player_glyphs.dart';
 import 'player_top_bar.dart';
+import 'player_ui_metrics.dart';
 import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
 import 'subtitle_settings_panel.dart';
@@ -1368,7 +1370,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Widget _buildProgressBar() {
     final padding = MediaQuery.of(context).padding;
     final bottomPadding = WindowControls.isDesktop ? 0.0 : padding.bottom;
-    const horizontalPadding = 12.0;
+    const horizontalPadding = PlayerUiMetrics.edge;
     return Positioned(
       left: horizontalPadding + padding.left,
       right: horizontalPadding + padding.right,
@@ -1390,14 +1392,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             : played;
     return Row(
       children: [
-        Text(
-          _formatDuration(position),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(_formatDuration(position), style: _timeTextStyle),
         const SizedBox(width: 8),
         Expanded(
           child: IgnorePointer(
@@ -1406,9 +1401,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               data: SliderTheme.of(context).copyWith(
                 trackHeight: 3,
                 thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: _isLocked ? 0 : 6,
+                  enabledThumbRadius: _isLocked ? 0 : 8,
                 ),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
               ),
               child: Slider(
                 value: played,
@@ -1437,21 +1432,24 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          _formatDuration(_duration),
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
+        Text(_formatDuration(_duration), style: _timeTextStyle),
       ],
     );
   }
 
+  static const _timeTextStyle = TextStyle(
+    color: Colors.white,
+    fontSize: PlayerUiMetrics.timeSize,
+    fontWeight: FontWeight.w600,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
   Widget _buildBottomBar() {
     final padding = MediaQuery.of(context).padding;
-    const horizontalPadding = 12.0;
+    const horizontalPadding = PlayerUiMetrics.edge;
+    final isDesktop = WindowControls.isDesktop;
+    final hasPlaylist = widget.episodes != null && widget.episodes!.isNotEmpty;
+    final gap = SizedBox(width: isDesktop ? 0 : PlayerUiMetrics.toolSpacing);
     return Positioned(
       left: 0,
       right: 0,
@@ -1487,27 +1485,33 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   ],
                 ),
                 const Spacer(),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    _buildAudioTrackButton(),
-                    _buildSubtitleButton(),
-                    if (widget.episodes != null && widget.episodes!.isNotEmpty)
-                      _buildIconButton(
-                        LucideIcons.list,
-                        _showPlaylistMenu,
-                        isLast: !WindowControls.isDesktop,
-                        size: 30,
-                      ),
-                    if (WindowControls.isDesktop)
-                      _buildIconButton(
-                        widget.isFullscreen
-                            ? LucideIcons.minimize
-                            : LucideIcons.maximize,
-                        widget.onToggleFullscreen,
-                        isLast: true,
-                      ),
-                  ],
+                Transform.translate(
+                  offset: Offset(
+                    (PlayerUiMetrics.hit - PlayerUiMetrics.toolIcon) / 2,
+                    0,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _buildAudioTrackButton(),
+                      gap,
+                      _buildSubtitleButton(),
+                      if (hasPlaylist) ...[
+                        gap,
+                        _buildToolButton(
+                          PlayerGlyphType.playlist,
+                          _showPlaylistMenu,
+                        ),
+                      ],
+                      if (isDesktop)
+                        _buildToolButton(
+                          widget.isFullscreen
+                              ? PlayerGlyphType.fullscreenExit
+                              : PlayerGlyphType.fullscreenEnter,
+                          widget.onToggleFullscreen,
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1527,10 +1531,11 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           },
           child: Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Icon(
-              _volume == 0 ? LucideIcons.volumeX : LucideIcons.volume2,
-              color: Colors.white,
-              size: 22,
+            child: PlayerGlyph(
+              _volume == 0
+                  ? PlayerGlyphType.volumeMute
+                  : PlayerGlyphType.volume,
+              size: PlayerUiMetrics.toolIcon,
             ),
           ),
         ),
@@ -1559,19 +1564,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   }
 
   Widget _buildFillModeButton() {
-    final isDesktop = WindowControls.isDesktop;
-    return IconButton(
-      onPressed: () {
+    return _buildToolButton(
+      _isFillMode ? PlayerGlyphType.aspectFit : PlayerGlyphType.aspectFill,
+      () {
         setState(() => _isFillMode = !_isFillMode);
         _showControlsTemporarily();
       },
-      icon: Icon(
-        _isFillMode ? LucideIcons.minimize2 : LucideIcons.maximize2,
-        color: Colors.white,
-        size: 22,
-      ),
-      padding: EdgeInsets.zero,
-      constraints: BoxConstraints(minWidth: isDesktop ? 48 : 40),
     );
   }
 
@@ -1591,6 +1589,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     return Builder(
       builder:
           (menuContext) => GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: () {
               _hideTimer?.cancel();
               _showSpeedMenu(menuContext, speeds);
@@ -1600,13 +1599,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               child: Container(
                 constraints:
                     isDesktop ? const BoxConstraints(minWidth: 48) : null,
-                alignment: isDesktop ? Alignment.center : null,
+                height: PlayerUiMetrics.hit,
+                alignment: isDesktop ? Alignment.center : Alignment.centerLeft,
                 child: Text(
                   '${_playbackSpeed}x',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
+                    fontSize: PlayerUiMetrics.speedSize,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
@@ -1678,29 +1679,13 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  Widget _buildAudioTrackButton({bool isLast = false}) {
+  Widget _buildAudioTrackButton() {
     return Builder(
       builder:
-          (menuContext) => GestureDetector(
-            onTap: () {
-              _hideTimer?.cancel();
-              _showAudioTrackMenu(menuContext);
-            },
-            child: Padding(
-              padding: EdgeInsets.only(left: isLast ? 6 : 0),
-              child: const SizedBox(
-                width: 30,
-                height: 30,
-                child: Center(
-                  child: Icon(
-                    LucideIcons.audioLines,
-                    color: Colors.white,
-                    size: 26,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          (menuContext) => _buildToolButton(PlayerGlyphType.audioTrack, () {
+            _hideTimer?.cancel();
+            _showAudioTrackMenu(menuContext);
+          }),
     );
   }
 
@@ -1779,26 +1764,10 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Widget _buildSubtitleButton() {
     return Builder(
       builder:
-          (menuContext) => GestureDetector(
-            onTap: () {
-              _hideTimer?.cancel();
-              _showSubtitleMenu(menuContext);
-            },
-            child: Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: const SizedBox(
-                width: 30,
-                height: 30,
-                child: Center(
-                  child: Icon(
-                    LucideIcons.captions,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ),
-            ),
-          ),
+          (menuContext) => _buildToolButton(PlayerGlyphType.subtitle, () {
+            _hideTimer?.cancel();
+            _showSubtitleMenu(menuContext);
+          }),
     );
   }
 
@@ -1939,9 +1908,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
   Widget _buildSeekIcon(bool forward) => Stack(
     alignment: Alignment.center,
     children: [
-      Transform.flip(
-        flipX: forward,
-        child: const Icon(Icons.replay, color: Colors.white, size: 26),
+      PlayerGlyph(
+        forward ? PlayerGlyphType.seekForward : PlayerGlyphType.seekBack,
+        size: PlayerUiMetrics.transportIcon,
       ),
       Padding(
         padding: const EdgeInsets.only(top: 2),
@@ -1949,7 +1918,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           '${widget.seekDuration}',
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 8,
+            fontSize: 10,
             fontWeight: FontWeight.w700,
             height: 1,
           ),
@@ -1958,62 +1927,61 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     ],
   );
 
-  List<Widget> _buildSeekButton(bool forward) => [
-    const SizedBox(width: 8),
-    IconButton(
-      icon: _buildSeekIcon(forward),
-      onPressed:
-          () => _seekRelative(
-            forward ? widget.seekDuration : -widget.seekDuration,
-          ),
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 48),
-      tooltip: '${forward ? '前进' : '后退'} ${widget.seekDuration} 秒',
+  Widget _buildTransportButton(
+    Widget icon,
+    VoidCallback? onPressed, {
+    String? tooltip,
+  }) => IconButton(
+    icon: icon,
+    onPressed: onPressed,
+    tooltip: tooltip,
+    padding: EdgeInsets.zero,
+    constraints: const BoxConstraints.tightFor(
+      width: PlayerUiMetrics.transportHit,
+      height: PlayerUiMetrics.transportHit,
     ),
-  ];
+  );
+
+  Widget _buildSeekButton(bool forward) => _buildTransportButton(
+    _buildSeekIcon(forward),
+    () => _seekRelative(forward ? widget.seekDuration : -widget.seekDuration),
+    tooltip: '${forward ? '前进' : '后退'} ${widget.seekDuration} 秒',
+  );
 
   Widget _buildPlayControls() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final showSeek = constraints.maxWidth >= 600;
+        final gap = SizedBox(width: showSeek ? 16 : 8);
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: Icon(
-                BootstrapIcons.skipStartFill,
+            _buildTransportButton(
+              PlayerGlyph(
+                PlayerGlyphType.previous,
                 color: widget.hasPrevious ? Colors.white : Colors.white38,
-                size: 26,
+                size: PlayerUiMetrics.transportIcon,
               ),
-              onPressed: widget.hasPrevious ? widget.onPrevious : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 48),
+              widget.hasPrevious ? widget.onPrevious : null,
             ),
-            if (showSeek) ..._buildSeekButton(false),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: Icon(
-                _playing
-                    ? BootstrapIcons.stopCircleFill
-                    : BootstrapIcons.playCircleFill,
-                color: Colors.white,
-                size: 32,
+            if (showSeek) ...[gap, _buildSeekButton(false)],
+            gap,
+            _buildTransportButton(
+              PlayerGlyph(
+                _playing ? PlayerGlyphType.pause : PlayerGlyphType.play,
+                size: PlayerUiMetrics.playIcon,
               ),
-              onPressed: () => widget.engine.playOrPause(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 48),
+              () => widget.engine.playOrPause(),
             ),
-            if (showSeek) ..._buildSeekButton(true),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: Icon(
-                BootstrapIcons.skipEndFill,
+            if (showSeek) ...[gap, _buildSeekButton(true)],
+            gap,
+            _buildTransportButton(
+              PlayerGlyph(
+                PlayerGlyphType.next,
                 color: widget.hasNext ? Colors.white : Colors.white38,
-                size: 26,
+                size: PlayerUiMetrics.transportIcon,
               ),
-              onPressed: widget.hasNext ? widget.onNext : null,
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 48),
+              widget.hasNext ? widget.onNext : null,
             ),
           ],
         );
@@ -2021,58 +1989,35 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  Widget _buildIconButton(
-    IconData icon,
+  Widget _buildToolButton(
+    PlayerGlyphType type,
     VoidCallback? onPressed, {
-    GlobalKey? key,
-    bool isLast = false,
-    double size = 26,
+    Alignment alignment = Alignment.center,
   }) {
-    final isDesktop = WindowControls.isDesktop;
-    final minW = isDesktop ? 48.0 : 40.0;
-    final iconWidget = SizedBox(
-      width: size,
-      height: size,
-      child: Center(child: Icon(icon, color: Colors.white, size: size)),
-    );
-    if (isLast) {
-      return Padding(
-        padding: EdgeInsets.only(left: (minW - 28) / 2),
-        child: GestureDetector(key: key, onTap: onPressed, child: iconWidget),
-      );
-    }
+    final hit = PlayerUiMetrics.hit;
     return IconButton(
-      key: key,
-      icon: iconWidget,
+      icon: PlayerGlyph(type, size: PlayerUiMetrics.toolIcon),
       onPressed: onPressed,
+      alignment: alignment,
       padding: EdgeInsets.zero,
-      constraints: BoxConstraints(minWidth: minW),
+      constraints: BoxConstraints.tightFor(width: hit, height: hit),
     );
   }
 
   Widget _buildLockButton() {
     final padding = MediaQuery.of(context).padding;
     return Positioned(
-      right: padding.right + 12,
+      right: padding.right + PlayerUiMetrics.edge,
       top: 0,
       bottom: 0,
       child: Center(
-        child: GestureDetector(
-          onTap: () {
+        child: _buildToolButton(
+          _isLocked ? PlayerGlyphType.lock : PlayerGlyphType.lockOpen,
+          () {
             setState(() => _isLocked = !_isLocked);
             _showControlsTemporarily();
           },
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              _isLocked ? LucideIcons.lock : LucideIcons.lockOpen,
-              color: Colors.white,
-            ),
-          ),
+          alignment: Alignment.centerRight,
         ),
       ),
     );

@@ -11,6 +11,7 @@ class AppBackButton extends StatelessWidget {
   final Color? color;
   final double iconSize;
   final double leftPadding;
+  final Widget? icon;
 
   const AppBackButton({
     super.key,
@@ -18,6 +19,7 @@ class AppBackButton extends StatelessWidget {
     this.color,
     this.iconSize = kAppBackButtonIconSize,
     this.leftPadding = kAppBackButtonLeftPadding,
+    this.icon,
   });
 
   @override
@@ -27,7 +29,7 @@ class AppBackButton extends StatelessWidget {
       child: InkResponse(
         onTap: onPressed,
         radius: iconSize,
-        child: Icon(CupertinoIcons.back, size: iconSize, color: color),
+        child: icon ?? Icon(CupertinoIcons.back, size: iconSize, color: color),
       ),
     );
   }

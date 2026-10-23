@@ -5,6 +5,8 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
+import 'player_glyphs.dart';
+import 'player_ui_metrics.dart';
 
 class PlayerTopBar extends StatelessWidget {
   final String title;
@@ -25,7 +27,7 @@ class PlayerTopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final padding = MediaQuery.of(context).padding;
-    const horizontalPadding = 12.0;
+    const horizontalPadding = PlayerUiMetrics.edge;
     final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
     const barHeight = 44.0;
 
@@ -49,7 +51,12 @@ class PlayerTopBar extends StatelessWidget {
                   AppBackButton(
                     onPressed: onBack ?? () => Navigator.of(context).pop(),
                     color: Colors.white,
+                    iconSize: PlayerUiMetrics.toolIcon,
                     leftPadding: 0,
+                    icon: const PlayerGlyph(
+                      PlayerGlyphType.back,
+                      size: PlayerUiMetrics.toolIcon,
+                    ),
                   ),
                   const SizedBox(width: 8),
                 ],
@@ -58,8 +65,8 @@ class PlayerTopBar extends StatelessWidget {
                     title,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontSize: PlayerUiMetrics.titleSize,
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
