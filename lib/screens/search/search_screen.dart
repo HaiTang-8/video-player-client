@@ -161,10 +161,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                         child: CupertinoSearchTextField(
                           controller: _searchController,
                           placeholder: '输入影片名称搜索',
-                          style: const TextStyle(fontSize: 13, fontFamily: 'HarmonyOS_Sans'),
+                          style: const TextStyle(fontSize: 13),
                           placeholderStyle: const TextStyle(
                             fontSize: 13,
-                            fontFamily: 'HarmonyOS_Sans',
                             color: CupertinoColors.systemGrey,
                             decoration: TextDecoration.none,
                           ),
@@ -184,7 +183,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                             onPressed: _doSearch,
                             child: Text(
                               '搜索',
-                              style: TextStyle(fontSize: 15, fontFamily: 'HarmonyOS_Sans', color: color),
+                              style: TextStyle(fontSize: 15, color: color),
                             ),
                           );
                         },
@@ -313,7 +312,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 child: Text(
                   items[index],
                   style: TextStyle(
-                    fontFamily: 'HarmonyOS_Sans',
                     color: selected ? CupertinoColors.activeBlue : CupertinoColors.black,
                     fontSize: 13,
                     fontWeight: FontWeight.w400,

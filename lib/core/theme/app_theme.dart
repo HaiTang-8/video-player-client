@@ -36,7 +36,7 @@ class AppTheme {
   /// 仅覆盖字体族与 Windows 下的字距，从而：
   /// - 保留深色/浅色模式下的正确文字颜色（修复输入内容“看不见”）
   /// - 仅在 Windows 上去掉负字距，避免字体显示别扭
-  static CupertinoTextThemeData get _cupertinoTextTheme {
+  static CupertinoTextThemeData _cupertinoTextTheme(Color primaryColor) {
     final defaults = CupertinoTextThemeData(primaryColor: primaryColor);
     final patch = _baseTextStyle;
 
@@ -59,7 +59,7 @@ class AppTheme {
     brightness: Brightness.light,
     fontFamily: _fontFamily,
     scaffoldBackgroundColor: const Color(0xFFF5F5F5),
-    cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
+    cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme(primaryColor)),
     extensions: const [AppColors.light],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
@@ -126,7 +126,7 @@ class AppTheme {
     useMaterial3: true,
     brightness: Brightness.dark,
     fontFamily: _fontFamily,
-    cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme),
+    cupertinoOverrideTheme: CupertinoThemeData(textTheme: _cupertinoTextTheme(primaryColor)),
     extensions: const [AppColors.dark],
     colorScheme: ColorScheme.fromSeed(
       seedColor: primaryColor,
@@ -243,4 +243,20 @@ class AppTheme {
     surfaceOpacity: 1,
     typography: _shadcnTypography,
   );
+
+  /// ShadcnApp 会在 Material Theme 之下再插一层 CupertinoTheme，
+  /// 必须显式传入，否则 cupertinoOverrideTheme 的字体配置会被其默认主题覆盖。
+  /// 颜色字段与 shadcn 默认值保持一致，仅补充字体主题。
+  static CupertinoThemeData cupertinoTheme(shadcn.ThemeData theme) {
+    final colors = theme.colorScheme;
+    return CupertinoThemeData(
+      brightness: theme.brightness,
+      primaryColor: colors.primary,
+      primaryContrastingColor: colors.primaryForeground,
+      barBackgroundColor: colors.accent,
+      scaffoldBackgroundColor: colors.background,
+      applyThemeToAll: true,
+      textTheme: _cupertinoTextTheme(colors.primary),
+    );
+  }
 }

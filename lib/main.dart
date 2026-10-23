@@ -159,6 +159,11 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
   }
 
   @override
+  void didChangePlatformBrightness() {
+    if (ref.read(themeModeProvider) == ThemeMode.system) setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final themeMode = ref.watch(themeModeProvider);
@@ -187,6 +192,11 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
     final materialTheme = effectiveThemeMode == ThemeMode.dark
         ? AppTheme.darkTheme
         : AppTheme.lightTheme;
+    final cupertinoTheme = AppTheme.cupertinoTheme(
+      effectiveThemeMode == ThemeMode.dark
+          ? AppTheme.shadcnDarkTheme
+          : AppTheme.shadcnLightTheme,
+    );
 
     return shadcn.ShadcnApp.router(
       title: 'Media Player',
@@ -200,6 +210,7 @@ class _MediaPlayerAppState extends ConsumerState<MediaPlayerApp>
               ? shadcn.ThemeMode.dark
               : shadcn.ThemeMode.light),
       materialTheme: materialTheme,
+      cupertinoTheme: cupertinoTheme,
       routerConfig: router,
       locale: const Locale('zh', 'CN'),
       supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
