@@ -21,6 +21,7 @@ import 'core/widgets/dialog_utils.dart';
 import 'data/services/aria2_manager.dart';
 import 'data/services/log_service.dart';
 import 'data/services/update_service.dart';
+import 'playback/cache/playback_proxy.dart';
 import 'providers/providers.dart';
 import 'providers/error_notification_provider.dart';
 
@@ -47,6 +48,13 @@ void main() {
 
       // 初始化 SharedPreferences
       final prefs = await SharedPreferences.getInstance();
+
+      // 设置页、存储空间页可能先于播放启动代理，需要按用户保存的上限淘汰
+      unawaited(
+        PlaybackProxy.instance.setQuota(
+          PlaybackSettingsNotifier.storedCacheQuotaGb(prefs) << 30,
+        ),
+      );
 
       // PC端自动启动aria2
       if (Platform.isWindows || Platform.isMacOS) {

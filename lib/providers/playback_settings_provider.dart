@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/app_constants.dart';
 import '../data/models/playback_settings.dart';
 import '../playback/cache/playback_cache_catalog.dart';
@@ -24,16 +25,17 @@ class PlaybackSettingsNotifier extends Notifier<PlaybackSettings> {
             AppConstants.enginePreferenceKey,
           )] ??
           EnginePreference.auto,
-      cacheQuotaGb: _cacheQuotaGb(
-        prefs.getInt(AppConstants.playbackCacheQuotaGbKey),
-      ),
+      cacheQuotaGb: storedCacheQuotaGb(prefs),
     );
   }
 
-  static int _cacheQuotaGb(int? stored) =>
-      stored != null && PlaybackCacheConfig.quotaOptionsGb.contains(stored)
-          ? stored
-          : PlaybackCacheConfig.defaultQuotaGb;
+  /// 已保存的缓存上限（GB）；没有保存或不在选项里时为默认值
+  static int storedCacheQuotaGb(SharedPreferences prefs) {
+    final stored = prefs.getInt(AppConstants.playbackCacheQuotaGbKey);
+    return stored != null && PlaybackCacheConfig.quotaOptionsGb.contains(stored)
+        ? stored
+        : PlaybackCacheConfig.defaultQuotaGb;
+  }
 
   Future<void> setSeekDuration(int duration) async {
     if (duration < 1 || duration > 60) return;
