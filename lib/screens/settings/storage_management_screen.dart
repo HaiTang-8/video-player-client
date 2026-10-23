@@ -70,7 +70,7 @@ class _StorageManagementScreenState extends ConsumerState<StorageManagementScree
     final confirmed = await DialogUtils.showConfirmDialog(
       context: context,
       title: '清除所有缓存',
-      content: '将清除图片缓存、日志文件和临时文件。下载的视频文件不会被删除。',
+      content: '将清除图片缓存、播放缓存、日志文件和临时文件。下载的视频文件不会被删除。',
       confirmText: '清除',
       isDestructive: true,
     );
@@ -329,6 +329,8 @@ class _StorageManagementScreenState extends ConsumerState<StorageManagementScree
         return CupertinoIcons.arrow_down_circle_fill;
       case 'image_cache':
         return CupertinoIcons.photo_fill;
+      case 'playback_cache':
+        return CupertinoIcons.play_rectangle_fill;
       case 'logs':
         return CupertinoIcons.doc_text_fill;
       default:
@@ -342,6 +344,8 @@ class _StorageManagementScreenState extends ConsumerState<StorageManagementScree
         return Colors.green;
       case 'image_cache':
         return Colors.purple;
+      case 'playback_cache':
+        return Colors.indigo;
       case 'logs':
         return Colors.orange;
       default:

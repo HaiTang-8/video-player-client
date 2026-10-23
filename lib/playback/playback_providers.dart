@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'cache/playback_cache_catalog.dart';
+import 'cache/playback_proxy.dart';
 import 'domain/playback_domain.dart';
 import 'engines/mpv/mpv_texture_engine.dart';
 import 'engines/native/native_playback_engine.dart';
@@ -14,6 +16,15 @@ const subtitleFontAssets = [
   'assets/fonts/HarmonyOS_Sans_SC_Regular.ttf',
   'assets/fonts/HarmonyOS_Sans_SC_Bold.ttf',
 ];
+
+/// 当前平台是否启用播放缓存（见 [PlaybackCacheConfig.supported]）
+final playbackCacheSupportedProvider = Provider<bool>(
+  (ref) => PlaybackCacheConfig.supported,
+);
+
+final playbackCacheCatalogProvider = Provider<PlaybackCacheCatalog>(
+  (ref) => PlaybackProxy.instance,
+);
 
 final platformEnvironmentProvider = Provider<PlatformEnvironment>(
   (ref) => PlatformEnvironment.current(),

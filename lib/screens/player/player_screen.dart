@@ -82,6 +82,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       environment: ref.read(platformEnvironmentProvider),
       resolver: ProxiedSourceResolver.wrapIfEnabled(
         PlaybackSourceResolver(gateway),
+        quotaGb: ref.read(playbackSettingsProvider).cacheQuotaGb,
         serverUrl: () => gateway.serverUrl,
       ),
       sourceGateway: gateway,

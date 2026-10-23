@@ -62,9 +62,13 @@ class _Entry {
     this.headers, {
     this.cacheId,
     this.refreshable = false,
+    this.filePath,
+    this.storageId,
   });
 
   final String id;
+  final String? filePath;
+  final int? storageId;
   Uri url;
   Map<String, String> headers;
   final String? cacheId;
@@ -175,13 +179,24 @@ class _CacheProxyServer {
     final cacheId = entry?.cacheId;
     switch (message['cmd']) {
       case 'register':
-        _entries[id!] = _Entry(
-          id,
+        final registered = _Entry(
+          id!,
           Uri.parse(message['url'] as String),
           Map<String, String>.from(message['headers'] as Map),
           cacheId: _store == null ? null : message['cacheId'] as String?,
           refreshable: message['refreshable'] == true,
+          filePath: message['filePath'] as String?,
+          storageId: message['storageId'] as int?,
         );
+        _entries[id] = registered;
+        final registeredCacheId = registered.cacheId;
+        if (registeredCacheId != null) {
+          _store!.describe(
+            registeredCacheId,
+            filePath: registered.filePath,
+            storageId: registered.storageId,
+          );
+        }
         return true;
       case 'unregister':
         _entries.remove(id);
@@ -228,6 +243,23 @@ class _CacheProxyServer {
           'entries': _store?.entries.length ?? 0,
           'limit': _limit,
         };
+      case 'entries':
+        final metas =
+            (_store?.entries.toList() ?? [])
+              ..sort((a, b) => b.lastAccess.compareTo(a.lastAccess));
+        return [
+          for (final meta in metas)
+            <String, Object?>{
+              'id': meta.id,
+              'filePath': meta.filePath,
+              'cachedBytes': meta.cachedBytes,
+              'size': meta.size,
+              'lastAccess': meta.lastAccess.millisecondsSinceEpoch,
+            },
+        ];
+      case 'remove':
+        await _store?.remove(message['cacheId'] as String);
+        return true;
       case 'clear':
         await _store?.clear();
         return true;
@@ -447,6 +479,8 @@ class _CacheProxyServer {
         contentType: info.contentType,
         etag: info.etag,
         lastModified: info.lastModified,
+        filePath: entry.filePath,
+        storageId: entry.storageId,
       );
     }
     if (request.method == 'HEAD' || !info.usable) {
@@ -540,6 +574,8 @@ class _CacheProxyServer {
         contentType: info.contentType,
         etag: info.etag,
         lastModified: info.lastModified,
+        filePath: entry.filePath,
+        storageId: entry.storageId,
       );
       throw const HttpException('upstream file changed');
     }

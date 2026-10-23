@@ -1,6 +1,6 @@
 # 播放缓存任务文档（续播秒开）
 
-> 状态：**Stage 0、0.4、1、3、4 完成（iOS 模拟器）；Stage 2.3 / 4.7 等待用户真机验证；下一步 Stage 5（设置与存储管理 UI，完成后缓存才默认开启）**
+> 状态：**Stage 0、0.4、1、3、4、5 完成（iOS 模拟器）；iOS 上播放缓存已默认开启；Stage 2.3 / 4.7 等待用户真机验证；下一步 Stage 6（命中缓存时延迟解析上游地址）**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/playback/`（新增 `cache/`）、`client/packages/native_player/`、`client/lib/screens/settings/`、iOS / macOS 工程配置
 >
@@ -452,8 +452,9 @@ abstract interface class PlaybackSourceObserver {
 
 1. 构建并安装（Profile 模式，便于看性能）：
    ```bash
-   cd client && DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer flutter run --profile -d <你的 iPhone> --dart-define=PLAYBACK_PROXY=true
+   cd client && DEVELOPER_DIR=/Applications/Xcode-26.3.app/Contents/Developer flutter run --profile -d <你的 iPhone>
    ```
+   Stage 5 起 iOS 默认开启播放缓存，不再需要 `PLAYBACK_PROXY=true`；对比直连时可在“播放设置 → 播放缓存 → 缓存上限”里选“关闭”。
 2. 播放一部 4K HDR / 杜比视界 REMUX（≥80 Mbps）10 分钟。在“设置 → 应用日志”里确认有 `PlaybackProxy via proxy: http://127.0.0.1:...`，退出播放页后有 `PlaybackProxy stats: {...}`。
 3. 观察：是否有“本地网络”权限弹窗；播放是否流畅（卡顿、掉帧）；机身温度。可以用 Xcode Instruments 的 CPU 和 Energy 模板，与不带 `PLAYBACK_PROXY` 的构建对比。
 4. 续播一部 HEVC 片子：开头是否还会先闪一下 0 秒的画面（Stage 1.7）；日志里 `PlaybackSession startup ... firstFrame=` 的数值。
@@ -527,9 +528,31 @@ abstract interface class PlaybackSourceObserver {
 
 **前置**：Stage 4。遵守 AGENTS.md 的 UI 规范（shadcn / Cupertino、深浅色、移动端与桌面端、空状态和错误状态）。
 
-- [ ] 5.1 `PlaybackSettings` 增加 `cacheQuotaBytes`（默认值见 D2），持久化到 SharedPreferences；修改后立即调用 `setQuota`。
-- [ ] 5.2 播放设置页增加“播放缓存”选项：关闭 / 1 / 2 / 5 / 10 / 20 GB，并显示当前占用。
-- [ ] 5.3 存储空间页增加“播放缓存”分类，可以单独清理；“清除所有缓存”同时清理播放缓存（说明文案同步修改：已下载的视频不受影响）。
+- [x] 5.1 `PlaybackSettings.cacheQuotaGb`（`playback_cache_quota_gb`，默认值见 D2，存储的值不在选项里时回到默认值），修改后立即调用 `setQuota`；选“关闭”时播放直连，已有缓存按 0 配额全部淘汰。
+- [x] 5.2 播放设置页新增“播放缓存”一节：缓存上限（关闭 / 1 / 2 / 5 / 10 / 20 GB）和已缓存大小，点击进入缓存明细页（从分支移植：列表、单条删除、全部清除，补充了读取失败状态）。
+- [x] 5.3 存储空间页增加“播放缓存”分类，可以单独清理；“清除所有缓存”同时清理播放缓存，说明文案已同步。
+
+#### Stage 5 结论（2026-10-23）
+
+- **只在 iOS 上默认开启**（`PlaybackCacheConfig.supported`）：
+  - 原因：代理加缓存只在 iOS（Aether）上验证过。macOS 的 Release 构建缺少 `network.server` 权限，默认开启会导致 macOS 上完全无法播放；Android（Media3 / mpv）和 Windows / Linux（mpv）还没有验证。
+  - 其他平台不显示这一节设置、不经过代理；推广到这些平台时改 `supported`（Stage 8）。
+  - `PLAYBACK_PROXY=true` 保留，用来在其他平台强制开启做测试。
+  - D2 的默认配额（移动端 2GB、桌面端 10GB）在支持的平台上生效。
+- **结构**：
+  - 新增 `PlaybackCacheCatalog` 接口和 `CachedVideo`，由 `PlaybackProxy` 实现（新增代理命令 `entries` / `remove`）。界面通过 `playbackCacheCatalogProvider` / `playbackCacheSupportedProvider` 取数据，测试可以替换。
+  - 登记条目时把 `filePath` / `storageId` 写进元数据（`CacheStore.describe`），明细页显示文件名，Stage 6 也会用到。
+  - 存储管理服务直接使用 `PlaybackProxy.instance`。
+- **样式**：沿用播放设置页现有的卡片、列表项和底部弹窗写法（三个样式方法改为 `static` 供新的一节复用）；读取失败状态复用 `AppErrorWidget`；路由 `/video-cache-detail`。
+- **自查**：
+  - iOS 模拟器上用 `playback_cache_ui_preview_test`（`--dart-define=SHOTS_DIR=…`，把整个应用渲染成 PNG）截了 7 个画面 × 浅色 / 深色：设置、上限选择、明细列表、删除确认、空状态、读取失败、存储空间。
+  - 宿主机上按 1280×800 渲染了桌面布局的设置和明细页（临时脚本，未提交）。
+  - 修掉 2 个问题：`setState` 回调返回了 Future（改配额后刷新时会触发断言，组件测试发现）；读取失败时深色模式下“重试”按钮看不清，而且直接显示了英文异常（截图发现，改用 `AppErrorWidget`，异常写日志）。
+  - 长文件名省略、没有溢出。
+- **测试**：
+  - 组件和设置测试 8 项：默认配额、非法值、持久化并立即生效、不支持的平台不调用缓存、设置一节关闭缓存、明细列表、空状态、读取失败后重试、删除确认；
+  - 代理列条目 / 删除 1 项。
+  - 全量 174 项通过，`flutter analyze` 无问题；缓存端到端测试重跑结果与 Stage 4 一致。
 
 ### Stage 6：命中缓存时延迟解析上游地址（P2）
 
@@ -546,8 +569,8 @@ abstract interface class PlaybackSourceObserver {
 
 ### Stage 8：推广到其他平台
 
-- [ ] 8.1 macOS：同样的 Aether 路径；Info.plist ATS；`Release.entitlements` 补 `network.server`。
-- [ ] 8.2 Android：Media3 + mpv 兜底；中端机吞吐压测，不达标时 Android 退到 Media3 原生 `SimpleCache`（预研中的方案 C）。mpv 实现首帧事件（候选：observe `vo-configured`；需要确认连续打开文件时它会重新变化），并在真机上验证。
+- [ ] 8.1 macOS：同样的 Aether 路径；Info.plist ATS；`Release.entitlements` 补 `network.server`；验证后把 macOS 加入 `PlaybackCacheConfig.supported`。
+- [ ] 8.2 Android：验证后加入 `PlaybackCacheConfig.supported`；Media3 + mpv 兜底；中端机吞吐压测，不达标时 Android 退到 Media3 原生 `SimpleCache`（预研中的方案 C）。mpv 实现首帧事件（候选：observe `vo-configured`；需要确认连续打开文件时它会重新变化），并在真机上验证。
 - [ ] 8.3 Windows / Linux：mpv；绑定回环地址，确认不触发防火墙弹窗；mpv 的 `cache-pause-wait` 在命中缓存时调小。
 
 ---
@@ -605,6 +628,7 @@ abstract interface class PlaybackSourceObserver {
 | 2026-10-22 | Stage 1 起播位置交给内核 | 完成，待真机确认 | 见 §6 Stage 1 结论。单测：会话新增 3 项（打开时带起播位置、起播位置防止网络错误后的异常片尾进度、非正数从头播放；反向验证：去掉 `markControlledSeek` 后用例失败），原生引擎新增 1 项（毫秒数透传），全量 108 项通过；`flutter analyze` 无问题；Android `:native_player:compileDebugKotlin` 通过；iOS 模拟器 `playback_session_native_test` 通过。测试源站新增 `timeline`（每个请求的开始 / 结束时间和已发送字节数），基准新增 `BENCH_SCENARIO` 过滤和 `NP_BENCH_TIMELINE` 输出。~~另一个发现：Aether 两次打开时各发出的 `bytes=0-33554431` 请求会一直下载~~（**已被 Stage 2 更正**：是测试源站的假象，见 §6 Stage 2 结论第 3 条） |
 | 2026-10-22 | Stage 0.4 首帧指标 | 完成 | 见 §6 Stage 0.4。单测新增 4 项（hub 重置首帧标志、原生事件映射、会话记录首帧、上一集的首帧不计入；反向验证：去掉 `markResolved` 前提后用例失败），全量 111 项通过；`flutter analyze` 无问题；Android Kotlin 编译通过；iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。基准第一次跑 MP4 时测试 App 连不上调试连接（`The log reader failed unexpectedly`，当时 Claude 应用的模拟器面板也在监听这台模拟器），重跑通过 |
 | 2026-10-22 | Stage 2 iOS 代理 Spike（模拟器） | 通过，待真机 | 见 §6 Stage 2 结论。iOS Info.plist 加了 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`（正式构建也生效；它同时放开了对局域网 IP 的 http 访问，iOS 17 起默认会拦截）。单测：代理 10 项（Range / HEAD / 鉴权头 / 重定向保留头 / 未知条目 / 并发 / 播放器断开时取消上游 / 同端口重新绑定 / 解析器装饰器），测试源站 9 项。iOS 模拟器：代理功能测试（含前后台切换）通过；直连 / 代理基准各 2 组。更正了 Stage 1 关于开头请求的结论 |
+| 2026-10-23 | Stage 5 设置与存储管理 UI | 完成（模拟器），待真机 | 见 §6 Stage 5 结论。iOS 上播放缓存默认开启（2GB），其他平台暂不开启；播放设置新增“播放缓存”（上限、已缓存、明细页），存储空间新增“播放缓存”分类 |
 | 2026-10-23 | Stage 4 代理接入缓存 | 完成（模拟器），待真机 | 见 §6 Stage 4 结论。代理隔离区持有 `CacheStore`：命中读盘、按缺口回源并写入、文件变化作废、401 / 403 / 410 时刷新地址、403 / 429 退避、打开阶段固定首尾、采样、配额淘汰。会话层新增 `PlaybackSourceObserver`。仍然只在 `PLAYBACK_PROXY=true` 时启用 |
 | 2026-10-23 | Stage 3 缓存存储 | 完成 | 见 §6 Stage 3 结论；§4.4 改为每块一个文件 + 块内有效区间，取消 `index.json`，默认块大小 4MiB。全量单测 153 项通过，`flutter analyze` 无问题 |
 | 2026-10-23 | 决策 D1 / D2 / D7 | 完成 | D1 = C（两级淘汰）；D2 = 移动端 2GB、桌面端 10GB，默认开启；D7 = B（核心重写，从分支移植 UI、缓存键规则和 403 / 429 重试） |

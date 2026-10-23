@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
+import '../../data/services/storage_management_service.dart';
+import '../../playback/cache/playback_cache_catalog.dart';
 import '../../playback/domain/engine_preference.dart';
 import '../../playback/playback_providers.dart';
 import '../../providers/providers.dart';
@@ -175,12 +177,14 @@ class PlaybackSettingsScreen extends ConsumerWidget {
               ),
             ),
           ],
+          if (ref.watch(playbackCacheSupportedProvider))
+            const _PlaybackCacheSection(),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(String title, ThemeData theme) {
+  static Widget _buildSectionHeader(String title, ThemeData theme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
       child: Text(
@@ -193,7 +197,10 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildSettingsCard(bool isDark, {required List<Widget> children}) {
+  static Widget _buildSettingsCard(
+    bool isDark, {
+    required List<Widget> children,
+  }) {
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1C1C1E) : Colors.white,
@@ -203,7 +210,7 @@ class PlaybackSettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildListTile(
+  static Widget _buildListTile(
     BuildContext context,
     ThemeData theme,
     bool isDark, {
@@ -559,6 +566,208 @@ class PlaybackSettingsScreen extends ConsumerWidget {
                   size: 20,
                   color: theme.colorScheme.primary,
                 ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 播放缓存：上限与已用空间，点击已用空间进入缓存明细
+class _PlaybackCacheSection extends ConsumerStatefulWidget {
+  const _PlaybackCacheSection();
+
+  @override
+  ConsumerState<_PlaybackCacheSection> createState() =>
+      _PlaybackCacheSectionState();
+}
+
+class _PlaybackCacheSectionState extends ConsumerState<_PlaybackCacheSection> {
+  late Future<int> _usage = _loadUsage();
+
+  Future<int> _loadUsage() =>
+      ref.read(playbackCacheCatalogProvider).usedBytes();
+
+  void _reload() {
+    setState(() {
+      _usage = _loadUsage();
+    });
+  }
+
+  static String _quotaLabel(int gb) => gb == 0 ? '关闭' : '$gb GB';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final quotaGb = ref.watch(
+      playbackSettingsProvider.select((s) => s.cacheQuotaGb),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 24),
+        PlaybackSettingsScreen._buildSectionHeader('播放缓存', theme),
+        PlaybackSettingsScreen._buildSettingsCard(
+          isDark,
+          children: [
+            PlaybackSettingsScreen._buildListTile(
+              context,
+              theme,
+              isDark,
+              icon: CupertinoIcons.archivebox,
+              iconColor: Colors.indigo,
+              title: '缓存上限',
+              subtitle: _quotaLabel(quotaGb),
+              onTap: () => _showQuotaPicker(quotaGb),
+            ),
+            Divider(
+              height: 1,
+              indent: 60,
+              color: theme.dividerColor.withValues(alpha: 0.3),
+            ),
+            FutureBuilder<int>(
+              future: _usage,
+              builder:
+                  (context, snapshot) => PlaybackSettingsScreen._buildListTile(
+                    context,
+                    theme,
+                    isDark,
+                    icon: CupertinoIcons.tray_full,
+                    iconColor: Colors.green,
+                    title: '已缓存',
+                    subtitle:
+                        snapshot.hasError
+                            ? '读取失败'
+                            : snapshot.hasData
+                            ? StorageManagementService.instance.formatSize(
+                              snapshot.data!,
+                            )
+                            : '计算中…',
+                    onTap: () async {
+                      await context.push('/video-cache-detail');
+                      if (mounted) _reload();
+                    },
+                  ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
+          child: Text(
+            '播放过的视频会在本机保留开头和上次播放位置附近的内容，再次打开时可以更快开始播放。'
+            '超出上限时先清理最久没看的视频，已下载的视频不受影响',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showQuotaPicker(int current) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      builder:
+          (sheetContext) => SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Text(
+                    '缓存上限',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  color: theme.dividerColor.withValues(alpha: 0.3),
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        for (final gb in PlaybackCacheConfig.quotaOptionsGb)
+                          _buildQuotaOption(
+                            sheetContext,
+                            theme,
+                            gb,
+                            gb == current,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+    );
+  }
+
+  Widget _buildQuotaOption(
+    BuildContext sheetContext,
+    ThemeData theme,
+    int gb,
+    bool isSelected,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () async {
+          Navigator.pop(sheetContext);
+          await ref.read(playbackSettingsProvider.notifier).setCacheQuotaGb(gb);
+          if (mounted) _reload();
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _quotaLabel(gb),
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight:
+                            isSelected ? FontWeight.w500 : FontWeight.normal,
+                        color: isSelected ? theme.colorScheme.primary : null,
+                      ),
+                    ),
+                    if (gb == 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '播放时直接连接服务器，并清除已有的播放缓存',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (isSelected) ...[
+                const SizedBox(width: 12),
+                Icon(
+                  CupertinoIcons.checkmark,
+                  size: 20,
+                  color: theme.colorScheme.primary,
+                ),
+              ],
             ],
           ),
         ),

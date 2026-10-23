@@ -184,6 +184,34 @@ void main() {
     expect((await proxy.usage())['entries'], 0);
   });
 
+  test('entries list cached videos by file name and can be removed', () async {
+    final uri = await proxy.register(
+      upstream.mediaUri,
+      auth,
+      cacheId: 'a',
+      filePath: '/movies/A Movie (2026).mkv',
+      storageId: 3,
+    );
+    await get(uri, range: 'bytes=0-131071');
+    final second = await proxy.register(
+      upstream.redirectUri,
+      auth,
+      cacheId: 'b',
+    );
+    await get(second, range: 'bytes=0-65535');
+
+    final entries = await proxy.entries();
+    expect(entries.map((e) => e.name), ['b', 'A Movie (2026).mkv']);
+    expect(entries.last.cachedBytes, 131072);
+    expect(entries.last.sizeBytes, size);
+    expect(entries.last.complete, isFalse);
+    expect(await proxy.usedBytes(), 131072 + 65536);
+
+    await proxy.remove('a');
+    expect((await proxy.entries()).map((e) => e.id), ['b']);
+    expect(await proxy.usedBytes(), 65536);
+  });
+
   test('a zero quota passes through without writing', () async {
     proxy = newProxy(quota: 0);
     final uri = await register('a');

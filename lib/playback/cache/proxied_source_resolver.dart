@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/log_service.dart';
 import '../domain/playback_domain.dart';
 import '../session/playback_item.dart';
 import '../session/playback_source_resolver.dart';
 import 'cache_entry_key.dart';
+import 'playback_cache_catalog.dart';
 import 'playback_proxy.dart';
 
 /// 网络片源改走本机代理，鉴权头由代理带给上游；本地文件保持原样
@@ -17,18 +20,17 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
     String? Function()? serverUrl,
   }) : _serverUrl = serverUrl;
 
-  /// 用 `--dart-define=PLAYBACK_PROXY=true` 构建时经过本机代理和缓存（设置界面完成前的开关）
+  /// 支持的平台上、配额不为 0 时经过本机代理和缓存；否则直连
   static PlaybackSourceResolver wrapIfEnabled(
     PlaybackSourceResolver inner, {
+    required int quotaGb,
     String? Function()? serverUrl,
-  }) =>
-      PlaybackProxy.devEnabled
-          ? ProxiedSourceResolver(
-            inner,
-            PlaybackProxy.instance,
-            serverUrl: serverUrl,
-          )
-          : inner;
+  }) {
+    if (!PlaybackCacheConfig.supported || quotaGb <= 0) return inner;
+    final proxy = PlaybackProxy.instance;
+    unawaited(proxy.setQuota(quotaGb << 30));
+    return ProxiedSourceResolver(inner, proxy, serverUrl: serverUrl);
+  }
 
   final PlaybackSourceResolver _inner;
   final PlaybackProxy _proxy;
@@ -53,6 +55,8 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
       Uri.parse(source.url),
       source.httpHeaders,
       cacheId: cacheId,
+      filePath: resolved.filePath,
+      storageId: resolved.storageId,
       refresh: () async {
         final again = await _inner.resolve(item);
         if (again.source.isLocalFile) return null;

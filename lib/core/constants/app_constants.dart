@@ -23,6 +23,7 @@ class AppConstants {
   static const String playbackSpeedKey = 'playback_speed';
   static const String longPressSpeedKey = 'playback_long_press_speed';
   static const String enginePreferenceKey = 'playback_engine_preference';
+  static const String playbackCacheQuotaGbKey = 'playback_cache_quota_gb';
   static const String watchHistoryMergeEnabledKey =
       'watch_history_merge_enabled';
 

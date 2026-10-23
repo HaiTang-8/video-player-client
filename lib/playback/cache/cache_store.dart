@@ -167,6 +167,14 @@ class CacheStore {
 
   void touch(String id) => _update(id, (m) => m.lastAccess = _now());
 
+  /// 补充片源信息（缓存明细页展示用，Stage 6 延迟解析时也会用到）
+  void describe(String id, {String? filePath, int? storageId}) =>
+      _update(id, (m) {
+        m
+          ..filePath = filePath ?? m.filePath
+          ..storageId = storageId ?? m.storageId;
+      });
+
   /// 记录打开阶段读取的区间（封装头、索引）
   void pin(String id, ByteRange range) => _update(id, (m) => m.pin(range));
 

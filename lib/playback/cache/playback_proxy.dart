@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'cache_proxy_server.dart';
+import 'playback_cache_catalog.dart';
 
 /// 重新解析上游地址（签名直链过期时由代理请求）；拿不到时返回 null
 typedef UpstreamRefresher =
@@ -16,8 +17,8 @@ typedef UpstreamRefresher =
 /// 本机播放代理的门面（主隔离区）：首次使用时启动代理隔离区，把上游地址登记为本机代理地址；
 /// 提供缓存目录时，可缓存的条目经过磁盘缓存
 ///
-/// 设置界面完成前（Stage 5），`--dart-define=PLAYBACK_PROXY=true` 时播放页才会经过它
-class PlaybackProxy {
+/// 播放页经 [ProxiedSourceResolver.wrapIfEnabled] 接入，是否启用见 [PlaybackCacheConfig.supported] 和播放设置里的配额
+class PlaybackProxy implements PlaybackCacheCatalog {
   /// [watchLifecycle] 为 true 时回到前台检查监听、进入后台保存缓存元数据（需要已初始化 WidgetsBinding）
   PlaybackProxy({
     this.watchLifecycle = true,
@@ -27,16 +28,12 @@ class PlaybackProxy {
     this.blockSize = 4 << 20,
   }) : _quotaBytes = quotaBytes ?? defaultQuotaBytes;
 
-  static const devEnabled = bool.fromEnvironment('PLAYBACK_PROXY');
-
   static final PlaybackProxy instance = PlaybackProxy(
     cacheDirectory: defaultCacheDirectory,
     freeSpace: platformFreeSpace,
   );
 
-  /// D2：移动端 2GB、桌面端 10GB
-  static int get defaultQuotaBytes =>
-      (Platform.isIOS || Platform.isAndroid ? 2 : 10) << 30;
+  static int get defaultQuotaBytes => PlaybackCacheConfig.defaultQuotaGb << 30;
 
   static Future<Directory?> defaultCacheDirectory() async => Directory(
     '${(await getApplicationCacheDirectory()).path}/playback_cache',
@@ -75,6 +72,8 @@ class PlaybackProxy {
     Map<String, String> headers, {
     String? cacheId,
     UpstreamRefresher? refresh,
+    String? filePath,
+    int? storageId,
   }) async {
     final handle = await _start();
     final id = 'r${++_nextId}';
@@ -86,6 +85,8 @@ class PlaybackProxy {
       'headers': headers,
       'cacheId': cacheId,
       'refreshable': refresh != null,
+      'filePath': filePath,
+      'storageId': storageId,
     });
     if (DateTime.now().difference(_limitsSentAt ?? DateTime(2000)) >
         const Duration(minutes: 1)) {
@@ -122,6 +123,7 @@ class PlaybackProxy {
       });
 
   /// 修改配额（0 表示只透传、不写盘）并按新上限淘汰
+  @override
   Future<void> setQuota(int bytes) async {
     _quotaBytes = bytes;
     final handle = await _handle;
@@ -133,9 +135,45 @@ class PlaybackProxy {
     return Map<String, int>.from(await handle.call({'cmd': 'usage'}) as Map);
   }
 
+  @override
   Future<void> clearCache() async {
     final handle = await _start();
     await handle.call({'cmd': 'clear'});
+  }
+
+  @override
+  Future<int> usedBytes() async => (await usage())['bytes'] ?? 0;
+
+  @override
+  Future<List<CachedVideo>> entries() async {
+    final handle = await _start();
+    final list = await handle.call({'cmd': 'entries'}) as List;
+    return [
+      for (final item in list.cast<Map>())
+        CachedVideo(
+          id: item['id'] as String,
+          name: _fileName(item['filePath'] as String?) ?? item['id'] as String,
+          cachedBytes: item['cachedBytes'] as int,
+          sizeBytes: item['size'] as int,
+          lastAccess: DateTime.fromMillisecondsSinceEpoch(
+            item['lastAccess'] as int,
+          ),
+        ),
+    ];
+  }
+
+  @override
+  Future<void> remove(String id) async {
+    final handle = await _start();
+    await handle.call({'cmd': 'remove', 'cacheId': id});
+  }
+
+  static String? _fileName(String? path) {
+    if (path == null || path.isEmpty) return null;
+    final name = path
+        .split(RegExp(r'[/\\]'))
+        .lastWhere((s) => s.isNotEmpty, orElse: () => '');
+    return name.isEmpty ? null : name;
   }
 
   /// 立即保存缓存元数据

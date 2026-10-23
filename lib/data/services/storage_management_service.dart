@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../playback/cache/playback_cache_catalog.dart';
+import '../../playback/cache/playback_proxy.dart';
 import 'download_service.dart';
 import 'log_service.dart';
 
@@ -60,6 +62,15 @@ class StorageManagementService {
       size: imageCacheSize,
     ));
 
+    if (PlaybackCacheConfig.supported) {
+      categories.add(StorageCategory(
+        id: 'playback_cache',
+        name: '播放缓存',
+        description: '播放过的视频片段，用于更快地续播',
+        size: await _getPlaybackCacheSize(),
+      ));
+    }
+
     // 日志文件
     final logSize = await _getLogSize();
     categories.add(StorageCategory(
@@ -99,6 +110,14 @@ class StorageManagementService {
     }
   }
 
+  Future<int> _getPlaybackCacheSize() async {
+    try {
+      return await PlaybackProxy.instance.usedBytes();
+    } catch (_) {
+      return 0;
+    }
+  }
+
   Future<int> _getLogSize() async {
     try {
       final dir = await getApplicationSupportDirectory();
@@ -132,6 +151,9 @@ class StorageManagementService {
       case 'image_cache':
         await _clearImageCache();
         break;
+      case 'playback_cache':
+        await _clearPlaybackCache();
+        break;
       case 'logs':
         await _clearLogs();
         break;
@@ -140,7 +162,17 @@ class StorageManagementService {
 
   Future<void> clearAll() async {
     await _clearImageCache();
+    await _clearPlaybackCache();
     await _clearLogs();
+  }
+
+  Future<void> _clearPlaybackCache() async {
+    if (!PlaybackCacheConfig.supported) return;
+    try {
+      await PlaybackProxy.instance.clearCache();
+    } catch (e) {
+      LogService.instance.warn('StorageManagement', 'Failed to clear playback cache: $e');
+    }
   }
 
   Future<void> _clearDownloads() async {
