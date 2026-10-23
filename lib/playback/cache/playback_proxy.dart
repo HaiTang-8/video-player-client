@@ -42,9 +42,9 @@ class PlaybackProxy implements PlaybackCacheCatalog {
     '${(await getApplicationCacheDirectory()).path}/playback_cache',
   );
 
-  /// iOS / Android 通过存储通道查询；桌面端没有接口，返回 null（只按配额）
+  /// iOS / Android / macOS 通过存储通道查询；Windows 没有接口，返回 null（只按配额）
   static Future<int?> platformFreeSpace() async {
-    if (!(Platform.isIOS || Platform.isAndroid)) return null;
+    if (Platform.isWindows) return null;
     try {
       final value = await const MethodChannel(
         'media_player/storage',

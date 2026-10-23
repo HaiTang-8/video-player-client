@@ -71,6 +71,20 @@ class MainFlutterWindow: NSWindow {
       }
     }
 
+    let storageChannel = FlutterMethodChannel(
+      name: "media_player/storage",
+      binaryMessenger: flutterViewController.engine.binaryMessenger
+    )
+    storageChannel.setMethodCallHandler { call, result in
+      guard call.method == "getAvailableSpace" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      let values = try? URL(fileURLWithPath: NSHomeDirectory())
+        .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+      result(values?.volumeAvailableCapacityForImportantUsage)
+    }
+
     super.awakeFromNib()
   }
 

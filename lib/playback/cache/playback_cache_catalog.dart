@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 /// 播放缓存的配额选项、默认值与可用平台
 abstract final class PlaybackCacheConfig {
   /// 0 表示关闭
@@ -9,10 +11,8 @@ abstract final class PlaybackCacheConfig {
   static int get defaultQuotaGb =>
       Platform.isIOS || Platform.isAndroid ? 2 : 10;
 
-  /// 只在已验证的平台（iOS）经过代理和缓存；其他平台推广前可用 `--dart-define=PLAYBACK_PROXY=true` 强制开启。
-  /// macOS 的 Release 构建缺少 network.server 权限，代理无法监听
-  static bool get supported =>
-      Platform.isIOS || const bool.fromEnvironment('PLAYBACK_PROXY');
+  /// 浏览器里无法监听本机端口，其余平台都经过本机代理和缓存
+  static bool get supported => !kIsWeb;
 }
 
 /// 缓存明细页的一条记录
