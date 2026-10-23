@@ -118,7 +118,7 @@
 | `test/playback/cache/support/range_test_server.dart` | Stage 0 测试源站（Range、首字节延迟、限速、302、请求统计） |
 | `integration_test/playback_startup_benchmark_test.dart` | Stage 0 起播基准（用法见 §6 Stage 0 结论；`BENCH_PROXY=true` 时经过代理） |
 | `lib/playback/cache/cache_proxy_server.dart` | Stage 2 代理隔离区：回环监听、Range 透传、手动跟随重定向、同端口重新绑定、统计 |
-| `lib/playback/cache/playback_proxy.dart` | Stage 2 代理门面：启动隔离区、登记上游（等待确认）、回到前台自检、`PLAYBACK_PROXY` 开关 |
+| `lib/playback/cache/playback_proxy.dart` | Stage 2 代理门面：启动隔离区、登记上游（等待确认）、回到前台自检 |
 | `lib/playback/cache/proxied_source_resolver.dart` | Stage 2 解析器装饰器：网络片源改为代理地址；播放页通过 `wrapIfEnabled` 接入 |
 | `integration_test/playback_proxy_native_test.dart` | Stage 2 功能验证；前后台切换用 `build/np_bench/run_proxy_bg.sh` 驱动 |
 
@@ -303,7 +303,7 @@ abstract interface class PlaybackSourceObserver {
 - 缓存目录用 `getApplicationCacheDirectory()`（iOS 对应 `Library/Caches`）：不进 iCloud 备份；系统空间紧张时可能被清理，对缓存来说可以接受。
 - Aether 的 `prewarm` 与本方案不冲突。“下一集预热”以后可以对代理地址调用 prewarm，属于本文范围外。
 - Aether 播放中会有多路读取（主 demuxer + 独立 reader），代理必须支持并发（§4.6）。
-- macOS（推广阶段）：`Release.entitlements` 缺少 `com.apple.security.network.server`，只有 `DebugProfile` 有，所以 Release 版代理无法监听；推到 macOS 时补上。
+- macOS（推广阶段）：Info.plist 同样需要 `NSAllowsLocalNetworking`（Stage 8 已加）。Debug 和 Release 都关闭了 App Sandbox，`network.server` 权限不影响监听，不需要补（早先认为 Release 版无法监听，是误判）。
 
 ---
 
@@ -614,9 +614,35 @@ abstract interface class PlaybackSourceObserver {
 
 ### Stage 8：推广到其他平台
 
-- [ ] 8.1 macOS：同样的 Aether 路径；Info.plist ATS；`Release.entitlements` 补 `network.server`；验证后把 macOS 加入 `PlaybackCacheConfig.supported`。
-- [ ] 8.2 Android：验证后加入 `PlaybackCacheConfig.supported`；Media3 + mpv 兜底；中端机吞吐压测，不达标时 Android 退到 Media3 原生 `SimpleCache`（预研中的方案 C）。mpv 实现首帧事件（候选：observe `vo-configured`；需要确认连续打开文件时它会重新变化），并在真机上验证。
-- [ ] 8.3 Windows / Linux：mpv；绑定回环地址，确认不触发防火墙弹窗；mpv 的 `cache-pause-wait` 在命中缓存时调小。
+- [x] 8.1 macOS：同样的 Aether 路径；Info.plist 加 `NSAllowsLocalNetworking`；存储通道补 `getAvailableSpace`。`Release.entitlements` 不需要改（未开启 App Sandbox）。
+- [x] 8.2 Android：默认开启（Media3 + mpv 兜底）。明文 http 和剩余空间通道已有，不需要原生改动。待用户真机验证；中端机吞吐不达标时再考虑退到 Media3 原生 `SimpleCache`（预研中的方案 C）。
+- [x] 8.3 Windows：默认开启（mpv）。剩余空间没有查询接口，只按上限控制。待用户验证防火墙弹窗。项目没有 Linux 构建，Web 不是构建目标（浏览器里无法监听本机端口）。
+- [ ] 8.4 mpv 首帧事件（候选：observe `vo-configured`；需要确认连续打开文件时它会重新变化）。没有首帧事件时，`startup` 日志没有 `firstFrame`，缓存的打开阶段按 15 秒超时结束，不影响命中缓存。
+- [ ] 8.5 mpv 的 `cache-pause-wait` 在命中缓存时调小（可选）。
+
+#### Stage 8 结论（2026-10-23）：全平台开启 + 缓存上限改为滑块
+
+- **用户要求**：缓存功能全平台都要有；缓存大小由用户手动调节（选的是滑块）。验证只在 iOS 模拟器上做，其他平台由用户自己测。
+- **全平台开启**：`PlaybackCacheConfig.supported` 改为 `!kIsWeb`，去掉 `PLAYBACK_PROXY` 开关。
+- **macOS**：
+  - Info.plist 加 `NSAllowsLocalNetworking`，否则 Aether 访问不了 `http://127.0.0.1`。
+  - `MainFlutterWindow.swift` 新增 `media_player/storage` 的 `getAvailableSpace`，至少保留 1GB 剩余空间的规则在 macOS 上也生效。
+  - 这两处在本机都没有编译运行过。
+- **缓存上限改为滑块**：
+  - 配额改为 0 到 `maxQuotaGb`（移动端 64、桌面端 200）之间的任意整数 GB，0 表示关闭。保存的值超出范围时回到默认值。
+  - 底部弹层：开关 + 滑块（步长 1GB）+ 设备可用空间，“取消 / 完成”与页面其他弹层一致，点“完成”才保存并淘汰。
+  - 滑块最大值为“已缓存 + 剩余空间 − 1GB”与 `maxQuotaGb` 中较小的一个，剩余空间未知时为 `maxQuotaGb`；不低于默认值和当前值。
+  - 重新打开开关时从默认值开始。
+  - `PlaybackCacheCatalog` 新增 `freeBytes()`。
+- **修复：冷启动后先进设置页会按默认上限淘汰**：
+  - 原因：用户设的上限只在播放时才交给代理，设置页、存储空间页读取用量时会先按默认的 2GB 启动代理并淘汰。比如用户设了 20GB，缓存会被删到 2GB 以下。
+  - 修复：`main.dart` 启动时把保存的上限交给 `PlaybackProxy.instance`（`PlaybackSettingsNotifier.storedCacheQuotaGb`），不会提前启动代理。
+- **iOS 模拟器验证**：
+  - `playback_cache_ui_preview_test` 新增弹层开启 / 关闭两张截图，浅色和深色各一套。
+  - 截图发现两处问题并已修正：深色下开关的开启状态几乎看不出来（改用主题主色）；关闭后滑块看不出已禁用（加半透明）。
+  - 缓存端到端测试：冷启动首帧 1980ms，命中缓存 72ms，源站不可用时 64ms，与修复后的结果一致。
+- **测试**：设置测试改为 8 项（新增滑块“完成”才保存、取消不保存、剩余空间未知时用固定最大值、重新开启从默认值开始、最大值随剩余空间变化），全量 193 项通过，`flutter analyze` 无问题。
+- **待用户验证**：Android（Media3 经代理播放、秒开、设置页可用空间）、macOS（Debug / Release 都能经代理播放）、Windows（经代理播放，首次播放有无防火墙弹窗）。
 
 ---
 
@@ -625,7 +651,7 @@ abstract interface class PlaybackSourceObserver {
 | # | 问题 | 选项 | 建议 | 影响阶段 | 结论 |
 |---|---|---|---|---|---|
 | D1 | 缓存目标 | A. 只保留续播集（占用小）；B. 看过的部分尽量都留着（占用大）；C. 两级淘汰兼顾 | C | 3 | **C（2026-10-23 用户确认）**：两级淘汰，超出配额时先把久未访问的条目瘦身为续播集，仍超出再按 LRU 整条删除 |
-| D2 | 默认配额 | 移动端 2GB / 桌面端 10GB；或默认关闭 | 移动端 2GB、桌面端 10GB | 5 | **移动端 2GB、桌面端 10GB，默认开启（2026-10-23 用户确认）**；可在播放设置中改为关闭 / 1 / 2 / 5 / 10 / 20 GB，实际上限受剩余空间限制（至少保留 1GB） |
+| D2 | 默认配额 | 移动端 2GB / 桌面端 10GB；或默认关闭 | 移动端 2GB、桌面端 10GB | 5 | **移动端 2GB、桌面端 10GB，默认开启（2026-10-23 用户确认）**；播放设置中用滑块按 1GB 调节（最大移动端 64GB、桌面端 200GB，并受剩余空间限制），另有开关可关闭；实际上限受剩余空间限制（至少保留 1GB） |
 | D3 | 是否做“继续观看”预取 | 做（只在 Wi-Fi 下）/ 不做 | 先不做，Stage 6 验收后再定 | 7 | 待定 |
 | D4 | 首个落地平台 | iOS / Android | — | 全部 | **iOS（2026-10-22 用户确认）** |
 | D5 | 代理用什么实现 | A. Dart 隔离区（跨平台一套）；B. iOS 用 Swift 原生实现 | A，Stage 2 压测不达标再考虑 B | 2, 4 | 待 Stage 2 结论 |
