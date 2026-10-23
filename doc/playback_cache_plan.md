@@ -1,6 +1,6 @@
 # 播放缓存任务文档（续播秒开）
 
-> 状态：**Stage 0、0.4、1、3、4、5 完成（iOS 模拟器）；iOS 上播放缓存已默认开启；Stage 2.3 / 4.7 等待用户真机验证；下一步 Stage 6（命中缓存时延迟解析上游地址）**
+> 状态：**Stage 0、0.4、1、3、4、5、6 完成（iOS 模拟器）；iOS 上播放缓存默认开启，命中时首帧约 80ms；Stage 2.3 / 4.7 等待用户真机验证；剩余可选 Stage 7（预取，D3）和 Stage 8（推广到其他平台）**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/playback/`（新增 `cache/`）、`client/packages/native_player/`、`client/lib/screens/settings/`、iOS / macOS 工程配置
 >
@@ -185,8 +185,12 @@ final class CacheEntryKey {
 class PlaybackProxy {
   PlaybackProxy({bool watchLifecycle, Future<Directory?> Function()? cacheDirectory,
                  int? quotaBytes /* 默认 D2 */, Future<int?> Function()? freeSpace, int blockSize});
-  Future<Uri> register(Uri upstream, Map<String, String> headers,
-                       {String? cacheId /* 为空时只透传 */, UpstreamRefresher? refresh});
+  Future<Uri> register(Uri? upstream /* 为空：上游待定，回源等 provideUpstream */, Map<String, String> headers,
+                       {String? cacheId /* 为空时只透传 */, UpstreamRefresher? refresh,
+                        String? filePath, int? storageId, String? serverId, String? itemKey});
+  Future<CacheHit?> lookup(String serverId, String itemKey);  // Stage 6：这部片子最近使用的缓存条目
+  void provideUpstream(Uri proxyUri, Uri url, Map<String, String> headers);
+  void failUpstream(Uri proxyUri);                         // 后台解析失败：缺口 502，已缓存部分照常读
   Future<void> unregister(Uri proxyUri);
   void opening(Uri proxyUri, Duration? startAt);           // 以下四个由会话经 PlaybackSourceObserver 调用，不等回复
   void opened(Uri proxyUri);
@@ -212,7 +216,7 @@ abstract interface class PlaybackSourceObserver {
 ```
 
 - `ProxiedSourceResolver` 用“服务器 + 媒体 + 文件路径”生成 `cacheId`；每次登记都分配独立的代理条目 id（`r<n>`），与缓存键分开，两个会话先后打开同一部片子时不会互相注销。
-- Stage 6 的 `lookup`（命中时跳过上游解析）尚未实现。
+- Stage 6：缓存键里的 `filePath` 要调流地址 API 才知道，所以元数据另存 `serverId` + `itemKey`，`lookup` 按“服务器 + 媒体”找最近使用的条目。
 
 - 代理隔离区不能直接调用 Riverpod / Dio 闭包：需要上游地址时，通过 SendPort 发消息给主隔离区，由主隔离区调用 `UpstreamResolver` 后回复。
 - 代理地址格式：`http://127.0.0.1:<port>/<launchToken>/e/<entryId>`。`launchToken` 是每次启动随机生成的，防止本机其他 App 借代理读取需要鉴权的内容。
@@ -558,9 +562,36 @@ abstract interface class PlaybackSourceObserver {
 
 **前置**：Stage 4。
 
-- [ ] 6.1 `PlaybackCache.lookup` 命中（`size` 已知且续播集完整）时，会话直接用代理地址 `open`，上游解析（API + 302）放到后台；字幕和媒体信息用 `meta` 里的 `filePath` / `storageId`。
-- [ ] 6.2 后台解析失败或文件已变化（大小 / ETag 不一致）：作废缓存，按现有失败流程处理或重新加载。
-- [ ] 6.3 iOS 测试：断网状态下续播已缓存的片子，能播放到已缓存区间结束为止。
+- [x] 6.1 `PlaybackProxy.lookup` 命中时，会话直接用代理地址 `open`，上游解析（API + 302）放到后台；字幕和媒体信息用元数据里的 `filePath` / `storageId`。
+- [x] 6.2 后台解析失败：已缓存的部分照常播放，缺口返回 502（交给现有的网络错误处理）。文件路径变了（片源换了）：作废旧缓存，本次播放按现有失败流程处理，重试时走正常路径。大小 / ETag 变化仍由回源时的校验处理。
+- [x] 6.3 iOS 测试：服务器整体不可用（流地址 API 和媒体源站都失败）时续播已缓存的片子，正常出画面并播放。
+
+#### Stage 6 结论（2026-10-23）
+
+- **命中条件**：这部片子有缓存就算命中，不要求续播集完整。缓存不全时，开头和索引照样从缓存读，缺口等后台解析完成后再回源，最坏和不命中一样。
+- **解析器流程**（`ProxiedSourceResolver.resolve`）：
+  1. 先查已下载的文件（`findDownloadedFile`），有就走原来的路径，本地文件优先；
+  2. 按服务器 + 媒体 `lookup`，命中则以“上游待定”登记，立即返回代理地址；
+  3. 后台调用内层解析器，把地址交给代理（`provideUpstream`）。
+- **代理**：条目支持上游待定（`Completer`），回源前最多等 30 秒；`upstreamFailed` 后缺口返回 502。
+- **iOS 模拟器**（`playback_cache_native_test`；流地址 API 延迟 300ms，源站每个请求 300ms、6MiB/s、经过 302）：
+
+| 封装 | 轮次 | resolve | firstFrame |
+|---|---|---|---|
+| MKV | 冷启动，续播 400 秒 | 670ms | 1991ms |
+| MKV | 命中缓存，续播 404 秒 | **3ms** | **77ms** |
+| MKV | 服务器整体不可用 | 0ms | **63ms** |
+| MP4 | 冷启动 | 676ms | 3039ms |
+| MP4 | 命中缓存 | **1ms** | **76ms** |
+| MP4 | 服务器整体不可用 | 1ms | **93ms** |
+
+  命中缓存的首帧（约 80ms）低于 `lan` 场景（约 100–150ms），**达到 §8 的目标**。命中后 seek 到未缓存的 100 秒正常（后台解析完成后回源）。
+
+- **单测**：
+  - 解析器 5 项：命中时不等内层解析器、已下载文件优先、片源变化作废缓存、后台解析失败仍读缓存、没有缓存时走正常路径；
+  - 代理 2 项：上游待定时读缓存并等待缺口、上游失败只影响缺口；
+  - 存储 1 项：按媒体查找最近条目并能持久化。
+  - 全量 182 项通过，`flutter analyze` 无问题。
 
 ### Stage 7（可选，D3）：“继续观看”预取（P3）
 
@@ -595,7 +626,7 @@ abstract interface class PlaybackSourceObserver {
 
 以 Stage 0.4 起的 `firstFrame` 指标衡量（基线见 Stage 0.4 结论）：
 
-- [ ] 网盘场景续播命中缓存（Stage 6 完成后）：`firstFrame` ≤ 同一样片 `lan` 场景 + 200ms（目前约 0.3 秒以内）；MKV 和 MP4 都要满足
+- [x] 网盘场景续播命中缓存（Stage 6 完成后）：`firstFrame` ≤ 同一样片 `lan` 场景 + 200ms；MKV 和 MP4 都要满足（模拟器上约 80ms，见 Stage 6 结论；真机待确认）
 - [x] Stage 1 完成后：续播的首帧不比旧做法慢（模拟器上已满足；真机见 1.7）
 - [ ] 未命中缓存、首次播放：`firstFrame` 不比 Stage 0.4 基线慢超过 100ms
 - [ ] 真机上用真实服务器和网盘片源各测一次（用户手动），对比日志里的 `startup` 行
@@ -628,6 +659,7 @@ abstract interface class PlaybackSourceObserver {
 | 2026-10-22 | Stage 1 起播位置交给内核 | 完成，待真机确认 | 见 §6 Stage 1 结论。单测：会话新增 3 项（打开时带起播位置、起播位置防止网络错误后的异常片尾进度、非正数从头播放；反向验证：去掉 `markControlledSeek` 后用例失败），原生引擎新增 1 项（毫秒数透传），全量 108 项通过；`flutter analyze` 无问题；Android `:native_player:compileDebugKotlin` 通过；iOS 模拟器 `playback_session_native_test` 通过。测试源站新增 `timeline`（每个请求的开始 / 结束时间和已发送字节数），基准新增 `BENCH_SCENARIO` 过滤和 `NP_BENCH_TIMELINE` 输出。~~另一个发现：Aether 两次打开时各发出的 `bytes=0-33554431` 请求会一直下载~~（**已被 Stage 2 更正**：是测试源站的假象，见 §6 Stage 2 结论第 3 条） |
 | 2026-10-22 | Stage 0.4 首帧指标 | 完成 | 见 §6 Stage 0.4。单测新增 4 项（hub 重置首帧标志、原生事件映射、会话记录首帧、上一集的首帧不计入；反向验证：去掉 `markResolved` 前提后用例失败），全量 111 项通过；`flutter analyze` 无问题；Android Kotlin 编译通过；iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。基准第一次跑 MP4 时测试 App 连不上调试连接（`The log reader failed unexpectedly`，当时 Claude 应用的模拟器面板也在监听这台模拟器），重跑通过 |
 | 2026-10-22 | Stage 2 iOS 代理 Spike（模拟器） | 通过，待真机 | 见 §6 Stage 2 结论。iOS Info.plist 加了 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`（正式构建也生效；它同时放开了对局域网 IP 的 http 访问，iOS 17 起默认会拦截）。单测：代理 10 项（Range / HEAD / 鉴权头 / 重定向保留头 / 未知条目 / 并发 / 播放器断开时取消上游 / 同端口重新绑定 / 解析器装饰器），测试源站 9 项。iOS 模拟器：代理功能测试（含前后台切换）通过；直连 / 代理基准各 2 组。更正了 Stage 1 关于开头请求的结论 |
+| 2026-10-23 | Stage 6 命中缓存时延迟解析上游 | 完成（模拟器），待真机 | 见 §6 Stage 6 结论。命中缓存首帧约 80ms（冷启动 2–3 秒）；服务器整体不可用时仍可从缓存续播 |
 | 2026-10-23 | Stage 5 设置与存储管理 UI | 完成（模拟器），待真机 | 见 §6 Stage 5 结论。iOS 上播放缓存默认开启（2GB），其他平台暂不开启；播放设置新增“播放缓存”（上限、已缓存、明细页），存储空间新增“播放缓存”分类 |
 | 2026-10-23 | Stage 4 代理接入缓存 | 完成（模拟器），待真机 | 见 §6 Stage 4 结论。代理隔离区持有 `CacheStore`：命中读盘、按缺口回源并写入、文件变化作废、401 / 403 / 410 时刷新地址、403 / 429 退避、打开阶段固定首尾、采样、配额淘汰。会话层新增 `PlaybackSourceObserver`。仍然只在 `PLAYBACK_PROXY=true` 时启用 |
 | 2026-10-23 | Stage 3 缓存存储 | 完成 | 见 §6 Stage 3 结论；§4.4 改为每块一个文件 + 块内有效区间，取消 `index.json`，默认块大小 4MiB。全量单测 153 项通过，`flutter analyze` 无问题 |

@@ -18,6 +18,18 @@ import '../test/playback/fakes/fake_gateways.dart';
 
 const _samplePath = String.fromEnvironment('NATIVE_PLAYER_SAMPLE');
 
+/// 流地址 API 延迟 300ms；[offline] 时直接失败，模拟服务器整体不可用
+class _NetdiskGateway extends FakeSourceGateway {
+  bool offline = false;
+
+  @override
+  Future<StreamInfo?> fetchStreamInfo(PlaybackItem item) async {
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    if (offline) throw const SocketException('server unreachable');
+    return super.fetchStreamInfo(item);
+  }
+}
+
 Future<void> _waitFor(
   WidgetTester tester,
   bool Function() condition,
@@ -31,7 +43,8 @@ Future<void> _waitFor(
   fail('timed out waiting for $what');
 }
 
-/// Stage 4：Aether 经缓存代理续播——冷启动、命中缓存的再次续播、seek 到未缓存区间、源站不可用时播放已缓存部分
+/// Stage 4 / 6：Aether 经缓存代理续播——冷启动、命中缓存的再次续播（不等流地址 API 和 302）、
+/// seek 到未缓存区间、服务器整体不可用时播放已缓存部分
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -53,7 +66,7 @@ void main() {
       });
       server.requiredHeaders = const {'Authorization': 'Bearer token'};
       final gateway =
-          FakeSourceGateway()
+          _NetdiskGateway()
             ..serverUrl = 'http://127.0.0.1:${server.mediaUri.port}'
             ..streamInfo = StreamInfo(url: server.redirectUri.toString());
       final cacheDir = await Directory.systemTemp.createTemp('playback_cache');
@@ -76,6 +89,7 @@ void main() {
             PlaybackSourceResolver(gateway),
             proxy,
             serverUrl: () => gateway.serverUrl,
+            findDownloadedFile: gateway.findDownloadedFile,
           ),
           sourceGateway: gateway,
           progressGateway: FakeProgressGateway(),
@@ -147,6 +161,7 @@ void main() {
 
       await server.close();
       serverUp = false;
+      gateway.offline = true;
       final offline = await play(
         'offline',
         const Duration(seconds: 405),
@@ -154,6 +169,11 @@ void main() {
       );
 
       expect(warm.firstFrame!, lessThan(cold.firstFrame!));
+      expect(
+        warm.resolved!,
+        lessThan(const Duration(milliseconds: 100)),
+        reason: '命中缓存不等流地址 API',
+      );
       expect(offline.firstFrame, isNotNull);
       debugPrint('NP_CACHE stats ${await proxy.stats()}');
     },

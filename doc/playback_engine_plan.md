@@ -748,6 +748,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-23 | 播放缓存 Stage 3：缓存存储（另一份任务） | 完成 | 新增 `lib/playback/cache/` 下的磁盘存储与两级淘汰（纯 Dart，供代理隔离区使用），不涉及内核与会话层；详见 `doc/playback_cache_plan.md` Stage 3 |
 | 2026-10-23 | 播放缓存 Stage 4：代理接入缓存（另一份任务） | 完成（模拟器），待真机 | 会话层新增 `PlaybackSourceObserver`（`ResolvedPlayback.observer`）：解析出地址后、`open` 之前调用 `onOpening`；首帧时调用 `onFirstFrame` 一次；用户 seek 时调用 `onSeek`；每 5 秒以及退出、切换剧集时调用 `onProgress`。内核不受影响。缓存仍然只在 `PLAYBACK_PROXY=true` 时启用；详见 `doc/playback_cache_plan.md` Stage 4 |
 | 2026-10-23 | 播放缓存 Stage 5：设置与默认开启（另一份任务） | 完成（模拟器），待真机 | `player_screen` 的解析器改为 `ProxiedSourceResolver.wrapIfEnabled(…, quotaGb: 播放设置里的缓存上限)`：iOS 上默认经过本机缓存代理（2GB），上限选“关闭”或其他平台时直连。内核不受影响；详见 `doc/playback_cache_plan.md` Stage 5 |
+| 2026-10-23 | 播放缓存 Stage 6：命中缓存时延迟解析上游（另一份任务） | 完成（模拟器），待真机 | 命中缓存时会话的 `resolve` 不再等流地址 API 和 302，直接拿到本机代理地址（字幕、媒体信息用缓存里记下的 `filePath` / `storageId`），上游在后台解析；`player_screen` 额外传入 `findDownloadedFile`，保证已下载文件优先。会话层和内核没有改动；详见 `doc/playback_cache_plan.md` Stage 6 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---

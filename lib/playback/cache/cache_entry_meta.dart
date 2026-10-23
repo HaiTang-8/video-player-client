@@ -26,6 +26,8 @@ final class CacheEntryMeta {
     this.lastModified,
     this.filePath,
     this.storageId,
+    this.serverId,
+    this.itemKey,
     this.resumePositionMs,
     this.durationMs,
     Map<int, ByteRange>? blocks,
@@ -49,6 +51,10 @@ final class CacheEntryMeta {
   String? lastModified;
   String? filePath;
   int? storageId;
+
+  /// 与 [itemKey] 一起用于命中查找：不先请求流地址 API 也能找到这部片子的缓存
+  String? serverId;
+  String? itemKey;
   int? resumePositionMs;
   int? durationMs;
 
@@ -236,6 +242,8 @@ final class CacheEntryMeta {
     'lastModified': lastModified,
     'filePath': filePath,
     'storageId': storageId,
+    'serverId': serverId,
+    'itemKey': itemKey,
     'resumePositionMs': resumePositionMs,
     'durationMs': durationMs,
     'blocks': [
@@ -258,6 +266,8 @@ final class CacheEntryMeta {
     lastModified: json['lastModified'] as String?,
     filePath: json['filePath'] as String?,
     storageId: json['storageId'] as int?,
+    serverId: json['serverId'] as String?,
+    itemKey: json['itemKey'] as String?,
     resumePositionMs: json['resumePositionMs'] as int?,
     durationMs: json['durationMs'] as int?,
     blocks: {

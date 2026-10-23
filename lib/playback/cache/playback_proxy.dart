@@ -14,6 +14,9 @@ import 'playback_cache_catalog.dart';
 typedef UpstreamRefresher =
     Future<({Uri url, Map<String, String> headers})?> Function();
 
+/// 按媒体查找到的缓存条目
+typedef CacheHit = ({String cacheId, String? filePath, int? storageId});
+
 /// 本机播放代理的门面（主隔离区）：首次使用时启动代理隔离区，把上游地址登记为本机代理地址；
 /// 提供缓存目录时，可缓存的条目经过磁盘缓存
 ///
@@ -66,14 +69,17 @@ class PlaybackProxy implements PlaybackCacheCatalog {
   int _nextId = 0;
 
   /// 登记上游，返回代理地址；登记在代理隔离区确认后才返回，避免播放器的请求先到。
-  /// 给出 [cacheId] 时经过磁盘缓存；[refresh] 用于上游返回 401 / 403 / 410 时重新解析
+  /// 给出 [cacheId] 时经过磁盘缓存；[refresh] 用于上游返回 401 / 403 / 410 时重新解析。
+  /// [upstream] 为空时（命中缓存、后台还在解析）已缓存的部分照常读取，回源要等 [provideUpstream]
   Future<Uri> register(
-    Uri upstream,
+    Uri? upstream,
     Map<String, String> headers, {
     String? cacheId,
     UpstreamRefresher? refresh,
     String? filePath,
     int? storageId,
+    String? serverId,
+    String? itemKey,
   }) async {
     final handle = await _start();
     final id = 'r${++_nextId}';
@@ -81,12 +87,14 @@ class PlaybackProxy implements PlaybackCacheCatalog {
     await handle.call({
       'cmd': 'register',
       'id': id,
-      'url': upstream.toString(),
+      'url': upstream?.toString(),
       'headers': headers,
       'cacheId': cacheId,
       'refreshable': refresh != null,
       'filePath': filePath,
       'storageId': storageId,
+      'serverId': serverId,
+      'itemKey': itemKey,
     });
     if (DateTime.now().difference(_limitsSentAt ?? DateTime(2000)) >
         const Duration(minutes: 1)) {
@@ -94,6 +102,35 @@ class PlaybackProxy implements PlaybackCacheCatalog {
     }
     return Uri.parse('http://127.0.0.1:${handle.port}/$_token/e/$id');
   }
+
+  /// 这部片子最近使用的缓存条目；没有缓存或不在支持的平台时返回 null
+  Future<CacheHit?> lookup(String serverId, String itemKey) async {
+    final handle = await _start();
+    final found =
+        await handle.call({
+              'cmd': 'lookup',
+              'serverId': serverId,
+              'itemKey': itemKey,
+            })
+            as Map?;
+    if (found == null) return null;
+    return (
+      cacheId: found['cacheId'] as String,
+      filePath: found['filePath'] as String?,
+      storageId: found['storageId'] as int?,
+    );
+  }
+
+  /// 补上后台解析出的上游地址，等待中的回源请求随之继续
+  void provideUpstream(Uri proxyUri, Uri url, Map<String, String> headers) =>
+      _post(proxyUri, {
+        'cmd': 'upstream',
+        'url': url.toString(),
+        'headers': headers,
+      });
+
+  /// 后台解析失败：需要回源的请求返回 502，已缓存的部分照常读取
+  void failUpstream(Uri proxyUri) => _post(proxyUri, {'cmd': 'upstreamFailed'});
 
   Future<void> unregister(Uri proxyUri) async {
     final handle = await _handle;

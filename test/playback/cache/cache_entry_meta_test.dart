@@ -150,6 +150,8 @@ void main() {
           ..etag = '"abc"'
           ..filePath = '/m/a.mkv'
           ..storageId = 3
+          ..serverId = 'http://media.local:80'
+          ..itemKey = 'movie:1'
           ..resumePositionMs = 1234
           ..durationMs = 99999
           ..markCached(const ByteRange(900, 2100))

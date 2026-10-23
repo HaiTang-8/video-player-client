@@ -224,6 +224,35 @@ void main() {
     expect(await Directory('${dir.path}/cache/a').exists(), isFalse);
   });
 
+  test('finds the most recent entry of an item', () async {
+    await store.prepare('old', size: size);
+    store.describe(
+      'old',
+      serverId: 's',
+      itemKey: 'movie:1',
+      filePath: '/a.mkv',
+    );
+    now = now.add(const Duration(hours: 1));
+    await store.prepare('new', size: size);
+    store.describe(
+      'new',
+      serverId: 's',
+      itemKey: 'movie:1',
+      filePath: '/b.mkv',
+    );
+    await store.prepare('other', size: size);
+    store.describe('other', serverId: 's', itemKey: 'movie:2');
+
+    expect(store.findByItem('s', 'movie:1')!.id, 'new');
+    expect(store.findByItem('s', 'movie:3'), isNull);
+    expect(store.findByItem('t', 'movie:1'), isNull);
+
+    await store.close();
+    store = newStore();
+    await store.open();
+    expect(store.findByItem('s', 'movie:1')!.filePath, '/b.mkv');
+  });
+
   test('clear removes every entry', () async {
     await store.prepare('a', size: size);
     await store.prepare('b', size: size);

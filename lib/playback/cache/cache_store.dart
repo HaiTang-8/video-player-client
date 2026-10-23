@@ -69,6 +69,8 @@ class CacheStore {
     String? lastModified,
     String? filePath,
     int? storageId,
+    String? serverId,
+    String? itemKey,
   }) async {
     final existing = _entries[id];
     if (existing != null &&
@@ -84,7 +86,9 @@ class CacheStore {
         ..etag = etag ?? existing.etag
         ..lastModified = lastModified ?? existing.lastModified
         ..filePath = filePath ?? existing.filePath
-        ..storageId = storageId ?? existing.storageId;
+        ..storageId = storageId ?? existing.storageId
+        ..serverId = serverId ?? existing.serverId
+        ..itemKey = itemKey ?? existing.itemKey;
       _markDirty(id);
       return existing;
     }
@@ -101,6 +105,8 @@ class CacheStore {
       lastModified: lastModified,
       filePath: filePath,
       storageId: storageId,
+      serverId: serverId,
+      itemKey: itemKey,
     );
     await _serial(id, () => _blocksDir(id).create(recursive: true));
     _entries[id] = meta;
@@ -167,13 +173,32 @@ class CacheStore {
 
   void touch(String id) => _update(id, (m) => m.lastAccess = _now());
 
-  /// 补充片源信息（缓存明细页展示用，Stage 6 延迟解析时也会用到）
-  void describe(String id, {String? filePath, int? storageId}) =>
-      _update(id, (m) {
-        m
-          ..filePath = filePath ?? m.filePath
-          ..storageId = storageId ?? m.storageId;
-      });
+  /// 补充片源信息（缓存明细页展示、按媒体查找命中时使用）
+  void describe(
+    String id, {
+    String? filePath,
+    int? storageId,
+    String? serverId,
+    String? itemKey,
+  }) => _update(id, (m) {
+    m
+      ..filePath = filePath ?? m.filePath
+      ..storageId = storageId ?? m.storageId
+      ..serverId = serverId ?? m.serverId
+      ..itemKey = itemKey ?? m.itemKey;
+  });
+
+  /// 这部片子最近使用的缓存条目（同一集可能换过片源，取最近的）
+  CacheEntryMeta? findByItem(String serverId, String itemKey) {
+    CacheEntryMeta? found;
+    for (final meta in _entries.values) {
+      if (meta.serverId != serverId || meta.itemKey != itemKey) continue;
+      if (found == null || meta.lastAccess.isAfter(found.lastAccess)) {
+        found = meta;
+      }
+    }
+    return found;
+  }
 
   /// 记录打开阶段读取的区间（封装头、索引）
   void pin(String id, ByteRange range) => _update(id, (m) => m.pin(range));

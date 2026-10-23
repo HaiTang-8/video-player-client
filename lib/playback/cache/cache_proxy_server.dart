@@ -64,13 +64,36 @@ class _Entry {
     this.refreshable = false,
     this.filePath,
     this.storageId,
-  });
+    this.serverId,
+    this.itemKey,
+  }) {
+    if (url != null) _upstream.complete(true);
+  }
 
   final String id;
   final String? filePath;
   final int? storageId;
-  Uri url;
+  final String? serverId;
+  final String? itemKey;
+
+  /// 命中缓存时先登记、后台解析完成后再补上；为空时回源要等 [upstreamReady]
+  Uri? url;
   Map<String, String> headers;
+  final Completer<bool> _upstream = Completer<bool>();
+
+  /// 上游地址可用时为 true，后台解析失败时为 false
+  Future<bool> get upstreamReady => _upstream.future;
+
+  void setUpstream(Uri value, Map<String, String> newHeaders) {
+    url = value;
+    headers = newHeaders;
+    if (!_upstream.isCompleted) _upstream.complete(true);
+  }
+
+  void failUpstream() {
+    if (!_upstream.isCompleted) _upstream.complete(false);
+  }
+
   final String? cacheId;
   final bool refreshable;
 
@@ -126,6 +149,7 @@ class _CacheProxyServer {
   /// 打开阶段只把文件首尾这些范围内的读取记为固定区间（封装头、索引），避免固定住续播点本身
   static const _pinZone = 64 << 20;
   static const _openingTimeout = Duration(seconds: 15);
+  static const _upstreamTimeout = Duration(seconds: 30);
   static const _enforceInterval = Duration(seconds: 1);
 
   final String _token;
@@ -179,14 +203,17 @@ class _CacheProxyServer {
     final cacheId = entry?.cacheId;
     switch (message['cmd']) {
       case 'register':
+        final url = message['url'] as String?;
         final registered = _Entry(
           id!,
-          Uri.parse(message['url'] as String),
+          url == null ? null : Uri.parse(url),
           Map<String, String>.from(message['headers'] as Map),
           cacheId: _store == null ? null : message['cacheId'] as String?,
           refreshable: message['refreshable'] == true,
           filePath: message['filePath'] as String?,
           storageId: message['storageId'] as int?,
+          serverId: message['serverId'] as String?,
+          itemKey: message['itemKey'] as String?,
         );
         _entries[id] = registered;
         final registeredCacheId = registered.cacheId;
@@ -195,9 +222,34 @@ class _CacheProxyServer {
             registeredCacheId,
             filePath: registered.filePath,
             storageId: registered.storageId,
+            serverId: registered.serverId,
+            itemKey: registered.itemKey,
           );
         }
         return true;
+      case 'upstream':
+        entry?.setUpstream(
+          Uri.parse(message['url'] as String),
+          Map<String, String>.from(message['headers'] as Map),
+        );
+        return true;
+      case 'upstreamFailed':
+        entry?.failUpstream();
+        return true;
+      case 'lookup':
+        final found = _store?.findByItem(
+          message['serverId'] as String,
+          message['itemKey'] as String,
+        );
+        return found == null
+            ? null
+            : <String, Object?>{
+              'cacheId': found.id,
+              'filePath': found.filePath,
+              'storageId': found.storageId,
+              'size': found.size,
+              'cachedBytes': found.cachedBytes,
+            };
       case 'unregister':
         _entries.remove(id);
         return true;
@@ -481,6 +533,8 @@ class _CacheProxyServer {
         lastModified: info.lastModified,
         filePath: entry.filePath,
         storageId: entry.storageId,
+        serverId: entry.serverId,
+        itemKey: entry.itemKey,
       );
     }
     if (request.method == 'HEAD' || !info.usable) {
@@ -576,6 +630,8 @@ class _CacheProxyServer {
         lastModified: info.lastModified,
         filePath: entry.filePath,
         storageId: entry.storageId,
+        serverId: entry.serverId,
+        itemKey: entry.itemKey,
       );
       throw const HttpException('upstream file changed');
     }
@@ -663,6 +719,11 @@ class _CacheProxyServer {
     _Entry entry,
     String? range,
   ) async {
+    final ready = await entry.upstreamReady.timeout(
+      _upstreamTimeout,
+      onTimeout: () => false,
+    );
+    if (!ready) return null;
     var refreshed = false;
     for (var attempt = 0; attempt < 4; attempt++) {
       final HttpClientResponse response;
@@ -722,7 +783,7 @@ class _CacheProxyServer {
     _Entry entry,
     String? range,
   ) async {
-    var url = entry.url;
+    var url = entry.url!;
     var headers = entry.headers;
     for (var hop = 0; ; hop++) {
       final outgoing = await _client.openUrl(method, url)

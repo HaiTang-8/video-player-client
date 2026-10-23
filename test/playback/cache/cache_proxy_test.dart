@@ -212,6 +212,51 @@ void main() {
     expect(await proxy.usedBytes(), 65536);
   });
 
+  test('a pending upstream serves cached data and waits for gaps', () async {
+    final first = await proxy.register(
+      upstream.mediaUri,
+      auth,
+      cacheId: 'a',
+      serverId: 's',
+      itemKey: 'movie:1',
+      filePath: '/m/a.mkv',
+    );
+    await get(first, range: 'bytes=0-131071');
+    final hit = await proxy.lookup('s', 'movie:1');
+    expect(hit?.cacheId, 'a');
+    expect(hit?.filePath, '/m/a.mkv');
+    expect(await proxy.lookup('s', 'movie:2'), isNull);
+
+    final pending = await proxy.register(null, const {}, cacheId: 'a');
+    upstream.resetStats();
+    final (_, cached) = await get(pending, range: 'bytes=0-65535');
+    expect(cached, bytes.sublist(0, 65536));
+    expect(upstream.requestCount, 0);
+
+    final gap = get(pending, range: 'bytes=200000-299999');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(upstream.requestCount, 0);
+    proxy.provideUpstream(pending, upstream.mediaUri, auth);
+    expect((await gap).$2, bytes.sublist(200000, 300000));
+  });
+
+  test('a failed upstream only fails the gaps', () async {
+    final first = await register('a');
+    await get(first, range: 'bytes=0-131071');
+    final pending = await proxy.register(null, const {}, cacheId: 'a');
+    proxy.failUpstream(pending);
+
+    final (_, cached) = await get(pending, range: 'bytes=0-1023');
+    expect(cached, bytes.sublist(0, 1024));
+    var missing = -1;
+    try {
+      missing = (await get(pending, range: 'bytes=500000-599999')).$2.length;
+    } on IOException {
+      missing = 0;
+    }
+    expect(missing, lessThan(100000));
+  });
+
   test('a zero quota passes through without writing', () async {
     proxy = newProxy(quota: 0);
     final uri = await register('a');

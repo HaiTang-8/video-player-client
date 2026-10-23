@@ -84,6 +84,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         PlaybackSourceResolver(gateway),
         quotaGb: ref.read(playbackSettingsProvider).cacheQuotaGb,
         serverUrl: () => gateway.serverUrl,
+        findDownloadedFile: gateway.findDownloadedFile,
       ),
       sourceGateway: gateway,
       progressGateway: gateway,
