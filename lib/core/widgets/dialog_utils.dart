@@ -21,11 +21,32 @@ class DialogUtils {
         context: context,
         alignment: Alignment.center,
         barrierDismissable: barrierDismissible,
-        builder: builder,
+        builder: (context) => AnimatedPadding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.decelerate,
+          child: Builder(builder: builder),
+        ),
       ).future;
     } finally {
       container.read(windowBorderVisibleProvider.notifier).show();
     }
+  }
+
+  /// 弹窗内容区最大高度，扣除键盘、安全区及标题/按钮占用，避免键盘弹出时溢出
+  static double contentMaxHeight(
+    BuildContext context, {
+    double max = 520,
+    double reserved = 180,
+  }) {
+    final mq = MediaQuery.of(context);
+    final available = mq.size.height -
+        mq.viewInsets.bottom -
+        mq.padding.vertical -
+        reserved;
+    return available.clamp(120.0, max);
   }
 
   /// 显示确认对话框

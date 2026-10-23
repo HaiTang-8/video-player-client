@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -494,10 +496,13 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   surfaceOpacity: 1,
                   title: const Text('添加服务器'),
                   content: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minHeight: 220,
+                    constraints: BoxConstraints(
+                      minHeight: math.min(
+                        220,
+                        DialogUtils.contentMaxHeight(context),
+                      ),
                       minWidth: 300,
-                      maxHeight: 520,
+                      maxHeight: DialogUtils.contentMaxHeight(context),
                     ),
                     child: SingleChildScrollView(
                       child: Padding(
@@ -734,9 +739,9 @@ class _ServerConfigScreenState extends ConsumerState<ServerConfigScreen> {
                   surfaceOpacity: 1,
                   title: const Text('编辑服务器'),
                   content: ConstrainedBox(
-                    constraints: const BoxConstraints(
+                    constraints: BoxConstraints(
                       minWidth: 300,
-                      maxHeight: 520,
+                      maxHeight: DialogUtils.contentMaxHeight(context),
                     ),
                     child: SingleChildScrollView(
                       child: Padding(
