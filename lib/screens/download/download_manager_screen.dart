@@ -414,12 +414,16 @@ class _DownloadingItem extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text(
-                      sizeText,
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    Expanded(
+                      child: Text(
+                        sizeText,
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    const Spacer(),
-                    if (task.isDownloading)
+                    if (task.isDownloading) ...[
+                      const SizedBox(width: 8),
                       Text(
                         task.formattedSpeed,
                         style: const TextStyle(
@@ -427,6 +431,7 @@ class _DownloadingItem extends StatelessWidget {
                           color: CupertinoColors.systemBlue,
                         ),
                       ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 6),
