@@ -19,6 +19,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart'
         showDropdown;
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     show LucideIcons;
+import '../../../core/device/device_status.dart';
 import '../../../core/widgets/dialog_utils.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
@@ -367,7 +368,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         final bytes = await engine.currentDownloadBytesPerSecond() ?? 0;
         if (!mounted) return;
         setState(() {
-          _speedText = bytes > 0 ? _formatSpeed(bytes) : null;
+          _speedText = bytes > 0 ? formatNetworkSpeed(bytes) : null;
         });
       } catch (e) {
         LogService.instance.warn(
@@ -378,22 +379,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     });
   }
 
+  Future<double?> Function()? get _engineThroughput {
+    final Object engine = widget.engine;
+    return engine is NetworkThroughputProvider
+        ? engine.currentDownloadBytesPerSecond
+        : null;
+  }
+
   void _stopSpeedPolling() {
     _speedTimer?.cancel();
     _speedTimer = null;
     if (mounted) setState(() => _speedText = null);
-  }
-
-  static String _formatSpeed(double bytesPerSecond) {
-    if (bytesPerSecond < 1024) {
-      return '${bytesPerSecond.toStringAsFixed(0)} B/s';
-    }
-    final kb = bytesPerSecond / 1024;
-    if (kb < 1024) {
-      return '${kb.toStringAsFixed(0)} KB/s';
-    }
-    final mb = kb / 1024;
-    return '${mb.toStringAsFixed(1)} MB/s';
   }
 
   static String _formatPlaybackSpeed(double speed) {
@@ -1288,6 +1284,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 title: widget.title ?? '',
                 onBack: widget.onBack ?? () => Navigator.of(context).maybePop(),
                 isLocked: _isLocked,
+                fallbackSpeed: _engineThroughput,
               ),
               if (!_isLocked) _buildBottomBar(),
               _buildProgressBar(),

@@ -4,10 +4,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.TrafficStats
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.os.StatFs
 import android.util.Log
 import android.view.View
@@ -25,6 +27,7 @@ class MainActivity : FlutterActivity() {
         private const val EVENT_CHANNEL = "media_player/downloader/progress"
         private const val STORAGE_CHANNEL = "media_player/storage"
         private const val ORIENTATION_CHANNEL = "media_player/orientation"
+        private const val DEVICE_STATUS_CHANNEL = "media_player/device_status"
     }
 
     private var downloadService: DownloadService? = null
@@ -112,6 +115,17 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
                 "getNotchSide" -> {
                     result.success(getNotchSide())
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, DEVICE_STATUS_CHANNEL).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "rxBytes" -> {
+                    val uid = TrafficStats.getUidRxBytes(Process.myUid())
+                    val bytes = if (uid != TrafficStats.UNSUPPORTED.toLong()) uid else TrafficStats.getTotalRxBytes()
+                    result.success(if (bytes == TrafficStats.UNSUPPORTED.toLong()) null else bytes)
                 }
                 else -> result.notImplemented()
             }

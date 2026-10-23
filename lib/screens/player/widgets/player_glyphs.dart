@@ -21,6 +21,9 @@ enum PlayerGlyphType {
   seekForward,
   play,
   pause,
+  wifi,
+  cellular,
+  ethernet,
 }
 
 class PlayerGlyph extends StatelessWidget {
@@ -70,6 +73,9 @@ class _PlayerGlyphPainter extends CustomPainter {
       canvas.drawPath(path, stroke);
       canvas.drawPath(path, fill);
     }
+
+    void outline(List<Offset> points) =>
+        canvas.drawPath(Path()..addPolygon(points, true), stroke);
 
     void mirrored(void Function() draw) {
       canvas.save();
@@ -233,6 +239,44 @@ class _PlayerGlyphPainter extends CustomPainter {
         mirrored(seekBack);
       case PlayerGlyphType.play:
         solid(const [Offset(6, 3), Offset(20, 12), Offset(6, 21)]);
+      case PlayerGlyphType.wifi:
+        const center = Offset(12, 19.5);
+        for (final radius in const [5.0, 10.0, 15.0]) {
+          canvas.drawArc(
+            Rect.fromCircle(center: center, radius: radius),
+            -math.pi * 3 / 4,
+            math.pi / 2,
+            false,
+            stroke,
+          );
+        }
+        canvas.drawCircle(center, 1.8, fill);
+      case PlayerGlyphType.cellular:
+        for (final (x, top) in const [
+          (3.0, 15.0),
+          (8.5, 11.0),
+          (14.0, 7.0),
+          (19.5, 3.0),
+        ]) {
+          canvas.drawRRect(
+            RRect.fromLTRBR(x, top, x + 3, 21, const Radius.circular(1)),
+            fill,
+          );
+        }
+      case PlayerGlyphType.ethernet:
+        outline(const [
+          Offset(3, 9),
+          Offset(7.5, 9),
+          Offset(7.5, 5),
+          Offset(16.5, 5),
+          Offset(16.5, 9),
+          Offset(21, 9),
+          Offset(21, 20),
+          Offset(3, 20),
+        ]);
+        line(9, 14, 9, 16.5);
+        line(12, 14, 12, 16.5);
+        line(15, 14, 15, 16.5);
       case PlayerGlyphType.pause:
         canvas.drawRRect(
           RRect.fromLTRBR(5, 2, 10.5, 22, const Radius.circular(1.5)),

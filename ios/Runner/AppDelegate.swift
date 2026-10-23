@@ -20,6 +20,23 @@ import ActivityKit
     }
   }
 
+  // 物理网卡（Wi-Fi / 有线 en*、蜂窝 pdp_ip*）累计下行字节；单个计数为 32 位，回绕由 Dart 端处理
+  static func networkRxBytes() -> UInt64? {
+    var head: UnsafeMutablePointer<ifaddrs>?
+    guard getifaddrs(&head) == 0, let first = head else { return nil }
+    defer { freeifaddrs(head) }
+    var total: UInt64 = 0
+    for pointer in sequence(first: first, next: { $0.pointee.ifa_next }) {
+      let ifa = pointer.pointee
+      guard let addr = ifa.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK),
+            let data = ifa.ifa_data?.assumingMemoryBound(to: if_data.self) else { continue }
+      let name = String(cString: ifa.ifa_name)
+      guard name.hasPrefix("en") || name.hasPrefix("pdp_ip") else { continue }
+      total += UInt64(data.pointee.ifi_ibytes)
+    }
+    return total
+  }
+
   private func interfaceOrientationString() -> String {
     switch currentInterfaceOrientation() {
     case .portrait:
@@ -110,6 +127,19 @@ import ActivityKit
           result(self.interfaceOrientationString())
         }
       default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    let deviceStatusChannel = FlutterMethodChannel(
+      name: "media_player/device_status",
+      binaryMessenger: controller.binaryMessenger
+    )
+
+    deviceStatusChannel.setMethodCallHandler { (call, result) in
+      if call.method == "rxBytes" {
+        result(AppDelegate.networkRxBytes().map { NSNumber(value: $0) })
+      } else {
         result(FlutterMethodNotImplemented)
       }
     }

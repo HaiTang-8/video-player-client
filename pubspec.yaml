@@ -97,6 +97,10 @@ dependencies:
   palette_generator: ^0.3.3+7
   socks5_proxy: ^2.1.1
 
+  # 播放器状态栏：电量、网络类型
+  battery_plus: ^6.2.3
+  connectivity_plus: ^6.1.5
+
 dependency_overrides:
   screen_brightness_ios: 2.1.2
 

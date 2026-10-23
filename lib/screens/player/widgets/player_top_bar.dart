@@ -6,6 +6,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
 import '../../../core/widgets/app_back_button.dart';
 import '../../../core/window/window_controls.dart';
 import 'player_glyphs.dart';
+import 'player_status_bar.dart';
 import 'player_ui_metrics.dart';
 
 class PlayerTopBar extends StatelessWidget {
@@ -14,6 +15,7 @@ class PlayerTopBar extends StatelessWidget {
   final bool isLocked;
   final bool useGradient;
   final bool useSafeArea;
+  final Future<double?> Function()? fallbackSpeed;
 
   const PlayerTopBar({
     super.key,
@@ -22,6 +24,7 @@ class PlayerTopBar extends StatelessWidget {
     this.isLocked = false,
     this.useGradient = true,
     this.useSafeArea = true,
+    this.fallbackSpeed,
   });
 
   @override
@@ -30,6 +33,7 @@ class PlayerTopBar extends StatelessWidget {
     const horizontalPadding = PlayerUiMetrics.edge;
     final leftPadding = WindowControls.isMacOS ? 68.0 : horizontalPadding;
     const barHeight = 44.0;
+    final isDesktop = WindowControls.isDesktop;
 
     final barContent = SizedBox(
       height: barHeight,
@@ -72,6 +76,10 @@ class PlayerTopBar extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (isDesktop) ...[
+                  const SizedBox(width: 16),
+                  PlayerStatusBar(fallbackSpeed: fallbackSpeed),
+                ],
                 if (WindowControls.isWindows) ...[
                   const SizedBox(width: 16),
                   _WindowCaptionButton(
@@ -91,16 +99,43 @@ class PlayerTopBar extends StatelessWidget {
               ],
             ),
           ),
-          const IgnorePointer(child: Center(child: _ClockText())),
+          if (isDesktop)
+            const IgnorePointer(child: Center(child: _ClockText())),
         ],
       ),
     );
 
+    final content =
+        isDesktop
+            ? barContent
+            : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 24,
+                  child: Stack(
+                    children: [
+                      const IgnorePointer(
+                        child: Center(
+                          child: _ClockText(style: PlayerStatusBar.textStyle),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: PlayerStatusBar(fallbackSpeed: fallbackSpeed),
+                      ),
+                    ],
+                  ),
+                ),
+                barContent,
+              ],
+            );
+
     final edgeInsets = EdgeInsets.only(
-      top: useSafeArea && !WindowControls.isDesktop ? (padding.top + 10) : 0,
+      top: useSafeArea && !isDesktop ? padding.top : 0,
       left: (useSafeArea ? padding.left : 0) + leftPadding,
       right: (useSafeArea ? padding.right : 0) + (WindowControls.isWindows ? 0 : horizontalPadding),
-      bottom: useSafeArea && !WindowControls.isDesktop ? 10 : 0,
+      bottom: useSafeArea && !isDesktop ? 10 : 0,
     );
 
     final Widget decorated;
@@ -117,7 +152,7 @@ class PlayerTopBar extends StatelessWidget {
           padding: edgeInsets,
           child: Material(
             color: Colors.transparent,
-            child: barContent,
+            child: content,
           ),
         ),
       );
@@ -125,7 +160,7 @@ class PlayerTopBar extends StatelessWidget {
       decorated = Container(
         color: Colors.black,
         padding: edgeInsets,
-        child: barContent,
+        child: content,
       );
     }
 
@@ -178,7 +213,15 @@ class _WindowCaptionButtonState extends State<_WindowCaptionButton> {
 }
 
 class _ClockText extends StatefulWidget {
-  const _ClockText();
+  final TextStyle style;
+
+  const _ClockText({
+    this.style = const TextStyle(
+      color: Colors.white70,
+      fontSize: 13,
+      fontFeatures: [FontFeature.tabularFigures()],
+    ),
+  });
 
   @override
   State<_ClockText> createState() => _ClockTextState();
@@ -212,13 +255,6 @@ class _ClockTextState extends State<_ClockText> {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      _time,
-      style: const TextStyle(
-        color: Colors.white70,
-        fontSize: 13,
-        fontFeatures: [FontFeature.tabularFigures()],
-      ),
-    );
+    return Text(_time, style: widget.style);
   }
 }
