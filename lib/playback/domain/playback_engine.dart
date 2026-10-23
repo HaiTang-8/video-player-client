@@ -5,6 +5,7 @@ import 'media_track.dart';
 import 'playback_engine_kind.dart';
 import 'playback_source.dart';
 import 'playback_state.dart';
+import 'subtitle_style.dart';
 import 'video_info.dart';
 
 /// 播放内核统一接口。音量 1.0 = 100%，上限见 [EngineCapabilities.maxVolume]
@@ -15,6 +16,7 @@ abstract interface class PlaybackEngine {
   PlaybackStreams get streams;
 
   Future<void> initialize();
+
   /// [startPosition] 由内核在打开时直接定位，不先从头播放
   Future<void> open(
     PlaybackSource source, {
@@ -34,6 +36,11 @@ abstract interface class PlaybackEngine {
 
   /// 加载并选中外挂字幕
   Future<void> addExternalSubtitle(ExternalSubtitle subtitle);
+
+  Future<void> setSubtitleStyle(SubtitleStyle style);
+
+  /// 正值表示字幕延后显示；仅在 [EngineCapabilities.subtitleDelay] 为 true 时生效
+  Future<void> setSubtitleDelay(Duration delay);
 
   Widget buildVideoView(BuildContext context, {required BoxFit fit});
 

@@ -94,13 +94,24 @@ class FakePlaybackEngine implements PlaybackEngine {
       calls.add('subtitle ${track?.id}');
 
   String? lastExternalFormatHint;
+  String? lastExternalText;
+  SubtitleStyle? subtitleStyle;
+  Duration? subtitleDelay;
 
   @override
   Future<void> addExternalSubtitle(ExternalSubtitle subtitle) async {
     final data = subtitle as ExternalSubtitleData;
     lastExternalFormatHint = data.formatHint;
+    lastExternalText = data.text;
     calls.add('external ${data.title}');
   }
+
+  @override
+  Future<void> setSubtitleStyle(SubtitleStyle style) async =>
+      subtitleStyle = style;
+
+  @override
+  Future<void> setSubtitleDelay(Duration delay) async => subtitleDelay = delay;
 
   @override
   Widget buildVideoView(BuildContext context, {required BoxFit fit}) =>

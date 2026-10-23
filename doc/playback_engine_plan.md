@@ -240,6 +240,7 @@ class EngineCapabilities {
   final double maxVolume;            // 1.0 = 100%；mpv 为 2.0，原生引擎为 1.0
   final double maxRate;              // mpv 100，Aether 2.0，Media3 3.0
   final bool reportsVideoView;       // 画面在原生视图里并上报挂载状态（Aether / Media3）：会话先暂停打开，视图挂载后再播放
+  final bool subtitleDelay;          // 支持对所有字幕设置偏移（mpv、Aether）；Media3 为 false，会话改为平移外挂字幕时间轴后重新加载
 }
 
 class PlaybackSource {               // PlaybackSource.network(url, httpHeaders:) / PlaybackSource.localFile(path)
@@ -282,6 +283,8 @@ abstract interface class PlaybackEngine {
   Future<void> selectAudioTrack(AudioTrackInfo track);
   Future<void> selectSubtitleTrack(SubtitleTrackInfo? track);  // null 表示关闭
   Future<void> addExternalSubtitle(ExternalSubtitle subtitle); // 加载并选中
+  Future<void> setSubtitleStyle(SubtitleStyle style);          // 字号倍率 / 颜色 / 底框不透明度 / 底部距离（占画面高度比例）
+  Future<void> setSubtitleDelay(Duration delay);               // 正值表示字幕延后；capabilities.subtitleDelay 为 false 时无效
   Widget buildVideoView(BuildContext context, {required BoxFit fit});
   Future<void> dispose();                                      // 幂等；之后所有流关闭
 }
@@ -316,7 +319,9 @@ abstract interface class EngineSelectionRule {
 - `PlaybackStateHub`：每个引擎内部持有一个 hub，只需调用 `hub.update(...)`，由 hub 负责快照、广播和去重，避免各引擎重复写 StreamController。
 - `open()` 必须能被新的 `open()` 打断（用代际计数丢弃过期回调），这对选集快速切换很重要。
 - 引擎**不得**把底层原始异常抛给 UI，一律映射为 `PlaybackError`（mpv 的错误字符串识别在 `MpvErrorMapper`）。
-- 字幕在各引擎内部渲染（mpv 自绘；Aether / Media3 在原生视图内的字幕层绘制），Flutter 控制层不画字幕。
+- 字幕在各引擎内部渲染（mpv 由引擎自带的 Flutter 叠加层 `MpvSubtitleOverlay` 绘制；Aether / Media3 在原生视图内的字幕层绘制），Flutter 控制层不画字幕。
+- 字幕样式（`SubtitleStyle`）由 `subtitleSettingsProvider` 持久化，会话在内核初始化后下发、设置变化时实时下发。字号对所有文本字幕生效（含 ASS，原生侧用 libass font scale）；颜色、底框、位置只作用于非 ASS 文本字幕；位图字幕不受影响。三端统一不描边、不加阴影，字体为 HarmonyOS Sans Medium（Android 的 ASS 仍用系统字体）。
+- 字幕偏移按剧集（整部剧所有季、所有集共用）或电影保存在本机（SharedPreferences，键 `subtitle_delay_<服务器ID>_tv_<tvShowId>` / `_movie_<movieId>`，毫秒，为零时删除）：会话通过 `SubtitleDelayStore`（`RiverpodPlaybackGateway` 实现）在 `load` 换 item 时读取，调整停止 500ms 后写入，换片和销毁时补写；未注入 store 时只对当前视频生效。
 - 媒体信息面板（`buildMediaInfoRows`）各内核统一：播放内核 → 选择原因（`PlaybackSession.engineReason`，回退后为“X 无法播放：原因”）→ 视频解码 → 动态范围（含 DV Profile，来自 `VideoInfo`）→ HDR 送显（来自 `MediaDiagnostics.outputDynamicRange`）→ 内核专属项（按固定键序，未知键排在最后）→ 倍速、屏幕刷新率、音量、源路径。HDR 送显的判定：mpv 纹理固定为 SDR；Aether 取 `AetherEngine.videoFormat`（屏幕实际呈现的格式）；Media3 在 GPU 重建时为 HDR10，杜比视界片源没用 DV 解码器时取基础层，屏幕不支持 HDR 时为 SDR。
 
 ### 4.5 会话层职责划分（从 `PlayerScreen` 拆出）
@@ -351,7 +356,7 @@ abstract interface class EngineSelectionRule {
 ```dart
 @HostApi()
 abstract class NativePlayerHostApi {
-  NativeCapabilities capabilities();                   // dolbyVisionColor / maxVolume / maxRate
+  NativeCapabilities capabilities();                   // dolbyVisionColor / maxVolume / maxRate / subtitleDelay
   void configureSubtitleFonts(List<String> assetKeys); // 字幕字体（Flutter 资源名，第一个为默认字体），在 create 之前调用
   int create();                                        // 返回 playerId
   @async void open(int playerId, NativeSource source, bool autoPlay);  // NativeSource.startPositionMs：起播位置，可为空
@@ -365,6 +370,8 @@ abstract class NativePlayerHostApi {
   void selectSubtitleTrack(int playerId, String? trackId);  // null 表示关闭
   @async void addExternalSubtitle(int playerId, String text, String title, String? formatHint);
   void setVideoFit(int playerId, NativeVideoFit fit);
+  void setSubtitleStyle(int playerId, NativeSubtitleStyle style);  // scale / color(ARGB) / backgroundOpacity / bottomMargin
+  void setSubtitleDelay(int playerId, int delayMs);    // Media3 忽略
   NativeDiagnostics diagnostics(int playerId);         // videoDecoder / outputDynamicRange / details
   void dispose(int playerId);
 }
@@ -689,7 +696,7 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 参考实现 Moonfin 是 GPL-2.0 | 只参考思路，不复制代码；字幕叠加层、桥接代码全部自行实现 |
 | Windows DWM 透明合成与驱动、系统版本的兼容性 | 保留子窗口在上方的备选摆法；失败时回退到纹理引擎 |
 | Android Hybrid Composition 的性能和手势问题 | 5.2 专项验证；问题严重时允许用户切兼容模式 |
-| 各引擎字幕样式不一致 | 记为已知限制；后续可以统一字幕样式配置 |
+| 各引擎字幕样式不一致 | 已统一为 `SubtitleStyle` 配置（2026-10-23）；ASS 在 Android 上仍用系统字体，PGS 不受样式影响 |
 | Media3 音频许可证 | D3 规避 GPL |
 
 ---
@@ -757,6 +764,9 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-23 | 修复：打开视频先出声后出画面 | 完成（模拟器），待真机 | 用户反馈打开缓存过的视频开头黑屏但有声音。原因：会话以 `autoPlay = true` 打开，页面在 Ready 之后才创建画面视图（UiKitView），命中缓存时缓冲瞬间完成，声音在视图显示前就出来了。修复：`EngineCapabilities.reportsVideoView` 的内核（Aether / Media3）先暂停打开，`PlaybackSnapshot.videoViewAttached` 变为 true 后再 `play()`，2 秒内视图没挂载则照常播放并打警告日志；用户在等待期间操作过播放 / 暂停时不再自动开始；mpv 仍然自动播放。最初按方案“等首帧再播放”实现，但 Aether 软件路径在 `autoplay=false` 加载时不会先出首帧，只能等到超时，改为等视图挂载。`firstFrameRendered` 改为“原生首帧 + 视图已创建”；`startup` 日志新增 `view=`。iOS 模拟器：命中缓存 view 48ms → playing 49ms → firstFrame 88ms，开始播放都在视图挂载之后 |
 | 2026-10-23 | 播放缓存 Stage 8：全平台开启（另一份任务） | 完成（iOS 模拟器），其他平台待用户验证 | `PlaybackCacheConfig.supported` 改为 `!kIsWeb`，Android（Media3 / mpv）、macOS（Aether）、Windows（mpv）默认经过本机缓存代理，去掉 `PLAYBACK_PROXY` 开关。**macOS Info.plist 新增 `NSAllowsLocalNetworking`**（与 iOS 相同），macOS 存储通道补 `getAvailableSpace`。内核和会话层没有改动；mpv 仍没有首帧事件（缓存打开阶段按 15 秒超时结束）。缓存上限改为滑块。详见 `doc/playback_cache_plan.md` Stage 8 |
 | 2026-10-23 | 进度条显示缓冲进度 | 完成（iOS 模拟器），其他平台待用户验证 | 契约变化：`PlaybackSnapshot` / `PlaybackStreams` 增加 `bufferedPosition`（`resetForNewMedia` 时清零），Pigeon 事件增加 `onBufferedPosition`（已重新生成三端代码；`NativePlayerEventDispatcher` 和集成测试的事件记录器同步实现）。Aether 订阅 `clock.bufferedPosition`（AVPlayer 路径 = 已取到的部分 + Aether 磁盘分片缓存；软件路径 = 已解出的最新时间点，模拟器上只领先约 0.2 秒），Media3 用 `bufferedPosition`（独立定时器，暂停时也更新），mpv 用 media_kit 的 `stream.buffer`。进度条用 `Slider.secondaryTrackValue` 画缓冲段（`white70`，已播放白色、未缓冲 `white38` 不变）。iOS 模拟器 `native_player_channel_test` 新增“缓冲位置领先播放位置”并通过；界面用假引擎截图确认 |
+| 2026-10-23 | 字幕偏移按剧集持久化 | 完成（单元测试） | 新增 `SubtitleDelayStore`（`playback_gateways.dart`），`PlaybackSession` 可选注入；同一部剧换集沿用偏移，不同剧 / 电影各自保存；写入防抖 500ms，换片与 dispose 时立即补写；面板提示按剧集 / 电影区分（“同一部剧各集通用” / “仅对当前影片生效”）。SharedPreferences 每条一个整数，只有调过偏移的剧占记录，规模可忽略 |
+| 2026-10-23 | 字幕底框改为圆角、入口移到字幕列表顶部 | 完成（iOS 模拟器实测，Android 编译），Android 待真机验证 | **原因**：Apple 用 libass BorderStyle 3 画的底框贴着文字、没有圆角，暗场景里看不出来；Media3 CaptionStyle 背景同样逐行贴边。**改动**：Apple 的默认样式头不再带方框，`SubtitleOverlayView` 按行合并 libass 文字区域后自己画圆角底框（留白 0.4 / 0.18 字高，圆角 0.25 字高，各行合成一条路径填充，相邻行不叠加变深），只对非 ASS 文本字幕生效；Android 新增 `TextCueView`，未指定位置的文本 cue 由它用 StaticLayout 绘制并画同样的圆角底框，带定位的文本和位图 cue 仍交给 SubtitleView；mpv 叠加层留白统一。默认背景不透明度 25% → 60%。“字幕设置”入口移到字幕菜单第一项 |
+| 2026-10-23 | 字幕样式与字幕设置面板 | 完成（单元测试、Android / macOS 编译），待真机验证 | **契约变化**：`PlaybackEngine` 新增 `setSubtitleStyle` / `setSubtitleDelay`，`EngineCapabilities.subtitleDelay`；Pigeon 新增 `NativeSubtitleStyle`、`setSubtitleStyle`、`setSubtitleDelay`、`NativeCapabilities.subtitleDelay`。**样式**：三端无描边无阴影，可选半透明底框（后改为三端自绘圆角底框，见下一条）；字号档位 0.8 / 1.0 / 1.2 / 1.45，标准约占画面高度 5.5%；`subtitleFontAssets` 改为 Medium + Bold（三个字重同一字体族，去掉 Regular 后常规字幕匹配 Medium），Android 的 `configureSubtitleFonts` 现在加载 Medium 给 SubtitleView。**mpv**：隐藏 media_kit 自带 SubtitleView（边距只在首次构建时读取、底框为逐行色块），改用 `MpvSubtitleOverlay` 按视频实际显示区域排版；偏移用 `sub-delay`。**Aether**：非 ASS 字幕的默认样式头按设置生成，字号用 `ass_set_font_scale`，偏移在叠加层渲染时刻上减去（提前显示只对已送达的 cue 有效）。**Media3**：没有字幕偏移接口，`subtitleDelay = false`；会话保存外挂字幕原文，停止调整 600ms 后用 `SubtitleTimeShifter`（SRT / WebVTT / ASS）平移后重新加载，原生侧按标题替换同名外挂字幕配置；内嵌字幕在 Android 上不支持偏移，面板置灰提示。ASS 字号用 `AssRender.setFontScale`（`AssHandler.renderCallback` 在渲染器创建时补设）。**界面**：字幕菜单底部“字幕设置”打开右侧面板（大小 / 颜色 / 背景透明度 / 位置 / 偏移 ±0.1s、长按数值归零 / 恢复默认 / 说明），设置实时生效，滑块松手后保存。“字幕自动缓存”为第二阶段，未做 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---

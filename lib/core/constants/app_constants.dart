@@ -46,6 +46,17 @@ class AppConstants {
   static const String smoothScrollEnabledKey = 'smooth_scroll_enabled';
   static const String libraryDesktopRowCountKey = 'library_desktop_row_count';
 
+  // 字幕样式
+  static const String subtitleScaleKey = 'subtitle_scale';
+  static const String subtitleColorKey = 'subtitle_color';
+  static const String subtitleBackgroundOpacityKey =
+      'subtitle_background_opacity';
+  static const String subtitleBottomMarginKey = 'subtitle_bottom_margin';
+
+  /// 字幕偏移（毫秒），[scope] 形如 `tv_12`、`movie_34`
+  static String subtitleDelayKey(String serverId, String scope) =>
+      'subtitle_delay_${serverId}_$scope';
+
   // 分页
   static const int defaultPageSize = 20;
 

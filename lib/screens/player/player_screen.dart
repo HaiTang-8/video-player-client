@@ -90,6 +90,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       progressGateway: gateway,
       defaultRate: () => ref.read(playbackSettingsProvider).playbackSpeed,
       enginePreference: ref.read(playbackSettingsProvider).enginePreference,
+      subtitleStyle: ref.read(subtitleSettingsProvider),
+      subtitleDelayStore: gateway,
     );
   }
 
@@ -424,6 +426,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final playbackSettings = ref.watch(playbackSettingsProvider);
+    ref.listen(
+      subtitleSettingsProvider,
+      (_, style) => _session.setSubtitleStyle(style),
+    );
 
     final status = _session.status;
     if (status is PlaybackSessionLoading) {
@@ -567,6 +573,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             onVolumeChanged: _session.rememberVolume,
             sourcePath: _session.filePath,
             onSelectExternalSubtitle: _session.selectExternalSubtitle,
+            subtitleDelay: _session.subtitleDelay,
+            subtitleDelaySupported: () => _session.subtitleDelaySupported,
+            subtitleDelaySharedByShow: _session.subtitleDelaySharedByShow,
+            onSubtitleDelayChanged: _session.setSubtitleDelay,
             onSeekRequested: _session.seek,
             isPlaybackErrorRecoveryActive:
                 () => _session.isRecoveringFromNetworkError,

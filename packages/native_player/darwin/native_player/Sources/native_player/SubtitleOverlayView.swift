@@ -31,6 +31,18 @@ final class SubtitleOverlayView: PlatformView {
   var rate: Double = 1 { didSet { reanchor() } }
   var fill = false { didSet { setNeedsRender() } }
 
+  /// 正值表示字幕延后显示（秒）
+  var delay: Double = 0 { didSet { setNeedsRender() } }
+
+  /// 字号对所有字幕生效；颜色、底框、位置只作用于非 ASS 的文本字幕
+  var style: NativeSubtitleStyle? {
+    didSet {
+      renderer?.setFontScale(style?.scale ?? 1)
+      if trackKey != nil && !isASSTrack { resetTrack(header: nil) }
+      setNeedsRender()
+    }
+  }
+
   /// 媒体信息面板中的“字幕”一行
   var summary: String { trackLabel }
 
@@ -85,11 +97,16 @@ final class SubtitleOverlayView: PlatformView {
     for font in fonts where Self.isFont(font) {
       renderer?.addFont(name: font.filename, data: font.data)
     }
+    resetTrack(header: header)
+    startTimer()
+  }
+
+  private func resetTrack(header: String?) {
     renderer?.reset(
-      header: header ?? SubtitleCueConverter.defaultHeader(fontName: renderer?.defaultFamily))
+      header: header
+        ?? SubtitleCueConverter.defaultHeader(fontName: renderer?.defaultFamily, style: style))
     fedKeys.removeAll()
     feed(lastCues)
-    startTimer()
   }
 
   func update(cues: [SubtitleCue]) {
@@ -187,7 +204,7 @@ final class SubtitleOverlayView: PlatformView {
     let height = Int32((geometry.visible.height * scale).rounded())
     guard width > 0, height > 0 else { return }
 
-    let now = currentTime()
+    let now = currentTime() - delay
     let result = renderer?.render(timeMs: Self.milliseconds(now), width: width, height: height)
     let visibleBitmaps = bitmapCues.filter { $0.start <= now && now < $0.end }
     let bitmapIDs = visibleBitmaps.map(\.id)
@@ -217,7 +234,6 @@ final class SubtitleOverlayView: PlatformView {
     return pixels.withUnsafeMutableBufferPointer { buffer -> CGImage? in
       guard let base = buffer.baseAddress else { return nil }
       base.update(repeating: 0, count: count)
-      LibassRenderer.composite(libass, into: base, width: width, height: height)
       guard
         let context = CGContext(
           data: base, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
@@ -225,6 +241,8 @@ final class SubtitleOverlayView: PlatformView {
           bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             | CGBitmapInfo.byteOrder32Big.rawValue)
       else { return nil }
+      drawBoxes(under: libass, in: context, height: height)
+      LibassRenderer.composite(libass, into: base, width: width, height: height)
       for bitmap in bitmaps {
         let rect = Self.bitmapRect(bitmap, video: geometry.video, videoSize: videoSize)
           .offsetBy(dx: -geometry.visible.minX, dy: -geometry.visible.minY)
@@ -235,6 +253,46 @@ final class SubtitleOverlayView: PlatformView {
       }
       return context.makeImage()
     }
+  }
+
+  /// 非 ASS 文本字幕的圆角底框：libass 输出的文字区域按行合并，画在文字下面
+  private func drawBoxes(
+    under first: UnsafeMutablePointer<ASS_Image>?, in context: CGContext, height: Int
+  ) {
+    let opacity = style?.backgroundOpacity ?? SubtitleCueConverter.defaultBackgroundOpacity
+    guard !isASSTrack, opacity > 0 else { return }
+    var rects: [CGRect] = []
+    var node = first
+    while let image = node?.pointee {
+      defer { node = image.next }
+      guard image.w > 0, image.h > 0 else { continue }
+      rects.append(
+        CGRect(
+          x: Int(image.dst_x), y: height - Int(image.dst_y) - Int(image.h),
+          width: Int(image.w), height: Int(image.h)))
+    }
+    var lines: [CGRect] = []
+    for rect in rects.sorted(by: { $0.minY < $1.minY }) {
+      if let last = lines.last, rect.minY < last.maxY {
+        lines[lines.count - 1] = last.union(rect)
+      } else {
+        lines.append(rect)
+      }
+    }
+    guard !lines.isEmpty else { return }
+    let em = SubtitleCueConverter.fontSize * (style?.scale ?? 1) * CGFloat(height) / 1080
+    let radius = em * 0.25
+    let path = CGMutablePath()
+    for line in lines {
+      // 按墨迹排版，笔画矮的行（如“一一”、小写字母）补到统一行高，各行底框高度一致
+      let grow = max(em * 0.8 - line.height, 0) / 2
+      path.addRoundedRect(
+        in: line.insetBy(dx: -em * 0.4, dy: -em * 0.18 - grow), cornerWidth: radius,
+        cornerHeight: radius)
+    }
+    context.setFillColor(CGColor(gray: 0, alpha: min(opacity, 1)))
+    context.addPath(path)
+    context.fillPath()
   }
 
   /// 视频在视图中的显示区域（保持比例或铺满），以及与视图相交的可见部分

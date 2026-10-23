@@ -5,24 +5,38 @@ import Foundation
 /// 把 AetherEngine 的字幕 cue 转成 libass 能处理的事件行（Matroska 格式：
 /// `ReadOrder,Layer,Style,Name,MarginL,MarginR,MarginV,Effect,Text`，时间单独传入）
 enum SubtitleCueConverter {
-  /// 非 ASS 字幕使用的样式，接近 mpv 默认观感：白字黑边、居中靠下
-  static func defaultHeader(fontName: String?) -> String {
-    defaultHeaderTemplate.replacingOccurrences(of: "{font}", with: fontName ?? "sans-serif")
+  /// 非 ASS 字幕的默认样式：无描边无阴影；字号倍率由渲染器整体缩放，底框由字幕层自己绘制
+  static func defaultHeader(fontName: String?, style: NativeSubtitleStyle?) -> String {
+    let color = style.map { UInt32(truncatingIfNeeded: $0.color) } ?? 0xFFFF_FFFF
+    let margin = min(max(style?.bottomMargin ?? defaultBottomMargin, 0), 1)
+    return """
+      [Script Info]
+      ScriptType: v4.00+
+      PlayResX: 1920
+      PlayResY: 1080
+      ScaledBorderAndShadow: yes
+      WrapStyle: 0
+
+      [V4+ Styles]
+      Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+      Style: Default,\(fontName ?? "sans-serif"),\(Int(fontSize)),\(assColor(rgb: color, alpha: 1)),&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,60,60,\(Int((margin * defaultPlayRes.height).rounded())),1
+
+      """
   }
 
-  private static let defaultHeaderTemplate = """
-    [Script Info]
-    ScriptType: v4.00+
-    PlayResX: 1920
-    PlayResY: 1080
-    ScaledBorderAndShadow: yes
-    WrapStyle: 0
+  /// 标准字号，PlayRes 1080 下约占画面高度 5.5%（与 mpv、Media3 一致）
+  static let fontSize: CGFloat = 70
+  static let defaultBackgroundOpacity = 0.6
+  private static let defaultBottomMargin = 0.06
 
-    [V4+ Styles]
-    Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-    Style: Default,{font},72,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,3.5,1.2,2,60,60,54,1
-
-    """
+  /// ASS 颜色为 &HAABBGGRR，AA 为透明度（00 不透明）
+  private static func assColor(rgb: UInt32, alpha: Double) -> String {
+    let a = UInt32(((1 - alpha) * 255).rounded())
+    let r = (rgb >> 16) & 0xFF
+    let g = (rgb >> 8) & 0xFF
+    let b = rgb & 0xFF
+    return String(format: "&H%02X%02X%02X%02X", a, b, g, r)
+  }
 
   private static let defaultPlayRes = CGSize(width: 1920, height: 1080)
 

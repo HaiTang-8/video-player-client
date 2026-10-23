@@ -1,12 +1,18 @@
 package com.mediaserver.nativeplayer
 
 import android.content.Context
+import android.graphics.Typeface
+import android.util.Log
 import com.mediaserver.nativeplayer.dovi.DoviSupport
 
 /** Pigeon HostApi 的实现：按 playerId 管理播放器实例；Pigeon 回调都在主线程 */
-class NativePlayerHost(private val context: Context, private val events: NativePlayerEventsApi) :
-  NativePlayerHostApi {
+class NativePlayerHost(
+  private val context: Context,
+  private val events: NativePlayerEventsApi,
+  private val assetPath: (String) -> String,
+) : NativePlayerHostApi {
   private var nextId = 1L
+  private var subtitleTypeface: Typeface? = null
   private val players = mutableMapOf<Long, Media3PlayerBackend>()
 
   fun backend(playerId: Long): Media3PlayerBackend? = players[playerId]
@@ -17,14 +23,22 @@ class NativePlayerHost(private val context: Context, private val events: NativeP
       dolbyVisionColor = DeviceCapabilities.hasDolbyVisionDecoder || DoviSupport.available,
       maxVolume = 1.0,
       maxRate = 3.0,
+      subtitleDelay = false,
     )
 
-  /** Android 的字幕由 Media3 的 SubtitleView 用系统字体绘制 */
-  override fun configureSubtitleFonts(assetKeys: List<String>) {}
+  /** 只用于 Media3 SubtitleView 绘制的文本字幕；ASS 由 libass 用系统字体渲染 */
+  override fun configureSubtitleFonts(assetKeys: List<String>) {
+    if (subtitleTypeface != null) return
+    val key = assetKeys.firstOrNull() ?: return
+    subtitleTypeface =
+      runCatching { Typeface.createFromAsset(context.assets, assetPath(key)) }
+        .onFailure { Log.w("NativePlayerHost", "字幕字体加载失败: $key", it) }
+        .getOrNull()
+  }
 
   override fun create(): Long {
     val id = nextId++
-    players[id] = Media3PlayerBackend(context, PlayerEventSink(id, events))
+    players[id] = Media3PlayerBackend(context, PlayerEventSink(id, events), subtitleTypeface)
     return id
   }
 
@@ -63,6 +77,12 @@ class NativePlayerHost(private val context: Context, private val events: NativeP
   ) = complete(callback) { backendOrThrow(playerId).addExternalSubtitle(text, title, formatHint) }
 
   override fun setVideoFit(playerId: Long, fit: NativeVideoFit) = backendOrThrow(playerId).setVideoFit(fit)
+
+  override fun setSubtitleStyle(playerId: Long, style: NativeSubtitleStyle) =
+    backendOrThrow(playerId).setSubtitleStyle(style)
+
+  /** Media3 没有字幕偏移接口；外挂字幕由 Dart 平移时间轴后重新加载 */
+  override fun setSubtitleDelay(playerId: Long, delayMs: Long) {}
 
   override fun diagnostics(playerId: Long): NativeDiagnostics = backendOrThrow(playerId).diagnostics()
 

@@ -32,6 +32,12 @@ abstract class MpvEngineBase
 
   @protected
   final Player player;
+
+  /// 字幕由 Flutter 叠加层绘制（media_kit 未启用 libass），叠加层监听此值
+  @protected
+  final ValueNotifier<SubtitleStyle> subtitleStyle = ValueNotifier(
+    SubtitleStyle.defaults,
+  );
   final PlaybackStateHub _hub = PlaybackStateHub();
   final List<StreamSubscription> _subscriptions = [];
   late final SpeedFrameLimiter _speedFrameLimiter;
@@ -47,6 +53,7 @@ abstract class MpvEngineBase
     dolbyVisionColor: false,
     maxVolume: 2.0,
     maxRate: 100,
+    subtitleDelay: true,
   );
 
   @override
@@ -126,6 +133,20 @@ abstract class MpvEngineBase
         ExternalSubtitleData(:final text, :final title) => player
             .setSubtitleTrack(SubtitleTrack.data(text, title: title)),
       };
+
+  @override
+  Future<void> setSubtitleStyle(SubtitleStyle style) async =>
+      subtitleStyle.value = style;
+
+  @override
+  Future<void> setSubtitleDelay(Duration delay) async {
+    final platform = player.platform;
+    if (platform is! NativePlayer) return;
+    await platform.setProperty(
+      'sub-delay',
+      (delay.inMilliseconds / 1000).toStringAsFixed(3),
+    );
+  }
 
   @override
   Future<MediaDiagnostics> fetchDiagnostics() async {

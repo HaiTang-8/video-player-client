@@ -53,6 +53,11 @@ final class LibassRenderer {
     if update { updateFonts() }
   }
 
+  /// 整体字号倍率，对 ASS 样式同样生效
+  func setFontScale(_ scale: Double) {
+    ass_set_font_scale(renderer, scale)
+  }
+
   /// 换成新的字幕轨；ReadOrder 去重关闭（很多文件把它写死为 0），由调用方按内容去重
   func reset(header: String) {
     if let track { ass_free_track(track) }

@@ -1,6 +1,7 @@
 package com.mediaserver.nativeplayer
 
 import android.content.Context
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -45,8 +46,11 @@ import java.util.UUID
 
 /** 基于 Media3 ExoPlayer 的播放器：系统解码器负责杜比视界 / HDR，画面交给 [NativeVideoView] 的 SurfaceView */
 @OptIn(UnstableApi::class)
-class Media3PlayerBackend(private val context: Context, private val events: PlayerEventSink) :
-  Player.Listener {
+class Media3PlayerBackend(
+  private val context: Context,
+  private val events: PlayerEventSink,
+  private val subtitleTypeface: Typeface?,
+) : Player.Listener {
   /** 没有杜比视界解码器但 GPU 能重建时，封装声明的 P5 也交给普通 HEVC 解码器，由 [DoviGlRenderer] 还原颜色 */
   private val reshapeDeclaredProfile5 = DoviSupport.available && !DeviceCapabilities.hasDolbyVisionDecoder
   /** ASS / SSA 由 libass 渲染（特效、卡拉 OK、内嵌字体），画在 SubtitleView 内的叠加层上；其余字幕仍走 Media3 */
@@ -98,6 +102,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   private val assSurfaceSize =
     View.OnLayoutChangeListener { surface, _, _, _, _, _, _, _, _ -> if (reshaping) syncAssSurfaceSize(surface) }
   private var fit = NativeVideoFit.CONTAIN
+  private var subtitleStyle: NativeSubtitleStyle? = null
   private var aspectRatio = 0f
   private var playing = false
   private var lastDurationMs = C.TIME_UNSET
@@ -127,6 +132,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     )
     player.setHandleAudioBecomingNoisy(true)
     ass.init(player)
+    ass.renderCallback = { render -> subtitleStyle?.let { render?.setFontScale(it.scale.toFloat()) } }
     player.addListener(this)
     player.addAnalyticsListener(
       object : AnalyticsListener {
@@ -250,7 +256,8 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
         .setLabel(title)
         .setId(id)
         .build()
-    val existing = item.localConfiguration?.subtitleConfigurations.orEmpty()
+    // 同名字幕（偏移后重新加载）替换旧的那条，不重复出现在轨道列表里
+    val existing = item.localConfiguration?.subtitleConfigurations.orEmpty().filter { it.label != title }
     pendingSubtitleId = id
     player.setMediaSource(
       factory.createMediaSource(item.buildUpon().setSubtitleConfigurations(existing + subtitle).build()),
@@ -264,13 +271,21 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
     view?.setFit(fit)
   }
 
+  fun setSubtitleStyle(style: NativeSubtitleStyle) {
+    subtitleStyle = style
+    view?.setSubtitleStyle(style, subtitleTypeface)
+    ass.render?.setFontScale(style.scale.toFloat())
+    refreshAssView()
+  }
+
   fun attach(view: NativeVideoView) {
     this.view?.let(::detachSurface)
     this.view = view
     attachSurface(view)
     view.setFit(fit)
+    view.setSubtitleStyle(subtitleStyle, subtitleTypeface)
     if (aspectRatio > 0) view.setAspectRatio(aspectRatio)
-    view.subtitleView.setCues(player.currentCues.cues)
+    view.setCues(player.currentCues.cues)
     removeAssView()
     assView = AssSubtitleView(view.subtitleView.context, ass).also(view.subtitleView::addView)
     view.surfaceView.addOnLayoutChangeListener(assSurfaceSize)
@@ -451,7 +466,7 @@ class Media3PlayerBackend(private val context: Context, private val events: Play
   }
 
   override fun onCues(cueGroup: CueGroup) {
-    view?.subtitleView?.setCues(cueGroup.cues)
+    view?.setCues(cueGroup.cues)
   }
 
   override fun onTracksChanged(tracks: Tracks) {

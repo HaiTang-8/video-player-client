@@ -18,6 +18,14 @@ abstract interface class PlaybackSourceGateway {
   });
 }
 
+/// 字幕偏移的本地保存：剧集按整部剧共用，电影按单部保存
+abstract interface class SubtitleDelayStore {
+  Duration read(PlaybackItem item);
+
+  /// [delay] 为零时删除记录
+  Future<void> write(PlaybackItem item, Duration delay);
+}
+
 /// 观看进度的上报（服务端）与发布（本地状态）
 abstract interface class WatchProgressGateway {
   bool get isAvailable;

@@ -11,10 +11,14 @@ class EngineCapabilities {
   /// 会话据此先暂停打开，视图挂载后再开始播放，避免画面还没显示就先出声
   final bool reportsVideoView;
 
+  /// 支持对所有字幕设置偏移；不支持时会话只能平移外挂字幕的时间轴后重新加载
+  final bool subtitleDelay;
+
   const EngineCapabilities({
     required this.dolbyVisionColor,
     required this.maxVolume,
     required this.maxRate,
     this.reportsVideoView = false,
+    this.subtitleDelay = false,
   });
 }

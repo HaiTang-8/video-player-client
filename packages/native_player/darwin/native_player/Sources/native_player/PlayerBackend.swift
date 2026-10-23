@@ -19,6 +19,8 @@ protocol PlayerBackend: AnyObject {
     text: String, title: String, formatHint: String?,
     completion: @escaping (Result<Void, Error>) -> Void)
   func setVideoFit(_ fit: NativeVideoFit)
+  func setSubtitleStyle(_ style: NativeSubtitleStyle)
+  func setSubtitleDelay(ms: Int64)
   func diagnostics() -> NativeDiagnostics
   func dispose()
 }
@@ -31,7 +33,8 @@ struct PlayerBackendFactory {
 
   /// 当前平台尚未接入内核时使用：可以创建实例，但打开媒体会失败
   static let unsupported = PlayerBackendFactory(
-    capabilities: NativeCapabilities(dolbyVisionColor: false, maxVolume: 1, maxRate: 1),
+    capabilities: NativeCapabilities(
+      dolbyVisionColor: false, maxVolume: 1, maxRate: 1, subtitleDelay: false),
     make: { _, _ in UnsupportedPlayerBackend() }
   )
 }
@@ -65,6 +68,8 @@ final class UnsupportedPlayerBackend: PlayerBackend {
   }
 
   func setVideoFit(_ fit: NativeVideoFit) {}
+  func setSubtitleStyle(_ style: NativeSubtitleStyle) {}
+  func setSubtitleDelay(ms: Int64) {}
   func diagnostics() -> NativeDiagnostics { NativeDiagnostics(details: [:]) }
   func dispose() {}
 }

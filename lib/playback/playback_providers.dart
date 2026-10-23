@@ -11,9 +11,10 @@ import 'selection/engine_selection_rule.dart';
 import 'selection/engine_selector.dart';
 import 'selection/platform_environment.dart';
 
-/// 原生引擎渲染字幕用的字体，与全局界面字体保持一致
+/// 原生引擎渲染字幕用的字体，与全局界面字体保持一致；
+/// 三个字重同属一个字体族，不放 Regular，常规字幕匹配到 Medium
 const subtitleFontAssets = [
-  'assets/fonts/HarmonyOS_Sans_SC_Regular.ttf',
+  'assets/fonts/HarmonyOS_Sans_SC_Medium.ttf',
   'assets/fonts/HarmonyOS_Sans_SC_Bold.ttf',
 ];
 

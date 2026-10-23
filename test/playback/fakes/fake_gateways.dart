@@ -63,3 +63,25 @@ SubtitleInfo subtitleInfo(String name, int score, {String? language}) =>
       language: language,
       score: score,
     );
+
+/// 按与正式实现相同的范围保存：剧集按整部剧，电影按单部
+class FakeSubtitleDelayStore implements SubtitleDelayStore {
+  final Map<String, Duration> saved = {};
+
+  static String key(PlaybackItem item) => switch (item) {
+    MoviePlaybackItem(:final movieId) => 'movie_$movieId',
+    EpisodePlaybackItem(:final tvShowId) => 'tv_$tvShowId',
+  };
+
+  @override
+  Duration read(PlaybackItem item) => saved[key(item)] ?? Duration.zero;
+
+  @override
+  Future<void> write(PlaybackItem item, Duration delay) async {
+    if (delay == Duration.zero) {
+      saved.remove(key(item));
+    } else {
+      saved[key(item)] = delay;
+    }
+  }
+}

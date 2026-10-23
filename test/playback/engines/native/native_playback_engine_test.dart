@@ -9,8 +9,12 @@ class _FakeHostApi extends NativePlayerHostApi {
   NativeSource? opened;
 
   @override
-  Future<NativeCapabilities> capabilities() async =>
-      NativeCapabilities(dolbyVisionColor: true, maxVolume: 1.0, maxRate: 2.0);
+  Future<NativeCapabilities> capabilities() async => NativeCapabilities(
+    dolbyVisionColor: true,
+    maxVolume: 1.0,
+    maxRate: 2.0,
+    subtitleDelay: true,
+  );
 
   @override
   Future<void> configureSubtitleFonts(List<String> assetKeys) async =>

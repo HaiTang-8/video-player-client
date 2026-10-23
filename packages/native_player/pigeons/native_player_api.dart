@@ -16,6 +16,7 @@ class NativeCapabilities {
     required this.dolbyVisionColor,
     required this.maxVolume,
     required this.maxRate,
+    required this.subtitleDelay,
   });
 
   bool dolbyVisionColor;
@@ -23,6 +24,31 @@ class NativeCapabilities {
   /// 1.0 = 100%
   double maxVolume;
   double maxRate;
+
+  /// 支持 [NativePlayerHostApi.setSubtitleDelay]
+  bool subtitleDelay;
+}
+
+/// 用户字幕样式；颜色、背景、位置只作用于文本字幕，ASS / 位图字幕保留原样式
+class NativeSubtitleStyle {
+  NativeSubtitleStyle({
+    required this.scale,
+    required this.color,
+    required this.backgroundOpacity,
+    required this.bottomMargin,
+  });
+
+  /// 字号倍率，1.0 为标准
+  double scale;
+
+  /// ARGB
+  int color;
+
+  /// 0 表示无底框
+  double backgroundOpacity;
+
+  /// 字幕底部到画面底部的距离，占画面高度的比例
+  double bottomMargin;
 }
 
 class NativeSource {
@@ -138,6 +164,11 @@ abstract class NativePlayerHostApi {
   );
 
   void setVideoFit(int playerId, NativeVideoFit fit);
+
+  void setSubtitleStyle(int playerId, NativeSubtitleStyle style);
+
+  /// 正值表示字幕延后显示；capabilities.subtitleDelay 为 false 时忽略
+  void setSubtitleDelay(int playerId, int delayMs);
 
   NativeDiagnostics diagnostics(int playerId);
 

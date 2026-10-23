@@ -59,6 +59,7 @@ class NativePlaybackEngine
       maxVolume: caps.maxVolume,
       maxRate: caps.maxRate,
       reportsVideoView: true,
+      subtitleDelay: caps.subtitleDelay,
     );
     if (subtitleFontAssets.isNotEmpty) {
       await _api.configureSubtitleFonts(subtitleFontAssets);
@@ -126,6 +127,21 @@ class NativePlaybackEngine
         ExternalSubtitleData(:final text, :final title, :final formatHint) =>
           _api.addExternalSubtitle(_id, text, title, formatHint),
       };
+
+  @override
+  Future<void> setSubtitleStyle(SubtitleStyle style) => _api.setSubtitleStyle(
+    _id,
+    NativeSubtitleStyle(
+      scale: style.scale,
+      color: style.color,
+      backgroundOpacity: style.backgroundOpacity,
+      bottomMargin: style.bottomMargin,
+    ),
+  );
+
+  @override
+  Future<void> setSubtitleDelay(Duration delay) =>
+      _api.setSubtitleDelay(_id, delay.inMilliseconds);
 
   @override
   Future<MediaDiagnostics> fetchDiagnostics() async {

@@ -7,4 +7,5 @@ export 'playback_error.dart';
 export 'playback_source.dart';
 export 'playback_state.dart';
 export 'playback_state_hub.dart';
+export 'subtitle_style.dart';
 export 'video_info.dart';

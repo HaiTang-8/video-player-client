@@ -241,7 +241,9 @@ data class NativeCapabilities (
   val dolbyVisionColor: Boolean,
   /** 1.0 = 100% */
   val maxVolume: Double,
-  val maxRate: Double
+  val maxRate: Double,
+  /** 支持 [NativePlayerHostApi.setSubtitleDelay] */
+  val subtitleDelay: Boolean
 )
  {
   companion object {
@@ -249,7 +251,8 @@ data class NativeCapabilities (
       val dolbyVisionColor = pigeonVar_list[0] as Boolean
       val maxVolume = pigeonVar_list[1] as Double
       val maxRate = pigeonVar_list[2] as Double
-      return NativeCapabilities(dolbyVisionColor, maxVolume, maxRate)
+      val subtitleDelay = pigeonVar_list[3] as Boolean
+      return NativeCapabilities(dolbyVisionColor, maxVolume, maxRate, subtitleDelay)
     }
   }
   fun toList(): List<Any?> {
@@ -257,6 +260,7 @@ data class NativeCapabilities (
       dolbyVisionColor,
       maxVolume,
       maxRate,
+      subtitleDelay,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -267,7 +271,7 @@ data class NativeCapabilities (
       return true
     }
     val other = other as NativeCapabilities
-    return NativePlayerApiPigeonUtils.deepEquals(this.dolbyVisionColor, other.dolbyVisionColor) && NativePlayerApiPigeonUtils.deepEquals(this.maxVolume, other.maxVolume) && NativePlayerApiPigeonUtils.deepEquals(this.maxRate, other.maxRate)
+    return NativePlayerApiPigeonUtils.deepEquals(this.dolbyVisionColor, other.dolbyVisionColor) && NativePlayerApiPigeonUtils.deepEquals(this.maxVolume, other.maxVolume) && NativePlayerApiPigeonUtils.deepEquals(this.maxRate, other.maxRate) && NativePlayerApiPigeonUtils.deepEquals(this.subtitleDelay, other.subtitleDelay)
   }
 
   override fun hashCode(): Int {
@@ -275,10 +279,68 @@ data class NativeCapabilities (
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.dolbyVisionColor)
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.maxVolume)
     result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.maxRate)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.subtitleDelay)
     return result
   }
   override fun toString(): String {
-    return "NativeCapabilities(dolbyVisionColor=$dolbyVisionColor, maxVolume=$maxVolume, maxRate=$maxRate)"
+    return "NativeCapabilities(dolbyVisionColor=$dolbyVisionColor, maxVolume=$maxVolume, maxRate=$maxRate, subtitleDelay=$subtitleDelay)"
+  }
+}
+
+/**
+ * 用户字幕样式；颜色、背景、位置只作用于文本字幕，ASS / 位图字幕保留原样式
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class NativeSubtitleStyle (
+  /** 字号倍率，1.0 为标准 */
+  val scale: Double,
+  /** ARGB */
+  val color: Long,
+  /** 0 表示无底框 */
+  val backgroundOpacity: Double,
+  /** 字幕底部到画面底部的距离，占画面高度的比例 */
+  val bottomMargin: Double
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): NativeSubtitleStyle {
+      val scale = pigeonVar_list[0] as Double
+      val color = pigeonVar_list[1] as Long
+      val backgroundOpacity = pigeonVar_list[2] as Double
+      val bottomMargin = pigeonVar_list[3] as Double
+      return NativeSubtitleStyle(scale, color, backgroundOpacity, bottomMargin)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      scale,
+      color,
+      backgroundOpacity,
+      bottomMargin,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as NativeSubtitleStyle
+    return NativePlayerApiPigeonUtils.deepEquals(this.scale, other.scale) && NativePlayerApiPigeonUtils.deepEquals(this.color, other.color) && NativePlayerApiPigeonUtils.deepEquals(this.backgroundOpacity, other.backgroundOpacity) && NativePlayerApiPigeonUtils.deepEquals(this.bottomMargin, other.bottomMargin)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.scale)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.color)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.backgroundOpacity)
+    result = 31 * result + NativePlayerApiPigeonUtils.deepHash(this.bottomMargin)
+    return result
+  }
+  override fun toString(): String {
+    return "NativeSubtitleStyle(scale=$scale, color=$color, backgroundOpacity=$backgroundOpacity, bottomMargin=$bottomMargin)"
   }
 }
 
@@ -546,25 +608,30 @@ private open class NativePlayerApiPigeonCodec : StandardMessageCodec() {
       }
       133.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NativeSource.fromList(it)
+          NativeSubtitleStyle.fromList(it)
         }
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NativeTrack.fromList(it)
+          NativeSource.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NativeVideoInfo.fromList(it)
+          NativeTrack.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          NativeDiagnostics.fromList(it)
+          NativeVideoInfo.fromList(it)
         }
       }
       137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          NativeDiagnostics.fromList(it)
+        }
+      }
+      138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           NativeError.fromList(it)
         }
@@ -590,24 +657,28 @@ private open class NativePlayerApiPigeonCodec : StandardMessageCodec() {
         stream.write(132)
         writeValue(stream, value.toList())
       }
-      is NativeSource -> {
+      is NativeSubtitleStyle -> {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is NativeTrack -> {
+      is NativeSource -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is NativeVideoInfo -> {
+      is NativeTrack -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is NativeDiagnostics -> {
+      is NativeVideoInfo -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is NativeError -> {
+      is NativeDiagnostics -> {
         stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is NativeError -> {
+        stream.write(138)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -643,6 +714,9 @@ interface NativePlayerHostApi {
   /** 加载并选中外挂字幕；formatHint 为文件扩展名（如 srt、ass） */
   fun addExternalSubtitle(playerId: Long, text: String, title: String, formatHint: String?, callback: (Result<Unit>) -> Unit)
   fun setVideoFit(playerId: Long, fit: NativeVideoFit)
+  fun setSubtitleStyle(playerId: Long, style: NativeSubtitleStyle)
+  /** 正值表示字幕延后显示；capabilities.subtitleDelay 为 false 时忽略 */
+  fun setSubtitleDelay(playerId: Long, delayMs: Long)
   fun diagnostics(playerId: Long): NativeDiagnostics
   fun dispose(playerId: Long)
 
@@ -905,6 +979,44 @@ interface NativePlayerHostApi {
             val fitArg = args[1] as NativeVideoFit
             val wrapped: List<Any?> = try {
               api.setVideoFit(playerIdArg, fitArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              NativePlayerApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleStyle$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val playerIdArg = args[0] as Long
+            val styleArg = args[1] as NativeSubtitleStyle
+            val wrapped: List<Any?> = try {
+              api.setSubtitleStyle(playerIdArg, styleArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              NativePlayerApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleDelay$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val playerIdArg = args[0] as Long
+            val delayMsArg = args[1] as Long
+            val wrapped: List<Any?> = try {
+              api.setSubtitleDelay(playerIdArg, delayMsArg)
               listOf(null)
             } catch (exception: Throwable) {
               NativePlayerApiPigeonUtils.wrapError(exception)

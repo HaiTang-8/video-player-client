@@ -217,6 +217,8 @@ struct NativeCapabilities: Hashable, CustomStringConvertible {
   /// 1.0 = 100%
   var maxVolume: Double
   var maxRate: Double
+  /// 支持 [NativePlayerHostApi.setSubtitleDelay]
+  var subtitleDelay: Bool
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -224,11 +226,13 @@ struct NativeCapabilities: Hashable, CustomStringConvertible {
     let dolbyVisionColor = pigeonVar_list[0] as! Bool
     let maxVolume = pigeonVar_list[1] as! Double
     let maxRate = pigeonVar_list[2] as! Double
+    let subtitleDelay = pigeonVar_list[3] as! Bool
 
     return NativeCapabilities(
       dolbyVisionColor: dolbyVisionColor,
       maxVolume: maxVolume,
-      maxRate: maxRate
+      maxRate: maxRate,
+      subtitleDelay: subtitleDelay
     )
   }
   func toList() -> [Any?] {
@@ -236,13 +240,14 @@ struct NativeCapabilities: Hashable, CustomStringConvertible {
       dolbyVisionColor,
       maxVolume,
       maxRate,
+      subtitleDelay,
     ]
   }
   static func == (lhs: NativeCapabilities, rhs: NativeCapabilities) -> Bool {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return NativePlayerApiPigeonInternal.deepEquals(lhs.dolbyVisionColor, rhs.dolbyVisionColor) && NativePlayerApiPigeonInternal.deepEquals(lhs.maxVolume, rhs.maxVolume) && NativePlayerApiPigeonInternal.deepEquals(lhs.maxRate, rhs.maxRate)
+    return NativePlayerApiPigeonInternal.deepEquals(lhs.dolbyVisionColor, rhs.dolbyVisionColor) && NativePlayerApiPigeonInternal.deepEquals(lhs.maxVolume, rhs.maxVolume) && NativePlayerApiPigeonInternal.deepEquals(lhs.maxRate, rhs.maxRate) && NativePlayerApiPigeonInternal.deepEquals(lhs.subtitleDelay, rhs.subtitleDelay)
   }
 
   func hash(into hasher: inout Hasher) {
@@ -250,10 +255,67 @@ struct NativeCapabilities: Hashable, CustomStringConvertible {
     NativePlayerApiPigeonInternal.deepHash(value: dolbyVisionColor, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: maxVolume, hasher: &hasher)
     NativePlayerApiPigeonInternal.deepHash(value: maxRate, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: subtitleDelay, hasher: &hasher)
   }
 
   public var description: String {
-    return "NativeCapabilities(dolbyVisionColor: \(String(describing: dolbyVisionColor)), maxVolume: \(String(describing: maxVolume)), maxRate: \(String(describing: maxRate)))"
+    return "NativeCapabilities(dolbyVisionColor: \(String(describing: dolbyVisionColor)), maxVolume: \(String(describing: maxVolume)), maxRate: \(String(describing: maxRate)), subtitleDelay: \(String(describing: subtitleDelay)))"
+  }
+}
+
+/// 用户字幕样式；颜色、背景、位置只作用于文本字幕，ASS / 位图字幕保留原样式
+///
+/// Generated class from Pigeon that represents data sent in messages.
+struct NativeSubtitleStyle: Hashable, CustomStringConvertible {
+  /// 字号倍率，1.0 为标准
+  var scale: Double
+  /// ARGB
+  var color: Int64
+  /// 0 表示无底框
+  var backgroundOpacity: Double
+  /// 字幕底部到画面底部的距离，占画面高度的比例
+  var bottomMargin: Double
+
+
+  // swift-format-ignore: AlwaysUseLowerCamelCase
+  static func fromList(_ pigeonVar_list: [Any?]) -> NativeSubtitleStyle? {
+    let scale = pigeonVar_list[0] as! Double
+    let color = pigeonVar_list[1] as! Int64
+    let backgroundOpacity = pigeonVar_list[2] as! Double
+    let bottomMargin = pigeonVar_list[3] as! Double
+
+    return NativeSubtitleStyle(
+      scale: scale,
+      color: color,
+      backgroundOpacity: backgroundOpacity,
+      bottomMargin: bottomMargin
+    )
+  }
+  func toList() -> [Any?] {
+    return [
+      scale,
+      color,
+      backgroundOpacity,
+      bottomMargin,
+    ]
+  }
+  static func == (lhs: NativeSubtitleStyle, rhs: NativeSubtitleStyle) -> Bool {
+    if Swift.type(of: lhs) != Swift.type(of: rhs) {
+      return false
+    }
+    return NativePlayerApiPigeonInternal.deepEquals(lhs.scale, rhs.scale) && NativePlayerApiPigeonInternal.deepEquals(lhs.color, rhs.color) && NativePlayerApiPigeonInternal.deepEquals(lhs.backgroundOpacity, rhs.backgroundOpacity) && NativePlayerApiPigeonInternal.deepEquals(lhs.bottomMargin, rhs.bottomMargin)
+  }
+
+  func hash(into hasher: inout Hasher) {
+    hasher.combine("NativeSubtitleStyle")
+    NativePlayerApiPigeonInternal.deepHash(value: scale, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: color, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: backgroundOpacity, hasher: &hasher)
+    NativePlayerApiPigeonInternal.deepHash(value: bottomMargin, hasher: &hasher)
+  }
+
+  public var description: String {
+    return "NativeSubtitleStyle(scale: \(String(describing: scale)), color: \(String(describing: color)), backgroundOpacity: \(String(describing: backgroundOpacity)), bottomMargin: \(String(describing: bottomMargin)))"
   }
 }
 
@@ -521,14 +583,16 @@ private class NativePlayerApiPigeonCodecReader: FlutterStandardReader {
     case 132:
       return NativeCapabilities.fromList(self.readValue() as! [Any?])
     case 133:
-      return NativeSource.fromList(self.readValue() as! [Any?])
+      return NativeSubtitleStyle.fromList(self.readValue() as! [Any?])
     case 134:
-      return NativeTrack.fromList(self.readValue() as! [Any?])
+      return NativeSource.fromList(self.readValue() as! [Any?])
     case 135:
-      return NativeVideoInfo.fromList(self.readValue() as! [Any?])
+      return NativeTrack.fromList(self.readValue() as! [Any?])
     case 136:
-      return NativeDiagnostics.fromList(self.readValue() as! [Any?])
+      return NativeVideoInfo.fromList(self.readValue() as! [Any?])
     case 137:
+      return NativeDiagnostics.fromList(self.readValue() as! [Any?])
+    case 138:
       return NativeError.fromList(self.readValue() as! [Any?])
     default:
       return super.readValue(ofType: type)
@@ -550,20 +614,23 @@ private class NativePlayerApiPigeonCodecWriter: FlutterStandardWriter {
     } else if let value = value as? NativeCapabilities {
       super.writeByte(132)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeSource {
+    } else if let value = value as? NativeSubtitleStyle {
       super.writeByte(133)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeTrack {
+    } else if let value = value as? NativeSource {
       super.writeByte(134)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeVideoInfo {
+    } else if let value = value as? NativeTrack {
       super.writeByte(135)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeDiagnostics {
+    } else if let value = value as? NativeVideoInfo {
       super.writeByte(136)
       super.writeValue(value.toList())
-    } else if let value = value as? NativeError {
+    } else if let value = value as? NativeDiagnostics {
       super.writeByte(137)
+      super.writeValue(value.toList())
+    } else if let value = value as? NativeError {
+      super.writeByte(138)
       super.writeValue(value.toList())
     } else {
       super.writeValue(value)
@@ -609,6 +676,9 @@ protocol NativePlayerHostApi {
   /// 加载并选中外挂字幕；formatHint 为文件扩展名（如 srt、ass）
   func addExternalSubtitle(playerId: Int64, text: String, title: String, formatHint: String?, completion: @escaping (Result<Void, Error>) -> Void)
   func setVideoFit(playerId: Int64, fit: NativeVideoFit) throws
+  func setSubtitleStyle(playerId: Int64, style: NativeSubtitleStyle) throws
+  /// 正值表示字幕延后显示；capabilities.subtitleDelay 为 false 时忽略
+  func setSubtitleDelay(playerId: Int64, delayMs: Int64) throws
   func diagnostics(playerId: Int64) throws -> NativeDiagnostics
   func dispose(playerId: Int64) throws
 }
@@ -846,6 +916,39 @@ class NativePlayerHostApiSetup {
       }
     } else {
       setVideoFitChannel.setMessageHandler(nil)
+    }
+    let setSubtitleStyleChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleStyle\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setSubtitleStyleChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let playerIdArg = args[0] as! Int64
+        let styleArg = args[1] as! NativeSubtitleStyle
+        do {
+          try api.setSubtitleStyle(playerId: playerIdArg, style: styleArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setSubtitleStyleChannel.setMessageHandler(nil)
+    }
+    /// 正值表示字幕延后显示；capabilities.subtitleDelay 为 false 时忽略
+    let setSubtitleDelayChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleDelay\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      setSubtitleDelayChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let playerIdArg = args[0] as! Int64
+        let delayMsArg = args[1] as! Int64
+        do {
+          try api.setSubtitleDelay(playerId: playerIdArg, delayMs: delayMsArg)
+          reply(wrapResult(nil))
+        } catch {
+          reply(wrapError(error))
+        }
+      }
+    } else {
+      setSubtitleDelayChannel.setMessageHandler(nil)
     }
     let diagnosticsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.native_player.NativePlayerHostApi.diagnostics\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

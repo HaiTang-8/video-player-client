@@ -7,7 +7,11 @@ class NativePlayerPlugin : FlutterPlugin {
 
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     val host =
-      NativePlayerHost(binding.applicationContext, NativePlayerEventsApi(binding.binaryMessenger))
+      NativePlayerHost(
+        binding.applicationContext,
+        NativePlayerEventsApi(binding.binaryMessenger),
+        binding.flutterAssets::getAssetFilePathByName,
+      )
     NativePlayerHostApi.setUp(binding.binaryMessenger, host)
     binding.platformViewRegistry.registerViewFactory(
       NativeVideoViewFactory.VIEW_TYPE,

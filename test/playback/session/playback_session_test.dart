@@ -51,9 +51,11 @@ class _FakeResolver implements PlaybackSourceResolver {
     return result!;
   }
 
+  String? subtitleText;
+
   @override
   Future<String?> fetchSubtitleText(SubtitleInfo subtitle) async =>
-      'subtitle of ${subtitle.name}';
+      subtitleText ?? 'subtitle of ${subtitle.name}';
 
   @override
   void dispose() => disposed = true;
@@ -409,6 +411,142 @@ void main() {
     await session.selectExternalSubtitle(subtitleInfo('movie.chs.ASS', 90));
     expect(engine.lastExternalFormatHint, 'ass');
   });
+
+  test('subtitle style is applied on initialize and when changed', () async {
+    await session.initialize();
+    expect(engine.subtitleStyle, SubtitleStyle.defaults);
+
+    const style = SubtitleStyle(scale: 1.2, color: 0xFFFBE5A0);
+    session.setSubtitleStyle(style);
+    await pumpEventQueue();
+    expect(engine.subtitleStyle, style);
+  });
+
+  test(
+    'subtitle delay goes to the engine and resets for another video',
+    () async {
+      engine.capabilities = const EngineCapabilities(
+        dolbyVisionColor: false,
+        maxVolume: 2.0,
+        maxRate: 100,
+        subtitleDelay: true,
+      );
+      await session.load(movie);
+      session.setSubtitleDelay(const Duration(milliseconds: 500));
+      await pumpEventQueue();
+      expect(engine.subtitleDelay, const Duration(milliseconds: 500));
+
+      await session.reload();
+      expect(session.subtitleDelay.value, const Duration(milliseconds: 500));
+      expect(engine.subtitleDelay, const Duration(milliseconds: 500));
+
+      await session.load(const MoviePlaybackItem(2));
+      expect(session.subtitleDelay.value, Duration.zero);
+      expect(engine.subtitleDelay, Duration.zero);
+    },
+  );
+
+  group('with a subtitle delay store', () {
+    late FakeSubtitleDelayStore store;
+    late PlaybackSession stored;
+
+    EpisodePlaybackItem episode(int show, int id) =>
+        EpisodePlaybackItem(tvShowId: show, seasonId: 1, episodeId: id);
+
+    setUp(() {
+      engine.capabilities = const EngineCapabilities(
+        dolbyVisionColor: false,
+        maxVolume: 2.0,
+        maxRate: 100,
+        subtitleDelay: true,
+      );
+      store = FakeSubtitleDelayStore();
+      stored = PlaybackSession(
+        selector: const EngineSelector([DefaultMpvTextureRule()]),
+        factory: PlaybackEngineFactory({
+          PlaybackEngineKind.mpvTexture: () => engine,
+        }),
+        environment: const PlatformEnvironment(platform: TargetPlatform.macOS),
+        resolver: resolver,
+        sourceGateway: sourceGateway,
+        progressGateway: progressGateway,
+        defaultRate: () => 1.0,
+        subtitleDelayStore: store,
+      );
+    });
+
+    tearDown(() => stored.dispose());
+
+    test('delay is shared by episodes of the same show', () async {
+      await stored.load(episode(1, 10));
+      expect(stored.subtitleDelaySharedByShow, isTrue);
+      stored.setSubtitleDelay(const Duration(milliseconds: 800));
+
+      await stored.load(episode(1, 11));
+      expect(store.saved['tv_1'], const Duration(milliseconds: 800));
+      expect(stored.subtitleDelay.value, const Duration(milliseconds: 800));
+      expect(engine.subtitleDelay, const Duration(milliseconds: 800));
+
+      await stored.load(episode(2, 20));
+      expect(stored.subtitleDelay.value, Duration.zero);
+      expect(engine.subtitleDelay, Duration.zero);
+    });
+
+    test('movies keep their own delay', () async {
+      store.saved['movie_1'] = const Duration(seconds: -1);
+      await stored.load(movie);
+      expect(stored.subtitleDelaySharedByShow, isFalse);
+      expect(stored.subtitleDelay.value, const Duration(seconds: -1));
+      expect(engine.subtitleDelay, const Duration(seconds: -1));
+    });
+
+    test('saves after adjustments settle and removes a zero delay', () async {
+      await stored.load(episode(1, 10));
+      stored
+        ..setSubtitleDelay(const Duration(milliseconds: 100))
+        ..setSubtitleDelay(const Duration(milliseconds: 200));
+      expect(store.saved, isEmpty);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(store.saved['tv_1'], const Duration(milliseconds: 200));
+
+      stored.setSubtitleDelay(Duration.zero);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(store.saved, isEmpty);
+    });
+
+    test('pending delay is saved on dispose', () async {
+      await stored.load(episode(1, 10));
+      stored.setSubtitleDelay(const Duration(milliseconds: 300));
+      stored.dispose();
+      await pumpEventQueue();
+      expect(store.saved['tv_1'], const Duration(milliseconds: 300));
+    });
+  });
+
+  test(
+    'without engine support the selected external subtitle is shifted',
+    () async {
+      resolver.subtitleText = '1\n00:00:01,000 --> 00:00:02,500\nhello\n';
+      final sub = subtitleInfo('movie.chs.srt', 90);
+      await session.load(movie);
+      expect(session.subtitleDelaySupported, isFalse);
+
+      await session.selectExternalSubtitle(sub);
+      engine.hub.update(
+        selectedTracks: SelectedTracks(
+          subtitle: SubtitleTrackInfo(id: '2:0', title: sub.displayName),
+        ),
+      );
+      expect(session.subtitleDelaySupported, isTrue);
+
+      session.setSubtitleDelay(const Duration(milliseconds: 1500));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      expect(
+        engine.lastExternalText,
+        '1\n00:00:02,500 --> 00:00:04,000\nhello\n',
+      );
+    },
+  );
 
   test('user seek cancels the pending start position', () async {
     await session.load(movie, startAt: const Duration(seconds: 120));

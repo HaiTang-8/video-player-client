@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
@@ -29,6 +29,7 @@ import 'media_info_rows.dart';
 import 'player_top_bar.dart';
 import 'player_overlay_notice.dart';
 import 'ripple_loading_indicator.dart';
+import 'subtitle_settings_panel.dart';
 
 class _PlayerHelpEntry {
   final String action;
@@ -66,6 +67,12 @@ class CustomVideoControls extends StatefulWidget {
   final int seekDuration;
   final double longPressSpeed;
 
+  /// 为空时字幕菜单不显示“字幕设置”
+  final ValueListenable<Duration>? subtitleDelay;
+  final bool Function()? subtitleDelaySupported;
+  final ValueChanged<Duration>? onSubtitleDelayChanged;
+  final bool subtitleDelaySharedByShow;
+
   const CustomVideoControls({
     super.key,
     required this.engine,
@@ -93,6 +100,10 @@ class CustomVideoControls extends StatefulWidget {
     this.isPlaybackErrorRecoveryActive,
     this.seekDuration = 10,
     this.longPressSpeed = 2.0,
+    this.subtitleDelay,
+    this.subtitleDelaySupported,
+    this.onSubtitleDelayChanged,
+    this.subtitleDelaySharedByShow = false,
   });
 
   @override
@@ -1566,15 +1577,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   Widget _buildSpeedButton() {
     final maxRate = widget.engine.capabilities.maxRate;
-    final speeds = [
-      0.5,
-      0.75,
-      1.0,
-      1.25,
-      1.5,
-      2.0,
-      3.0,
-    ].where((s) => s <= maxRate).toList();
+    final speeds =
+        [
+          0.5,
+          0.75,
+          1.0,
+          1.25,
+          1.5,
+          2.0,
+          3.0,
+        ].where((s) => s <= maxRate).toList();
     final isDesktop = WindowControls.isDesktop;
     return Builder(
       builder:
@@ -1819,6 +1831,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         );
         final closeSelected = _subtitleOff;
         final children = <shadcn.MenuItem>[
+          if (widget.subtitleDelay != null) ...[
+            shadcn.MenuButton(
+              leading: const Icon(LucideIcons.slidersHorizontal, size: 16),
+              child: const Text('字幕设置'),
+              onPressed: (_) => _showSubtitleSettings(),
+            ),
+            const shadcn.MenuDivider(),
+          ],
           shadcn.MenuButton(
             trailing:
                 closeSelected
@@ -1900,6 +1920,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         );
       },
     );
+  }
+
+  Future<void> _showSubtitleSettings() async {
+    final delay = widget.subtitleDelay;
+    if (delay == null) return;
+    _hideTimer?.cancel();
+    await SubtitleSettingsPanel.show(
+      context,
+      delay: delay,
+      delaySupported: widget.subtitleDelaySupported ?? () => false,
+      onDelayChanged: widget.onSubtitleDelayChanged ?? (_) {},
+      delaySharedByShow: widget.subtitleDelaySharedByShow,
+    );
+    if (mounted) _startHideTimer();
   }
 
   Widget _buildSeekIcon(bool forward) => Stack(

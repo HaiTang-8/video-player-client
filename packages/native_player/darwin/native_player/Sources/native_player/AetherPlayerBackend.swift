@@ -10,7 +10,8 @@ import UIKit
 extension PlayerBackendFactory {
   /// 视频播放倍速上限 2.0（AetherEngine `maxSupportedRate`），音量上限 100%
   static let aether = PlayerBackendFactory(
-    capabilities: NativeCapabilities(dolbyVisionColor: true, maxVolume: 1, maxRate: 2),
+    capabilities: NativeCapabilities(
+      dolbyVisionColor: true, maxVolume: 1, maxRate: 2, subtitleDelay: true),
     make: { events, fonts in try AetherPlayerBackend(events: events, subtitleFonts: fonts) }
   )
 }
@@ -148,6 +149,15 @@ final class AetherPlayerBackend: PlayerBackend {
   func setVideoFit(_ fit: NativeVideoFit) {
     engine.videoGravity = fit == .cover ? .resizeAspectFill : .resizeAspect
     subtitles.fill = fit == .cover
+  }
+
+  func setSubtitleStyle(_ style: NativeSubtitleStyle) {
+    subtitles.style = style
+  }
+
+  /// 字幕层按渲染时刻减去偏移取字幕；提前显示（负值）只对已经送达的 cue 有效
+  func setSubtitleDelay(ms: Int64) {
+    subtitles.delay = Double(ms) / 1000
   }
 
   func diagnostics() -> NativeDiagnostics {

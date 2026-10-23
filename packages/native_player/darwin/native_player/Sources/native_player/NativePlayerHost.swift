@@ -76,6 +76,14 @@ final class NativePlayerHost: @preconcurrency NativePlayerHostApi {
 
   func setVideoFit(playerId: Int64, fit: NativeVideoFit) throws { try player(playerId).setVideoFit(fit) }
 
+  func setSubtitleStyle(playerId: Int64, style: NativeSubtitleStyle) throws {
+    try player(playerId).setSubtitleStyle(style)
+  }
+
+  func setSubtitleDelay(playerId: Int64, delayMs: Int64) throws {
+    try player(playerId).setSubtitleDelay(ms: delayMs)
+  }
+
   func diagnostics(playerId: Int64) throws -> NativeDiagnostics { try player(playerId).diagnostics() }
 
   func dispose(playerId: Int64) throws {

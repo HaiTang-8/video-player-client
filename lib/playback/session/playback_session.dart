@@ -18,6 +18,7 @@ import 'playback_source_resolver.dart';
 import 'playback_startup_timeline.dart';
 import 'seek_coordinator.dart';
 import 'subtitle_auto_selector.dart';
+import 'subtitle_time_shifter.dart';
 
 sealed class PlaybackSessionStatus {
   const PlaybackSessionStatus();
@@ -53,6 +54,8 @@ class PlaybackSession extends ChangeNotifier {
     required WatchProgressGateway progressGateway,
     required double Function() defaultRate,
     EnginePreference enginePreference = EnginePreference.auto,
+    SubtitleStyle subtitleStyle = SubtitleStyle.defaults,
+    SubtitleDelayStore? subtitleDelayStore,
     Duration videoViewTimeout = const Duration(seconds: 2),
   }) : _selector = selector,
        _factory = factory,
@@ -62,6 +65,8 @@ class PlaybackSession extends ChangeNotifier {
        _sourceGateway = sourceGateway,
        _defaultRate = defaultRate,
        _enginePreference = enginePreference,
+       _subtitleStyle = subtitleStyle,
+       _subtitleDelayStore = subtitleDelayStore,
        _videoViewTimeout = videoViewTimeout {
     _attach(_factory.create(_selectKind()!));
   }
@@ -105,6 +110,14 @@ class PlaybackSession extends ChangeNotifier {
   List<SubtitleInfo> _externalSubtitles = const [];
   double? _sessionRate;
   double? _sessionVolume;
+  SubtitleStyle _subtitleStyle;
+  final ValueNotifier<Duration> _subtitleDelay = ValueNotifier(Duration.zero);
+  Timer? _delayReload;
+  final SubtitleDelayStore? _subtitleDelayStore;
+  Timer? _delaySave;
+
+  /// 最近一次加载的外挂字幕原文，内核不支持字幕偏移时据此平移后重新加载
+  ({SubtitleInfo info, String text})? _externalSubtitle;
   PlaybackStartupTimeline? _startup;
   PlaybackStartupReport? _lastStartup;
   PlaybackSourceObserver? _observer;
@@ -125,6 +138,24 @@ class PlaybackSession extends ChangeNotifier {
   /// 用户在本次会话中调整过的音量，切换剧集时沿用
   double? get sessionVolume => _sessionVolume;
 
+  /// 字幕偏移按剧集（整部剧共用）或电影保存在本地；没有保存位置时只对当前视频生效
+  ValueListenable<Duration> get subtitleDelay => _subtitleDelay;
+
+  /// 偏移由同一部剧的各集共用
+  bool get subtitleDelaySharedByShow =>
+      _subtitleDelayStore != null && _item is EpisodePlaybackItem;
+
+  /// 内核支持字幕偏移，或当前选中的是可以平移时间轴的外挂字幕
+  bool get subtitleDelaySupported =>
+      engine.capabilities.subtitleDelay || _externalSelected;
+
+  bool get _externalSelected {
+    final external = _externalSubtitle;
+    return external != null &&
+        engine.state.selectedTracks.subtitle?.title ==
+            external.info.displayName;
+  }
+
   bool get isRecoveringFromNetworkError => _tracker.hasRecentNetworkError;
 
   /// 最近一次加载的起播耗时
@@ -136,6 +167,7 @@ class PlaybackSession extends ChangeNotifier {
   Future<void> initialize() async {
     try {
       await engine.initialize();
+      await engine.setSubtitleStyle(_subtitleStyle);
     } catch (e) {
       LogService.instance.warn(
         'PlaybackSession',
@@ -160,6 +192,12 @@ class PlaybackSession extends ChangeNotifier {
     await _seek.awaitActive();
     final generation = ++_loadGeneration;
     _cancelPendingStart();
+    if (!identical(item, _item)) {
+      _flushDelaySave();
+      _subtitleDelay.value = _subtitleDelayStore?.read(item) ?? Duration.zero;
+    }
+    _delayReload?.cancel();
+    _externalSubtitle = null;
     _tracker
       ..stop()
       ..resetErrorTracking();
@@ -197,6 +235,12 @@ class PlaybackSession extends ChangeNotifier {
       );
       if (_isStale(generation)) return;
       _startup?.markOpened();
+      if (engine.capabilities.subtitleDelay) {
+        await _applyToEngine(
+          () => engine.setSubtitleDelay(_subtitleDelay.value),
+          'subtitle delay',
+        );
+      }
       final volume = _sessionVolume;
       if (volume != null) await engine.setVolume(volume);
       if (_isStale(generation)) return;
@@ -243,18 +287,102 @@ class PlaybackSession extends ChangeNotifier {
     try {
       final text = await _resolver.fetchSubtitleText(subtitle);
       if (text == null || _disposed) return;
-      await engine.addExternalSubtitle(
-        ExternalSubtitle.data(
-          text,
-          title: subtitle.displayName,
-          formatHint: _formatHint(subtitle.path),
-        ),
-      );
+      _externalSubtitle = (info: subtitle, text: text);
+      await _addExternalSubtitle(subtitle, text);
     } catch (e) {
       LogService.instance.warn(
         'PlaybackSession',
         'Failed to load subtitle: $e',
       );
+    }
+  }
+
+  Future<void> _addExternalSubtitle(SubtitleInfo subtitle, String text) {
+    final delay = _subtitleDelay.value;
+    return engine.addExternalSubtitle(
+      ExternalSubtitle.data(
+        engine.capabilities.subtitleDelay
+            ? text
+            : SubtitleTimeShifter.shift(text, delay),
+        title: subtitle.displayName,
+        formatHint: _formatHint(subtitle.path),
+      ),
+    );
+  }
+
+  void setSubtitleStyle(SubtitleStyle style) {
+    if (style == _subtitleStyle) return;
+    _subtitleStyle = style;
+    unawaited(_applyToEngine(() => engine.setSubtitleStyle(style), 'style'));
+  }
+
+  /// 正值表示字幕延后显示。内核不支持时平移外挂字幕时间轴，停止调整后再重新加载
+  void setSubtitleDelay(Duration delay) {
+    if (_disposed || delay == _subtitleDelay.value) return;
+    _subtitleDelay.value = delay;
+    _scheduleDelaySave();
+    if (engine.capabilities.subtitleDelay) {
+      unawaited(
+        _applyToEngine(() => engine.setSubtitleDelay(delay), 'subtitle delay'),
+      );
+      return;
+    }
+    final external = _externalSubtitle;
+    if (external == null || !_externalSelected) return;
+    _delayReload?.cancel();
+    _delayReload = Timer(const Duration(milliseconds: 600), () {
+      if (_disposed || !identical(external, _externalSubtitle)) return;
+      unawaited(
+        _applyToEngine(
+          () => _addExternalSubtitle(external.info, external.text),
+          'shifted subtitle',
+        ),
+      );
+    });
+  }
+
+  void _scheduleDelaySave() {
+    final store = _subtitleDelayStore;
+    final item = _item;
+    if (store == null || item == null) return;
+    _delaySave?.cancel();
+    _delaySave = Timer(
+      const Duration(milliseconds: 500),
+      () => _saveDelay(store, item, _subtitleDelay.value),
+    );
+  }
+
+  /// 换视频或退出前把尚未写入的偏移立即保存
+  void _flushDelaySave() {
+    final pending = _delaySave;
+    if (pending == null || !pending.isActive) return;
+    pending.cancel();
+    final store = _subtitleDelayStore;
+    final item = _item;
+    if (store != null && item != null) {
+      _saveDelay(store, item, _subtitleDelay.value);
+    }
+  }
+
+  void _saveDelay(SubtitleDelayStore store, PlaybackItem item, Duration delay) {
+    unawaited(
+      store.write(item, delay).catchError((Object e) {
+        LogService.instance.warn(
+          'PlaybackSession',
+          'Failed to save subtitle delay: $e',
+        );
+      }),
+    );
+  }
+
+  Future<void> _applyToEngine(
+    Future<void> Function() action,
+    String what,
+  ) async {
+    try {
+      await action();
+    } catch (e) {
+      LogService.instance.warn('PlaybackSession', 'Failed to apply $what: $e');
     }
   }
 
@@ -276,6 +404,8 @@ class PlaybackSession extends ChangeNotifier {
     if (_disposed) return;
     _disposed = true;
     _cancelPendingStart();
+    _delayReload?.cancel();
+    _flushDelaySave();
     _tracker.stop();
     for (final sub in _subscriptions) {
       sub.cancel();

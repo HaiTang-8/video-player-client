@@ -122,6 +122,7 @@ class NativeCapabilities {
     required this.dolbyVisionColor,
     required this.maxVolume,
     required this.maxRate,
+    required this.subtitleDelay,
   });
 
   bool dolbyVisionColor;
@@ -131,8 +132,11 @@ class NativeCapabilities {
 
   double maxRate;
 
+  /// 支持 [NativePlayerHostApi.setSubtitleDelay]
+  bool subtitleDelay;
+
   List<Object?> _toList() {
-    return <Object?>[dolbyVisionColor, maxVolume, maxRate];
+    return <Object?>[dolbyVisionColor, maxVolume, maxRate, subtitleDelay];
   }
 
   Object encode() {
@@ -145,6 +149,7 @@ class NativeCapabilities {
       dolbyVisionColor: result[0]! as bool,
       maxVolume: result[1]! as double,
       maxRate: result[2]! as double,
+      subtitleDelay: result[3]! as bool,
     );
   }
 
@@ -159,7 +164,8 @@ class NativeCapabilities {
     }
     return _deepEquals(dolbyVisionColor, other.dolbyVisionColor) &&
         _deepEquals(maxVolume, other.maxVolume) &&
-        _deepEquals(maxRate, other.maxRate);
+        _deepEquals(maxRate, other.maxRate) &&
+        _deepEquals(subtitleDelay, other.subtitleDelay);
   }
 
   @override
@@ -168,7 +174,71 @@ class NativeCapabilities {
 
   @override
   String toString() {
-    return 'NativeCapabilities(dolbyVisionColor: $dolbyVisionColor, maxVolume: $maxVolume, maxRate: $maxRate)';
+    return 'NativeCapabilities(dolbyVisionColor: $dolbyVisionColor, maxVolume: $maxVolume, maxRate: $maxRate, subtitleDelay: $subtitleDelay)';
+  }
+}
+
+/// 用户字幕样式；颜色、背景、位置只作用于文本字幕，ASS / 位图字幕保留原样式
+class NativeSubtitleStyle {
+  NativeSubtitleStyle({
+    required this.scale,
+    required this.color,
+    required this.backgroundOpacity,
+    required this.bottomMargin,
+  });
+
+  /// 字号倍率，1.0 为标准
+  double scale;
+
+  /// ARGB
+  int color;
+
+  /// 0 表示无底框
+  double backgroundOpacity;
+
+  /// 字幕底部到画面底部的距离，占画面高度的比例
+  double bottomMargin;
+
+  List<Object?> _toList() {
+    return <Object?>[scale, color, backgroundOpacity, bottomMargin];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static NativeSubtitleStyle decode(Object result) {
+    result as List<Object?>;
+    return NativeSubtitleStyle(
+      scale: result[0]! as double,
+      color: result[1]! as int,
+      backgroundOpacity: result[2]! as double,
+      bottomMargin: result[3]! as double,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! NativeSubtitleStyle || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(scale, other.scale) &&
+        _deepEquals(color, other.color) &&
+        _deepEquals(backgroundOpacity, other.backgroundOpacity) &&
+        _deepEquals(bottomMargin, other.bottomMargin);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'NativeSubtitleStyle(scale: $scale, color: $color, backgroundOpacity: $backgroundOpacity, bottomMargin: $bottomMargin)';
   }
 }
 
@@ -468,20 +538,23 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is NativeCapabilities) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is NativeSource) {
+    } else if (value is NativeSubtitleStyle) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    } else if (value is NativeTrack) {
+    } else if (value is NativeSource) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    } else if (value is NativeVideoInfo) {
+    } else if (value is NativeTrack) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    } else if (value is NativeDiagnostics) {
+    } else if (value is NativeVideoInfo) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is NativeError) {
+    } else if (value is NativeDiagnostics) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    } else if (value is NativeError) {
+      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -503,14 +576,16 @@ class _PigeonCodec extends StandardMessageCodec {
       case 132:
         return NativeCapabilities.decode(readValue(buffer)!);
       case 133:
-        return NativeSource.decode(readValue(buffer)!);
+        return NativeSubtitleStyle.decode(readValue(buffer)!);
       case 134:
-        return NativeTrack.decode(readValue(buffer)!);
+        return NativeSource.decode(readValue(buffer)!);
       case 135:
-        return NativeVideoInfo.decode(readValue(buffer)!);
+        return NativeTrack.decode(readValue(buffer)!);
       case 136:
-        return NativeDiagnostics.decode(readValue(buffer)!);
+        return NativeVideoInfo.decode(readValue(buffer)!);
       case 137:
+        return NativeDiagnostics.decode(readValue(buffer)!);
+      case 138:
         return NativeError.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -814,6 +889,47 @@ class NativePlayerHostApi {
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
       <Object?>[playerId, fit],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> setSubtitleStyle(int playerId, NativeSubtitleStyle style) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleStyle$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[playerId, style],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  /// 正值表示字幕延后显示；capabilities.subtitleDelay 为 false 时忽略
+  Future<void> setSubtitleDelay(int playerId, int delayMs) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.native_player.NativePlayerHostApi.setSubtitleDelay$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[playerId, delayMs],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/stream_info.dart';
 import '../../data/models/subtitle_info.dart';
@@ -13,7 +15,7 @@ import 'playback_item.dart';
 
 /// 基于 Riverpod 的数据访问实现，由播放页创建
 class RiverpodPlaybackGateway
-    implements PlaybackSourceGateway, WatchProgressGateway {
+    implements PlaybackSourceGateway, WatchProgressGateway, SubtitleDelayStore {
   RiverpodPlaybackGateway(this._ref)
     : _mediaService = _ref.read(mediaServiceProvider);
 
@@ -22,6 +24,36 @@ class RiverpodPlaybackGateway
 
   @override
   String? get serverUrl => _ref.read(serverUrlProvider);
+
+  @override
+  Duration read(PlaybackItem item) {
+    final key = _subtitleDelayKey(item);
+    final ms = key == null ? null : _prefs.getInt(key);
+    return Duration(milliseconds: ms ?? 0);
+  }
+
+  @override
+  Future<void> write(PlaybackItem item, Duration delay) async {
+    final key = _subtitleDelayKey(item);
+    if (key == null) return;
+    if (delay == Duration.zero) {
+      await _prefs.remove(key);
+    } else {
+      await _prefs.setInt(key, delay.inMilliseconds);
+    }
+  }
+
+  SharedPreferences get _prefs => _ref.read(sharedPreferencesProvider);
+
+  /// 没有当前服务器时不保存
+  String? _subtitleDelayKey(PlaybackItem item) {
+    final serverId = _ref.read(serverListProvider).currentServerId;
+    if (serverId == null) return null;
+    return AppConstants.subtitleDelayKey(serverId, switch (item) {
+      MoviePlaybackItem(:final movieId) => 'movie_$movieId',
+      EpisodePlaybackItem(:final tvShowId) => 'tv_$tvShowId',
+    });
+  }
 
   @override
   String? get accessToken => _ref.read(authProvider).tokens?.accessToken;
