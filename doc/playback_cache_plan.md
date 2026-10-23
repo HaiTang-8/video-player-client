@@ -1,6 +1,6 @@
 # 播放缓存任务文档（续播秒开）
 
-> 状态：**Stage 0、0.4、1 完成；Stage 2 模拟器部分通过，等待用户真机验证（2.3）；D1、D2、D7 已决策，Stage 3 可以开始（真机结果不达标时回到 D5）**
+> 状态：**Stage 0、0.4、1、3 完成；Stage 2 模拟器部分通过，等待用户真机验证（2.3）；下一步 Stage 4（代理接入缓存）**
 > 最后更新：2026-10-22
 > 适用范围：`client/lib/playback/`（新增 `cache/`）、`client/packages/native_player/`、`client/lib/screens/settings/`、iOS / macOS 工程配置
 >
@@ -145,18 +145,23 @@ flowchart LR
 
 ```
 lib/playback/cache/
-├── playback_cache.dart            # 门面（主隔离区）：启动代理、注册条目、配额、清理、统计
-├── cache_entry_key.dart           # 缓存键
-├── cache_store.dart               # 磁盘存储：块位图、元数据、读写、淘汰（纯 Dart，可单测）
-├── cache_eviction.dart            # 两级淘汰策略（纯函数，可单测）
-├── cache_proxy_server.dart        # 代理（独立隔离区）：Range 解析、命中 / 未命中拼接、上游拉取
-└── upstream_resolution.dart       # 隔离区间协议：请求上游地址、强制刷新
+├── playback_proxy.dart            # 门面（主隔离区）：启动代理隔离区、登记条目、生命周期自检（Stage 2）；Stage 4 扩展为配额、清理、统计
+├── proxied_source_resolver.dart   # 解析器装饰器（主隔离区，Stage 2）
+├── cache_proxy_server.dart        # 代理（独立隔离区）：Range 透传（Stage 2）；Stage 4 加入命中 / 未命中拼接、写缓存
+├── cache_entry_key.dart           # 缓存键（Stage 3）
+├── byte_range.dart                # 半开字节区间与合并（Stage 3）
+├── cache_entry_meta.dart          # 条目元数据：块有效区间、固定区间、续播采样与估算（Stage 3）
+├── cache_store.dart               # 磁盘存储：块文件读写、写入器、元数据持久化、启动核对、应用淘汰（Stage 3）
+├── cache_eviction.dart            # 两级淘汰计划与实际上限（纯函数，Stage 3）
+└── upstream_resolution.dart       # 隔离区间协议：请求上游地址、强制刷新（Stage 4）
 test/playback/cache/…              # 单测 + 本地可限速的 Range 测试源站
 ```
 
 依赖规则（在 `playback_engine_plan.md` §4.1 基础上补充）：
 
-- `cache/` 只依赖 `domain/` 和 `dart:io`，**不依赖任何引擎实现**；引擎也不知道缓存的存在，只拿到一个 http 地址。
+- 运行在代理隔离区的部分（`cache_proxy_server`、`cache_store`、`cache_entry_meta`、`cache_eviction`、`cache_entry_key`、`byte_range`）只依赖 `dart:*` 和 `crypto`，不依赖 Flutter、Riverpod、会话层或任何引擎实现。
+- 主隔离区的门面和解析器装饰器可以依赖会话层（`PlaybackSourceResolver`、`PlaybackItem`）和 `LogService`。
+- 引擎不知道缓存的存在，只拿到一个 http 地址。
 - UI 只通过 Provider 读取配额和占用，不直接操作 `cache_store`。
 
 ### 4.3 契约草案（实现时可以微调，但必须同步更新本节）
@@ -194,37 +199,50 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 - 代理隔离区不能直接调用 Riverpod / Dio 闭包：需要上游地址时，通过 SendPort 发消息给主隔离区，由主隔离区调用 `UpstreamResolver` 后回复。
 - 代理地址格式：`http://127.0.0.1:<port>/<launchToken>/e/<entryId>`。`launchToken` 是每次启动随机生成的，防止本机其他 App 借代理读取需要鉴权的内容。
 
-### 4.4 磁盘结构
+### 4.4 磁盘结构（Stage 3 实现）
 
 ```
 <应用缓存目录>/playback_cache/
-├── index.json                       # 条目列表：最后访问时间、已用字节（启动时可从各条目重建）
 └── <entryId>/
-    ├── data                         # 稀疏文件，按源文件偏移写入
-    └── meta.json                    # 见下
+    ├── meta.json                    # 见下
+    └── blocks/
+        ├── 0                        # 每块一个文件，默认 4MiB；最后一块可能更短
+        ├── 1
+        └── …
 ```
 
-`meta.json`：
+**为什么不用“一个稀疏文件 + 位图”**（原设计）：Dart 没有在文件中间打洞的接口（macOS / iOS 的 `F_PUNCHHOLE`），瘦身删掉的块不会释放磁盘空间，两级淘汰的第一级就没有意义了。改成每块一个文件后，删除块文件就能释放空间。
 
-- `size`、`contentType`、`etag`、`lastModified`（第一次拿到上游响应时写入）
-- `blockSize`（默认 1MiB）和已缓存块的位图（base64）
-- `pinnedRanges`：打开阶段（`open` 到第一帧之间）读取的字节区间，也就是封装头和索引。这样不需要解析 MKV / MP4，就能知道哪些区间是起播必需的。
-- `resume`：最后播放位置，以及“位置 → 字节偏移”的采样点（每次打开或 seek 后第一次读取的偏移，与当时的播放位置配对），用来估算续播点对应的字节区间。
-- `filePath`、`storageId`（Stage 6 延迟解析上游时，供字幕和媒体信息使用）
+**每块记录一段有效区间** `[lo, hi)`（相对块起点）：
+- 播放器读末尾 64KiB、从块中间开始读时，局部数据也能缓存，代理不用为了凑整块而向上游多要数据。
+- 同一块里写入了两段不相连的数据时，只保留较长的一段。
+- 相邻块的有效区间首尾相接时，查询时会连成一段。
+
+`meta.json`（`CacheEntryMeta`，`version: 1`）：
+
+- `size`、`contentType`、`etag`、`lastModified`、`filePath`、`storageId`
+- `blockSize`、`blocks`（`[序号, lo, hi]` 列表）
+- `pinned`：打开阶段读取的字节区间（封装头、索引），合并后最多保留 32 段
+- `samples`：`[播放位置毫秒, 字节偏移]`，按位置升序，相距 2 秒以内的合并，最多 64 个（超出时删掉与前一个间隔最小的）
+- `resumePositionMs`、`durationMs`、`createdAt`、`lastAccess`
 
 规则：
 
-- 块写完并刷盘后才在位图里置位；`meta.json` 先写临时文件再改名，保证原子性。
-- 上游返回的 `size` 或 ETag 与 `meta` 不一致：整条作废并重建。
-- 正在被代理连接使用的条目不参与淘汰。
+- 写入器每写满一块（以及关闭时）先 `flush`，再把这段区间记为已缓存，所以元数据只会少记、不会多记。
+- 元数据先写 `meta.json.tmp` 再改名；最多每 2 秒保存一次（`metaSaveDelay`），`flush()` / `close()` 立即保存，并会等前一次保存（包括定时触发的）完成。
+- 同一条目的目录操作（保存元数据、删除、瘦身、创建目录）串行执行；条目被删除或重建后，旧元数据不会再保存，旧写入器写入的数据会被丢弃。
+- 不再单独维护 `index.json`：`open()` 时扫描各条目的 `meta.json` 重建。元数据损坏或 `id` 不符的条目整条删除；记录了但磁盘上没有的块从记录中去掉；没有记录的块文件和临时文件删除。
+- `prepare()` 时，`size` 不同，或 ETag 不同（没有 ETag 时比较 Last-Modified），整条作废并重建。
+- 代理连接使用条目时要 `acquire` / `release`（写入器会自动做）；使用中的条目不会被瘦身或淘汰。用户主动清理（`remove` / `clear`）不受这个限制。
+- 续播点估算：采样点 ≥ 2 个时线性插值，超出范围时用最近两个点外推；只有 1 个时按平均码率（`size / durationMs`）推算；没有采样点时直接按平均码率算；都没有时只保留固定区间。
 
 ### 4.5 配额与淘汰（两级）
 
-1. **瘦身**：按最后访问时间从旧到新，把条目裁成“续播集” = `pinnedRanges` + 续播点估算偏移前 16MiB 到后 64MiB（参数可调）。
-2. **整条删除**：瘦身后仍超出配额，按 LRU 删除整条。
+1. **瘦身**：按最后访问时间从旧到新，把条目裁成“续播集” = `pinned` + 续播点估算偏移前 16MiB 到后 64MiB（`CacheStore.resumeBefore` / `resumeAfter`），与续播集相交的块整块保留。续播集为空的条目直接整条删除，不留下只有元数据的空条目。
+2. **整条删除**：瘦身后仍超出，按 LRU 整条删除（替换掉该条目之前的瘦身动作）。
 
-- 实际上限 = min(配额, 剩余空间 − 1GiB)。剩余空间不足时停止写入，只做透传。
-- 淘汰在写入路径上增量触发（超过上限 105% 时开始，降到 95% 为止），不阻塞读取。
+- 实际上限 = min(配额, 已用 + 剩余空间 − 1GiB)（`effectiveCacheLimit`），为 0 时停止写入，只做透传。dart:io 没有查询剩余空间的接口，剩余空间要由主隔离区通过平台通道查询后传给代理隔离区。
+- 淘汰在写入路径上增量触发（超过上限 105% 时开始，降到 95% 为止），不阻塞读取；调小配额时用 `force`，只要超过上限就开始。
 
 ### 4.6 代理行为
 
@@ -423,11 +441,27 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 
 **前置**：Stage 2 通过；D1、D2 已决策。
 
-- [ ] 3.1 `CacheEntryKey`、`meta.json` 读写（原子替换）、块位图。
-- [ ] 3.2 `cache_store`：按偏移读写块、查询缺失区间、条目作废、占用统计、启动时重建索引。
-- [ ] 3.3 `cache_eviction`：两级淘汰（§4.5），纯函数。
-- [ ] 3.4 续播集：记录 `pinnedRanges` 和“位置 → 偏移”采样，估算续播区间。
-- [ ] 3.5 单测：区间合并、块边界、并发写、ETag 或大小不一致时作废、淘汰顺序、空间不足时降级为透传。
+- [x] 3.1 `CacheEntryKey`、`meta.json` 读写（原子替换）、块记录（改为每块一个文件 + 块内有效区间，见 §4.4）。
+- [x] 3.2 `cache_store`：按偏移读写块、查询缺失区间、条目作废、占用统计、启动时重建索引。
+- [x] 3.3 `cache_eviction`：两级淘汰（§4.5），纯函数。
+- [x] 3.4 续播集：记录 `pinned` 和“位置 → 偏移”采样，估算续播区间。
+- [x] 3.5 单测：区间合并、块边界、并发写、ETag 或大小不一致时作废、淘汰顺序、空间不足时降级为透传（`effectiveCacheLimit` 为 0）。
+
+#### Stage 3 结论（2026-10-23）
+
+- **单测**（`test/playback/cache/`）：
+  - 元数据 12 项：区间合并、跨块合并、缺口、块内不相连时的取舍、短尾块、固定区间、采样合并与上限、续播点估算、续播集与保留块、JSON 往返、缓存键规范化；
+  - 淘汰 8 项：低于阈值、按 LRU 瘦身、瘦身不够时删除、跳过使用中、`force`、空续播集直接删除、配额为 0、实际上限；
+  - 存储 13 项：非对齐读写、局部尾块、流式写入器、超出文件尾、重新打开后核对、原子保存、ETag / Last-Modified 作废、瘦身释放块文件、配额淘汰、并发写、写入期间被删除、清空。
+- **修掉两个只会偶发的竞态**：
+  1. 定时保存元数据和 `enforce` 删除条目同时进行，导致改名失败。修复：同一条目的目录操作串行化，保存前检查元数据还是当前对象。
+  2. `close()` 没有等定时器触发的保存完成。修复：`flush()` 串成链。
+  修复后存储测试连续跑 12 遍全部通过（修复前 5 遍里失败 3 遍）。
+- **交给 Stage 4**：
+  - `CacheStore` 运行在代理隔离区；代理每个连接都要 `acquire` / `release`。
+  - 未命中时边转发边用 `writer(id, offset)` 写入；打开阶段的读取区间调用 `pin`；打开和 seek 后第一次读取时调用 `addSample`。
+  - 播放位置和时长由会话经主隔离区传过来，调用 `reportPlayback`。
+  - 写入路径上用 `effectiveCacheLimit` 算出上限后调用 `enforce`；剩余空间由主隔离区查询。
 
 ### Stage 4：代理接入（iOS 先跑通）
 
@@ -523,5 +557,6 @@ final class UpstreamSource { final Uri url; final Map<String, String> headers; }
 | 2026-10-22 | Stage 1 起播位置交给内核 | 完成，待真机确认 | 见 §6 Stage 1 结论。单测：会话新增 3 项（打开时带起播位置、起播位置防止网络错误后的异常片尾进度、非正数从头播放；反向验证：去掉 `markControlledSeek` 后用例失败），原生引擎新增 1 项（毫秒数透传），全量 108 项通过；`flutter analyze` 无问题；Android `:native_player:compileDebugKotlin` 通过；iOS 模拟器 `playback_session_native_test` 通过。测试源站新增 `timeline`（每个请求的开始 / 结束时间和已发送字节数），基准新增 `BENCH_SCENARIO` 过滤和 `NP_BENCH_TIMELINE` 输出。~~另一个发现：Aether 两次打开时各发出的 `bytes=0-33554431` 请求会一直下载~~（**已被 Stage 2 更正**：是测试源站的假象，见 §6 Stage 2 结论第 3 条） |
 | 2026-10-22 | Stage 0.4 首帧指标 | 完成 | 见 §6 Stage 0.4。单测新增 4 项（hub 重置首帧标志、原生事件映射、会话记录首帧、上一集的首帧不计入；反向验证：去掉 `markResolved` 前提后用例失败），全量 111 项通过；`flutter analyze` 无问题；Android Kotlin 编译通过；iOS 模拟器 `native_player_channel_test` 通过（首帧到达，seek 后不重复）。基准第一次跑 MP4 时测试 App 连不上调试连接（`The log reader failed unexpectedly`，当时 Claude 应用的模拟器面板也在监听这台模拟器），重跑通过 |
 | 2026-10-22 | Stage 2 iOS 代理 Spike（模拟器） | 通过，待真机 | 见 §6 Stage 2 结论。iOS Info.plist 加了 `NSAppTransportSecurity` → `NSAllowsLocalNetworking`（正式构建也生效；它同时放开了对局域网 IP 的 http 访问，iOS 17 起默认会拦截）。单测：代理 10 项（Range / HEAD / 鉴权头 / 重定向保留头 / 未知条目 / 并发 / 播放器断开时取消上游 / 同端口重新绑定 / 解析器装饰器），测试源站 9 项。iOS 模拟器：代理功能测试（含前后台切换）通过；直连 / 代理基准各 2 组。更正了 Stage 1 关于开头请求的结论 |
+| 2026-10-23 | Stage 3 缓存存储 | 完成 | 见 §6 Stage 3 结论；§4.4 改为每块一个文件 + 块内有效区间，取消 `index.json`，默认块大小 4MiB。全量单测 153 项通过，`flutter analyze` 无问题 |
 | 2026-10-23 | 决策 D1 / D2 / D7 | 完成 | D1 = C（两级淘汰）；D2 = 移动端 2GB、桌面端 10GB，默认开启；D7 = B（核心重写，从分支移植 UI、缓存键规则和 403 / 429 重试） |
 | 2026-10-22 | 任务文档 | 完成 | 本文；补充 iOS 约束：iOS 17+ ATS 默认拦截 IP 地址，需要 `NSAllowsLocalNetworking`；回前台时 Aether 用原 URL 重建，代理必须在同一端口恢复；macOS Release 版缺少 `network.server` 权限 |
