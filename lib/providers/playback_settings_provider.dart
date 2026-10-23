@@ -29,10 +29,10 @@ class PlaybackSettingsNotifier extends Notifier<PlaybackSettings> {
     );
   }
 
-  /// 已保存的缓存上限（GB）；没有保存或不在选项里时为默认值
+  /// 已保存的缓存上限（GB）；没有保存或超出范围时为默认值
   static int storedCacheQuotaGb(SharedPreferences prefs) {
     final stored = prefs.getInt(AppConstants.playbackCacheQuotaGbKey);
-    return stored != null && PlaybackCacheConfig.quotaOptionsGb.contains(stored)
+    return stored != null && PlaybackCacheConfig.isValidQuotaGb(stored)
         ? stored
         : PlaybackCacheConfig.defaultQuotaGb;
   }
@@ -66,7 +66,7 @@ class PlaybackSettingsNotifier extends Notifier<PlaybackSettings> {
 
   /// 立即按新上限淘汰；关闭（0）时清空已有缓存，之后播放直连
   Future<void> setCacheQuotaGb(int gb) async {
-    if (!PlaybackCacheConfig.quotaOptionsGb.contains(gb)) return;
+    if (!PlaybackCacheConfig.isValidQuotaGb(gb)) return;
     final prefs = ref.read(sharedPreferencesProvider);
     await prefs.setInt(AppConstants.playbackCacheQuotaGbKey, gb);
     state = state.copyWith(cacheQuotaGb: gb);

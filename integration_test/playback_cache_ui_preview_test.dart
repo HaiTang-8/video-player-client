@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:integration_test/integration_test.dart';
@@ -17,7 +17,7 @@ import '../test/screens/support/settings_test_app.dart';
 /// 截图写到这个目录（宿主机路径，模拟器可以直接写）
 const _shotsDir = String.fromEnvironment('SHOTS_DIR');
 
-/// Stage 5 界面自查：播放设置的缓存一节、上限选择、缓存明细（列表 / 删除确认 / 空 / 读取失败）、存储空间，浅色与深色各一套
+/// Stage 5 界面自查：播放设置的缓存一节、上限滑块（开 / 关）、缓存明细（列表 / 删除确认 / 空 / 读取失败）、存储空间，浅色与深色各一套
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -103,7 +103,9 @@ void main() {
 
       await tester.tap(find.text('缓存上限'));
       await shot(key, 'quota_$theme');
-      await tester.tapAt(const Offset(20, 80));
+      await tester.tap(find.byType(CupertinoSwitch));
+      await shot(key, 'quota_off_$theme');
+      await tester.tap(find.text('取消'));
       await tester.pumpAndSettle();
 
       await tester.tap(find.text('已缓存'));

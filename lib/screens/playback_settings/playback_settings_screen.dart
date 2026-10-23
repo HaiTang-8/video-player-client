@@ -668,110 +668,178 @@ class _PlaybackCacheSectionState extends ConsumerState<_PlaybackCacheSection> {
     );
   }
 
-  void _showQuotaPicker(int current) {
+  Future<void> _showQuotaPicker(int current) async {
+    final catalog = ref.read(playbackCacheCatalogProvider);
+    final used = await catalog.usedBytes().catchError((_) => 0);
+    final free = await catalog.freeBytes().catchError((_) => null);
+    if (!mounted) return;
+    final max = PlaybackCacheConfig.maxQuotaGbFor(
+      usedBytes: used,
+      freeBytes: free,
+      currentGb: current,
+    );
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final hintStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    var enabled = current > 0;
+    var gb = enabled ? current : PlaybackCacheConfig.defaultQuotaGb;
 
-    showModalBottomSheet(
+    await showModalBottomSheet<void>(
       context: context,
       backgroundColor: isDark ? const Color(0xFF1C1C1E) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
       ),
       builder:
-          (sheetContext) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  child: Text(
-                    '缓存上限',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                Divider(
-                  height: 1,
-                  color: theme.dividerColor.withValues(alpha: 0.3),
-                ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        for (final gb in PlaybackCacheConfig.quotaOptionsGb)
-                          _buildQuotaOption(
-                            sheetContext,
-                            theme,
-                            gb,
-                            gb == current,
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-    );
-  }
-
-  Widget _buildQuotaOption(
-    BuildContext sheetContext,
-    ThemeData theme,
-    int gb,
-    bool isSelected,
-  ) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () async {
-          Navigator.pop(sheetContext);
-          await ref.read(playbackSettingsProvider.notifier).setCacheQuotaGb(gb);
-          if (mounted) _reload();
-        },
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _quotaLabel(gb),
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight:
-                            isSelected ? FontWeight.w500 : FontWeight.normal,
-                        color: isSelected ? theme.colorScheme.primary : null,
+          (sheetContext) => StatefulBuilder(
+            builder:
+                (sheetContext, setSheetState) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            CupertinoButton(
+                              child: Text(
+                                '取消',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(sheetContext),
+                            ),
+                            Text(
+                              '缓存上限',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            CupertinoButton(
+                              child: Text(
+                                '完成',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              onPressed: () async {
+                                Navigator.pop(sheetContext);
+                                final target = enabled ? gb : 0;
+                                if (target == current) return;
+                                await ref
+                                    .read(playbackSettingsProvider.notifier)
+                                    .setCacheQuotaGb(target);
+                                if (mounted) _reload();
+                              },
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (gb == 0) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        '播放时直接连接服务器，并清除已有的播放缓存',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                      Divider(
+                        height: 1,
+                        color: theme.dividerColor.withValues(alpha: 0.3),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '播放缓存',
+                                    style: theme.textTheme.bodyLarge,
+                                  ),
+                                ),
+                                CupertinoSwitch(
+                                  value: enabled,
+                                  activeTrackColor: theme.colorScheme.primary,
+                                  onChanged:
+                                      (value) =>
+                                          setSheetState(() => enabled = value),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '上限',
+                                    style: theme.textTheme.bodyLarge,
+                                  ),
+                                ),
+                                Text(
+                                  enabled ? '$gb GB' : '关闭',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color:
+                                        enabled
+                                            ? theme.colorScheme.primary
+                                            : theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Opacity(
+                              opacity: enabled ? 1 : 0.4,
+                              child: Column(
+                                children: [
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: CupertinoSlider(
+                                      value: gb.toDouble(),
+                                      min: 1,
+                                      max: max.toDouble(),
+                                      divisions: max - 1,
+                                      activeColor: theme.colorScheme.primary,
+                                      onChanged:
+                                          enabled
+                                              ? (value) => setSheetState(
+                                                () => gb = value.round(),
+                                              )
+                                              : null,
+                                    ),
+                                  ),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('1 GB', style: hintStyle),
+                                      Text('$max GB', style: hintStyle),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!enabled || free != null) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                enabled
+                                    ? '设备可用空间约 ${StorageManagementService.instance.formatSize(free!)}'
+                                    : '关闭后播放时直接连接服务器，并清除已有的播放缓存',
+                                style: hintStyle,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (isSelected) ...[
-                const SizedBox(width: 12),
-                Icon(
-                  CupertinoIcons.checkmark,
-                  size: 20,
-                  color: theme.colorScheme.primary,
-                ),
-              ],
-            ],
           ),
-        ),
-      ),
     );
   }
 }

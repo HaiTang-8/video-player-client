@@ -182,6 +182,9 @@ class PlaybackProxy implements PlaybackCacheCatalog {
   Future<int> usedBytes() async => (await usage())['bytes'] ?? 0;
 
   @override
+  Future<int?> freeBytes() async => freeSpace?.call();
+
+  @override
   Future<List<CachedVideo>> entries() async {
     final handle = await _start();
     final list = await handle.call({'cmd': 'entries'}) as List;

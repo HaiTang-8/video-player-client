@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class FakePlaybackCacheCatalog implements PlaybackCacheCatalog {
   List<CachedVideo> videos = [];
   Object? error;
+  int? free = 120 << 30;
   final List<int> quotas = [];
   final List<String> removed = [];
   int clears = 0;
@@ -34,6 +35,9 @@ class FakePlaybackCacheCatalog implements PlaybackCacheCatalog {
     if (failure != null) throw failure;
     return videos.fold<int>(0, (sum, v) => sum + v.cachedBytes);
   }
+
+  @override
+  Future<int?> freeBytes() async => free;
 
   @override
   Future<void> remove(String id) async {
