@@ -49,6 +49,10 @@ class NativePlayerEventDispatcher
       _listeners[playerId]?.onBuffering(playerId, buffering);
 
   @override
+  void onBufferingProgress(int playerId, double progress) =>
+      _listeners[playerId]?.onBufferingProgress(playerId, progress);
+
+  @override
   void onCompleted(int playerId, bool completed) =>
       _listeners[playerId]?.onCompleted(playerId, completed);
 

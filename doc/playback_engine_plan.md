@@ -241,6 +241,8 @@ class EngineCapabilities {
   final double maxRate;              // mpv 100，Aether 2.0，Media3 3.0
   final bool reportsVideoView;       // 画面在原生视图里并上报挂载状态（Aether / Media3）：会话先暂停打开，视图挂载后再播放
   final bool subtitleDelay;          // 支持对所有字幕设置偏移（mpv、Aether）；Media3 为 false，会话改为平移外挂字幕时间轴后重新加载
+  final Duration bufferingTarget;    // 卡顿/跳转后前方缓冲到多长才恢复播放，UI 据此估算缓冲百分比：默认 3s（mpv cache-pause-wait=3），Media3 2.5s（DefaultLoadControl）；reportsBufferingProgress 为 true 时缓冲中改用内核上报的进度
+  final bool reportsBufferingProgress; // 内核自己上报 PlaybackSnapshot.bufferingProgress（mpv、Aether）；Media3 为 false
 }
 
 class PlaybackSource {               // PlaybackSource.network(url, httpHeaders:) / PlaybackSource.localFile(path)
@@ -259,8 +261,9 @@ class PlaybackError {
   final bool fallbackSuggested;      // 当前内核放不了，会话换下一个候选内核
 }
 
-class PlaybackSnapshot { position, duration, bufferedPosition, playing, buffering, completed, firstFrameRendered, videoViewAttached, rate, volume, tracks, selectedTracks, videoInfo }
+class PlaybackSnapshot { position, duration, bufferedPosition, playing, buffering, bufferingProgress, completed, firstFrameRendered, videoViewAttached, rate, volume, tracks, selectedTracks, videoInfo }
 // bufferedPosition：不用再取数据就能播到的位置（与 position 同一时间轴），resetForNewMedia 时清零；进度条据此画缓冲段
+// bufferingProgress：缓冲中恢复播放的进度 0~1。mpv 取 cache-buffering-state（只在 paused-for-cache 期间有意义）；Aether 见 §4.6 onBufferingProgress
 // firstFrameRendered：本次 open 后第一帧已上屏（原生首帧 + 画面视图已创建），内核不支持时始终为 false
 // videoViewAttached：原生画面视图（PlatformView）已挂载，NativeVideoView 的 onCreated / onDisposed 驱动
 class PlaybackStreams  { 上述各项对应的 Stream，另加 Stream<PlaybackError> errors }
@@ -382,7 +385,8 @@ abstract class NativePlayerEventsApi {                // 每类事件一个方�
   void onDuration(int playerId, int durationMs);
   void onBufferedPosition(int playerId, int bufferedMs); // Aether 250ms 节流、Media3 每 500ms，值变化才上报
   void onPlaying(int playerId, bool playing);
-  void onBuffering(int playerId, bool buffering);
+  void onBuffering(int playerId, bool buffering);       // Aether：isBuffering 或 state 为 loading / seeking
+  void onBufferingProgress(int playerId, double progress); // 只在缓冲期间上报。Aether：跳转后缓存从目标点前的关键帧按段生成，进度 = 包含该关键帧的缓存段长度 ÷（目标点 + 4s − 段起点），段起点早于目标点 30s 以上时按目标点算；Media3 不上报
   void onCompleted(int playerId, bool completed);
   void onFirstFrame(int playerId);                    // 每次 open 后第一帧上屏时一次（后台重建、seek 不再上报）
   void onRate(int playerId, double rate);
@@ -770,6 +774,9 @@ Windows 列是 Stage 2 的目标；Stage 2 完成前 Windows 仍走 mpv 纹理�
 | 2026-10-23 | 字幕样式与字幕设置面板 | 完成（单元测试、Android / macOS 编译），待真机验证 | **契约变化**：`PlaybackEngine` 新增 `setSubtitleStyle` / `setSubtitleDelay`，`EngineCapabilities.subtitleDelay`；Pigeon 新增 `NativeSubtitleStyle`、`setSubtitleStyle`、`setSubtitleDelay`、`NativeCapabilities.subtitleDelay`。**样式**：三端无描边无阴影，可选半透明底框（后改为三端自绘圆角底框，见下一条）；字号档位 0.8 / 1.0 / 1.2 / 1.45，标准约占画面高度 5.5%；`subtitleFontAssets` 改为 Medium + Bold（三个字重同一字体族，去掉 Regular 后常规字幕匹配 Medium），Android 的 `configureSubtitleFonts` 现在加载 Medium 给 SubtitleView。**mpv**：隐藏 media_kit 自带 SubtitleView（边距只在首次构建时读取、底框为逐行色块），改用 `MpvSubtitleOverlay` 按视频实际显示区域排版；偏移用 `sub-delay`。**Aether**：非 ASS 字幕的默认样式头按设置生成，字号用 `ass_set_font_scale`，偏移在叠加层渲染时刻上减去（提前显示只对已送达的 cue 有效）。**Media3**：没有字幕偏移接口，`subtitleDelay = false`；会话保存外挂字幕原文，停止调整 600ms 后用 `SubtitleTimeShifter`（SRT / WebVTT / ASS）平移后重新加载，原生侧按标题替换同名外挂字幕配置；内嵌字幕在 Android 上不支持偏移，面板置灰提示。ASS 字号用 `AssRender.setFontScale`（`AssHandler.renderCallback` 在渲染器创建时补设）。**界面**：字幕菜单底部“字幕设置”打开右侧面板（大小 / 颜色 / 背景透明度 / 位置 / 偏移 ±0.1s、长按数值归零 / 恢复默认 / 说明），设置实时生效，滑块松手后保存。“字幕自动缓存”为第二阶段，未做 |
 | 2026-10-23 | 控制层尺寸统一（独立 UI 任务，非内核阶段） | 完成（iOS 模拟器、macOS 实测），待 Android 真机验证 | 新增 `widgets/player_ui_metrics.dart` 集中尺寸：屏幕边距 16、工具图标 24、播放控制图标 26、播放键 32、点击区域移动端 44 / 桌面 48、播放控制按钮 48。播放/暂停去掉圆底（原暂停显示为停止方块）；快退/快进数字 10sp；控制层图标全部改为 `player_glyphs.dart` 自绘（`PlayerGlyphType` 18 种：返回、锁 / 解锁、铺满 / 适应、全屏进入 / 退出、音量 / 静音、音轨、字幕、播放列表、上一集 / 下一集、快退 / 快进、播放 / 暂停；24 网格、线宽 2；工具图标统一 20×20 可视框，上一集 / 下一集 17×17，播放 / 暂停 16×20），控制层不再使用 BootstrapIcons 和 Material `Icons.replay`；`AppBackButton` 增加可选 `icon`，仅播放器顶栏传入自绘返回图标。手势浮层、菜单、弹窗、字幕设置面板、Windows 窗口按钮仍用原图标库。工具按钮统一为 `_buildToolButton`，右侧组整体右移半个留白，使间距均匀、末个图标对齐边线；锁按钮去掉额外内边距。标题 18 w600、进度时间 13 w600 等宽数字、倍速 16 w600；进度滑块半径 6→8。不涉及内核与能力判断 |
 | 2026-10-24 | 播放器状态栏：网速、网络类型、电量（独立 UI 任务） | 完成（iOS 模拟器、macOS 实测，Android 编译通过），待 Android 真机验证 | 新增 `lib/core/device/device_status.dart` 与 `widgets/player_status_bar.dart`。网速：新原生通道 `media_player/device_status.rxBytes`，每秒取累计下行字节差值；Android 为本 App 的 `TrafficStats.getUidRxBytes`，iOS / macOS 为 `getifaddrs` 汇总 `en*` / `pdp_ip*` 网卡（32 位计数回绕时该秒记 0）；没有原生实现的平台（Windows）改用 mpv 的 `NetworkThroughputProvider`。网络类型 `connectivity_plus`、电量 `battery_plus`，均固定在 6.x：7.x 的 SwiftPM 清单依赖 Flutter 3.44 才生成的 `FlutterFramework` 包，且 Android 端要求 AGP ≥ 8.12.1 / Kotlin 2.2。读不到电池（台式机、模拟器）时不显示；充电绿色、≤20% 红色。布局：移动端在标题行上方加一行 24pt 状态行（时钟移到状态行居中，标题位置与示例一致），桌面端放在标题栏右侧（Windows 在窗口按钮左侧）。新增自绘图标 Wi-Fi / 蜂窝 / 有线网 |
+| 2026-10-24 | 播放器倍速提示紧凑化、缓冲提示改圆环（独立 UI 任务） | 完成（单元测试），待真机 | 屏幕短边 < 600 时顶部提示（倍速、杜比视界）改为小胶囊。缓冲提示（加载页、拖动跳转、卡顿）统一为 `BufferingRingIndicator`：转圈圆环，圆内显示缓冲百分比，下方显示网速（无网速时显示提示文字）；加载页没有缓冲数据，只显示圆环和提示文字。百分比 = (bufferedPosition − position) ÷ `EngineCapabilities.bufferingTarget`，最高显示 99%。拖动跳转期间也会轮询网速 |
+| 2026-10-24 | 修复：Apple 跳转后缓冲圈提前消失 | 完成（iOS 模拟器实测） | **原因**：AetherEngine 跳转期间处于 `.seeking`，`isBuffering` 只在 `.playing` 时为 true，且跳转开始就把 `clock.currentTime` 设为目标点，控制层判定跳转已到位并收起缓冲圈，画面实际还卡着。**修复**：`AetherPlayerBackend` 上报的 buffering 改为 `isBuffering \|\| state ∈ {loading, seeking}`；控制层手势快进松手即收起拖动提示，避免与缓冲圈重叠（也避免上一次较慢的跳转收起下一次拖动的提示）。实测快进 10 分钟：画面停住的约 3.5 秒里圆环一直显示，出画后消失。跳转期间百分比不准的问题见下一条「内核上报缓冲进度」 |
+| 2026-10-24 | 内核上报缓冲进度 | 完成（单元测试、iOS 模拟器实测），mpv 与 Android 待验证 | **问题**：Aether 跳转期间圆环百分比不准：`clock.bufferedPosition` 按屏幕上的帧计算，画面停在旧帧，往前跳恒为 0%、往回跳恒为 99%；`residentRanges` 从目标点前的关键帧开始按 5～6 秒整段生成，按「目标点前方缓存」算只会 0% 直接跳到 99%。**契约变化**：`PlaybackSnapshot` / `PlaybackStreams` 增加 `bufferingProgress`，`EngineCapabilities` 增加 `reportsBufferingProgress`（Dart 侧按内核设置，原生 initialize 时保留），Pigeon 增加 `onBufferingProgress`（Kotlin 侧已生成，Media3 不调用）。mpv 接 media_kit `bufferingPercentage`；Aether 公式见 §4.6。控制层只在 `buffering` 为 true 且内核支持时用内核进度，否则仍按 `bufferingTarget` 估算。实测往回跳 9 分钟：0%（约 3s）→ 17%（约 2.5s）→ 99% → 出画；进度档位取决于关键帧间隔和分段生成节奏，比较粗 |
 | 2026-10-22 | Stage 2 暂缓 | 待完成 | 用户决定 Windows 暂不做，Stage 2 标记为待完成，Windows 继续走 mpv 纹理。讨论过的测试方式：CI 只能保证编译和打包；本机 Parallels 可装 Windows 11 ARM 虚拟机（约 5–6 GB 镜像、30 GB 磁盘，x64 App 转译运行），能验证原生窗口叠放、跟随、控制层叠加、回退和 gpu-next 软解颜色，不能验证真 HDR、d3d11va、多显示器和性能；这些只能在用户的 Windows 真机上验收。7.3 及 Stage 1、4 的真机回归由用户自行测试 |
 
 ---

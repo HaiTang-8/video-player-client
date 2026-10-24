@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'player_ui_metrics.dart';
+
 enum PlayerOverlayNoticePosition { center, top }
 
 class PlayerOverlayNotice extends StatelessWidget {
@@ -24,18 +26,23 @@ class PlayerOverlayNotice extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTop = position == PlayerOverlayNoticePosition.top;
+    final compact = isTop && PlayerUiMetrics.isCompact(context);
     final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding:
+          compact
+              ? const EdgeInsets.symmetric(horizontal: 12, vertical: 6)
+              : const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.black54,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(compact ? 16 : 8),
       ),
-      child: _buildContent(),
+      child: _buildContent(compact),
     );
 
-    if (position == PlayerOverlayNoticePosition.top) {
+    if (isTop) {
       return Positioned(
-        top: safePadding.top + 20,
+        top: safePadding.top + (compact ? 12 : 20),
         left: 0,
         right: 0,
         child: Center(child: content),
@@ -45,7 +52,7 @@ class PlayerOverlayNotice extends StatelessWidget {
     return Center(child: content);
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(bool compact) {
     final progressValue = progress?.clamp(0.0, 1.0);
     final hasProgress = progressValue != null;
     final hasIcon = icon != null;
@@ -96,15 +103,18 @@ class PlayerOverlayNotice extends StatelessWidget {
             text!,
             style: TextStyle(
               color: color,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+              fontSize: compact ? 13 : 18,
+              fontWeight: compact ? FontWeight.w600 : FontWeight.bold,
             ),
           ),
-        if (hasSecondaryText) const SizedBox(height: 4),
+        if (hasSecondaryText) SizedBox(height: compact ? 2 : 4),
         if (hasSecondaryText)
           Text(
             secondaryText!,
-            style: const TextStyle(color: Colors.white70, fontSize: 14),
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: compact ? 11 : 14,
+            ),
           ),
       ],
     );

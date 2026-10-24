@@ -31,7 +31,7 @@ import 'player_glyphs.dart';
 import 'player_top_bar.dart';
 import 'player_ui_metrics.dart';
 import 'player_overlay_notice.dart';
-import 'ripple_loading_indicator.dart';
+import 'buffering_ring_indicator.dart';
 import 'subtitle_settings_panel.dart';
 
 class _PlayerHelpEntry {
@@ -146,6 +146,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
 
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   final ValueNotifier<Duration> _buffered = ValueNotifier(Duration.zero);
+  final ValueNotifier<double> _engineBufferingProgress = ValueNotifier(0);
   Duration _duration = Duration.zero;
   Duration _lastTrustedPosition = Duration.zero;
   int _seekRequestVersion = 0;
@@ -257,6 +258,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _position.value = state.position;
     _lastTrustedPosition = state.position;
     _buffered.value = state.bufferedPosition;
+    _engineBufferingProgress.value = state.bufferingProgress;
     _duration = state.duration;
     _playing = state.playing;
     _buffering = state.buffering;
@@ -290,12 +292,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           _position.value = p;
           _lastTrustedPosition = p;
         }
-        if (seekReached) setState(_clearManualSeekPending);
+        if (seekReached) {
+          setState(_clearManualSeekPending);
+          _syncSpeedPolling();
+        }
       }),
     );
     _subscriptions.add(
       streams.bufferedPosition.listen((b) {
         if (mounted) _buffered.value = b;
+      }),
+    );
+    _subscriptions.add(
+      streams.bufferingProgress.listen((p) {
+        if (mounted) _engineBufferingProgress.value = p;
       }),
     );
     _subscriptions.add(
@@ -312,11 +322,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       streams.buffering.listen((b) {
         if (!mounted) return;
         setState(() => _buffering = b);
-        if (b) {
-          _startSpeedPolling();
-        } else {
-          _stopSpeedPolling();
-        }
+        _syncSpeedPolling();
       }),
     );
     _subscriptions.add(
@@ -386,6 +392,24 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
         : null;
   }
 
+  void _syncSpeedPolling() {
+    if (_buffering || _manualSeekPending) {
+      if (_speedTimer == null) _startSpeedPolling();
+    } else if (_speedTimer != null) {
+      _stopSpeedPolling();
+    }
+  }
+
+  double get _bufferingProgress {
+    if (_buffering && widget.engine.capabilities.reportsBufferingProgress) {
+      return _engineBufferingProgress.value.clamp(0.0, 0.99);
+    }
+    final target = widget.engine.capabilities.bufferingTarget.inMilliseconds;
+    final ahead =
+        _buffered.value.inMilliseconds - _position.value.inMilliseconds;
+    return (ahead / target).clamp(0.0, 0.99);
+  }
+
   void _stopSpeedPolling() {
     _speedTimer?.cancel();
     _speedTimer = null;
@@ -405,6 +429,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _notchOnRight.dispose();
     _position.dispose();
     _buffered.dispose();
+    _engineBufferingProgress.dispose();
     _hideTimer?.cancel();
     _longPressTimer?.cancel();
     _mediaInfoTimer?.cancel();
@@ -932,6 +957,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     _manualSeekPendingTimer = Timer(const Duration(seconds: 10), () {
       if (!mounted || version != _manualSeekPendingVersion) return;
       setState(_clearManualSeekPending);
+      _syncSpeedPolling();
     });
   }
 
@@ -958,7 +984,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       _dragging = true;
       _manualSeekPending = true;
       _manualSeekTarget = target;
+      if (hideSeekOverlay) _showSeekOverlay = false;
     });
+    _syncSpeedPolling();
     _startManualSeekPendingTimeout(manualSeekPendingVersion);
 
     try {
@@ -975,15 +1003,12 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       if (mounted) {
         final isLatestSeek = seekRequestVersion == _seekRequestVersion;
         if (isLatestSeek) _position.value = target;
-        setState(() {
-          if (isLatestSeek) {
+        if (isLatestSeek) {
+          setState(() {
             _lastTrustedPosition = target;
             _dragging = false;
-          }
-          if (hideSeekOverlay) {
-            _showSeekOverlay = false;
-          }
-        });
+          });
+        }
         if (isLatestSeek) {
           if (showControlsAfterSeek) {
             _showControlsTemporarily();
@@ -1293,9 +1318,17 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             if (_visible && !WindowControls.isDesktop) _buildLockButton(),
             // 缓冲指示器
             if (showLoading)
-              RippleLoadingIndicator(
-                speedText: _speedText,
-                hintText: _manualSeekPending ? '跳转中' : '缓冲中',
+              ListenableBuilder(
+                listenable: Listenable.merge([
+                  _position,
+                  _buffered,
+                  _engineBufferingProgress,
+                ]),
+                builder:
+                    (context, _) => BufferingRingIndicator(
+                      progress: _bufferingProgress,
+                      label: _speedText ?? (_manualSeekPending ? '跳转中' : '缓冲中'),
+                    ),
               ),
             if (_isLongPressSpeed)
               PlayerOverlayNotice(

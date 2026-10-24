@@ -107,6 +107,8 @@ void main() {
         dolbyVisionColor: false,
         maxVolume: 1.0,
         maxRate: 1.0,
+        bufferingTarget: Duration(milliseconds: 2500),
+        reportsBufferingProgress: true,
       ),
       subtitleFontAssets: const ['fonts/a.ttf', 'fonts/b.ttf'],
       api: api,
@@ -123,6 +125,11 @@ void main() {
       expect(registry.listeners[7], same(engine));
       expect(engine.capabilities.dolbyVisionColor, isTrue);
       expect(engine.capabilities.maxRate, 2.0);
+      expect(
+        engine.capabilities.bufferingTarget,
+        const Duration(milliseconds: 2500),
+      );
+      expect(engine.capabilities.reportsBufferingProgress, isTrue);
     },
   );
 
@@ -196,6 +203,7 @@ void main() {
       ..onDuration(7, 5400000)
       ..onPosition(7, 1500)
       ..onBufferedPosition(7, 31500)
+      ..onBufferingProgress(7, 0.61)
       ..onPlaying(7, true)
       ..onTracks(
         7,
@@ -223,6 +231,7 @@ void main() {
     expect(state.duration, const Duration(minutes: 90));
     expect(state.position, const Duration(milliseconds: 1500));
     expect(state.bufferedPosition, const Duration(milliseconds: 31500));
+    expect(state.bufferingProgress, 0.61);
     expect(state.playing, isTrue);
     expect(state.tracks.subtitle.single.title, '简体');
     expect(state.selectedTracks.audio?.language, 'chi');

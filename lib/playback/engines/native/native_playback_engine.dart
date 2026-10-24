@@ -60,6 +60,8 @@ class NativePlaybackEngine
       maxRate: caps.maxRate,
       reportsVideoView: true,
       subtitleDelay: caps.subtitleDelay,
+      bufferingTarget: _capabilities.bufferingTarget,
+      reportsBufferingProgress: _capabilities.reportsBufferingProgress,
     );
     if (subtitleFontAssets.isNotEmpty) {
       await _api.configureSubtitleFonts(subtitleFontAssets);
@@ -221,6 +223,10 @@ class NativePlaybackEngine
   @override
   void onBuffering(int playerId, bool buffering) =>
       _hub.update(buffering: buffering);
+
+  @override
+  void onBufferingProgress(int playerId, double progress) =>
+      _hub.update(bufferingProgress: progress);
 
   @override
   void onCompleted(int playerId, bool completed) =>

@@ -17,6 +17,9 @@ final class PlayerEventSink {
   }
   func playing(_ value: Bool) { api.onPlaying(playerId: playerId, playing: value) { _ in } }
   func buffering(_ value: Bool) { api.onBuffering(playerId: playerId, buffering: value) { _ in } }
+  func bufferingProgress(_ value: Double) {
+    api.onBufferingProgress(playerId: playerId, progress: value) { _ in }
+  }
   func completed(_ value: Bool) { api.onCompleted(playerId: playerId, completed: value) { _ in } }
   func firstFrame() { api.onFirstFrame(playerId: playerId) { _ in } }
   func rate(_ value: Double) { api.onRate(playerId: playerId, rate: value) { _ in } }

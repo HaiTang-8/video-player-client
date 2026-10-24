@@ -14,11 +14,19 @@ class EngineCapabilities {
   /// 支持对所有字幕设置偏移；不支持时会话只能平移外挂字幕的时间轴后重新加载
   final bool subtitleDelay;
 
+  /// 卡顿或跳转后，前方缓冲到多长内核才恢复播放；UI 据此估算缓冲百分比
+  final Duration bufferingTarget;
+
+  /// 内核自己上报缓冲进度（PlaybackSnapshot.bufferingProgress）；否则 UI 按 bufferingTarget 估算
+  final bool reportsBufferingProgress;
+
   const EngineCapabilities({
     required this.dolbyVisionColor,
     required this.maxVolume,
     required this.maxRate,
     this.reportsVideoView = false,
     this.subtitleDelay = false,
+    this.bufferingTarget = const Duration(seconds: 3),
+    this.reportsBufferingProgress = false,
   });
 }

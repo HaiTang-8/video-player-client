@@ -11,6 +11,9 @@ class PlaybackSnapshot {
   final Duration bufferedPosition;
   final bool playing;
   final bool buffering;
+
+  /// 缓冲中恢复播放的进度 0~1；只在 capabilities.reportsBufferingProgress 为 true 时有意义
+  final double bufferingProgress;
   final bool completed;
 
   /// 本次打开后第一帧画面已上屏（画面视图也已创建）；内核不支持时始终为 false
@@ -30,6 +33,7 @@ class PlaybackSnapshot {
     this.bufferedPosition = Duration.zero,
     this.playing = false,
     this.buffering = false,
+    this.bufferingProgress = 0,
     this.completed = false,
     this.firstFrameRendered = false,
     this.videoViewAttached = false,
@@ -47,6 +51,7 @@ class PlaybackStreams {
   final Stream<Duration> bufferedPosition;
   final Stream<bool> playing;
   final Stream<bool> buffering;
+  final Stream<double> bufferingProgress;
   final Stream<bool> completed;
   final Stream<bool> firstFrameRendered;
   final Stream<bool> videoViewAttached;
@@ -63,6 +68,7 @@ class PlaybackStreams {
     required this.bufferedPosition,
     required this.playing,
     required this.buffering,
+    required this.bufferingProgress,
     required this.completed,
     required this.firstFrameRendered,
     required this.videoViewAttached,

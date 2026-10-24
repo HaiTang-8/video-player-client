@@ -189,6 +189,9 @@ abstract class NativePlayerEventsApi {
 
   void onBuffering(int playerId, bool buffering);
 
+  /// 缓冲中恢复播放的进度 0~1，只在缓冲期间上报
+  void onBufferingProgress(int playerId, double progress);
+
   void onCompleted(int playerId, bool completed);
 
   /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）

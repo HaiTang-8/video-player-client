@@ -1163,6 +1163,24 @@ class NativePlayerEventsApi(private val binaryMessenger: BinaryMessenger, privat
       } 
     }
   }
+  /** 缓冲中恢复播放的进度 0~1，只在缓冲期间上报 */
+  fun onBufferingProgress(playerIdArg: Long, progressArg: Double, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBufferingProgress$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(playerIdArg, progressArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(NativePlayerApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
   fun onCompleted(playerIdArg: Long, completedArg: Boolean, callback: (Result<Unit>) -> Unit)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""

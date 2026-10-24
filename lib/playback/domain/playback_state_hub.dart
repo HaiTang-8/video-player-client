@@ -12,6 +12,7 @@ class PlaybackStateHub {
   final _bufferedPosition = StreamController<Duration>.broadcast();
   final _playing = StreamController<bool>.broadcast();
   final _buffering = StreamController<bool>.broadcast();
+  final _bufferingProgress = StreamController<double>.broadcast();
   final _completed = StreamController<bool>.broadcast();
   final _firstFrameRendered = StreamController<bool>.broadcast();
   final _videoViewAttached = StreamController<bool>.broadcast();
@@ -31,6 +32,7 @@ class PlaybackStateHub {
     bufferedPosition: _bufferedPosition.stream,
     playing: _playing.stream,
     buffering: _buffering.stream,
+    bufferingProgress: _bufferingProgress.stream,
     completed: _completed.stream,
     firstFrameRendered: _firstFrameRendered.stream,
     videoViewAttached: _videoViewAttached.stream,
@@ -50,6 +52,7 @@ class PlaybackStateHub {
     Duration? bufferedPosition,
     bool? playing,
     bool? buffering,
+    double? bufferingProgress,
     bool? completed,
     bool? firstFrameRendered,
     bool? videoViewAttached,
@@ -71,6 +74,11 @@ class PlaybackStateHub {
       ),
       playing: _apply(playing, s.playing, _playing),
       buffering: _apply(buffering, s.buffering, _buffering),
+      bufferingProgress: _apply(
+        bufferingProgress,
+        s.bufferingProgress,
+        _bufferingProgress,
+      ),
       completed: _apply(completed, s.completed, _completed),
       firstFrameRendered: _apply(
         firstFrameRendered,
@@ -115,6 +123,7 @@ class PlaybackStateHub {
       _bufferedPosition.close(),
       _playing.close(),
       _buffering.close(),
+      _bufferingProgress.close(),
       _completed.close(),
       _firstFrameRendered.close(),
       _videoViewAttached.close(),

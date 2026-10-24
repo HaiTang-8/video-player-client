@@ -7,7 +7,7 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/window/window_controls.dart';
 import 'widgets/player_top_bar.dart';
-import 'widgets/ripple_loading_indicator.dart';
+import 'widgets/buffering_ring_indicator.dart';
 import '../../data/models/category.dart';
 import '../../data/models/episode.dart';
 import '../../data/services/log_service.dart';
@@ -437,8 +437,8 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
         backgroundColor: Colors.black,
         body: Stack(
           children: [
-            RippleLoadingIndicator(
-              hintText: status.resolvingSource ? '正在获取播放地址' : '正在加载视频',
+            BufferingRingIndicator(
+              label: status.resolvingSource ? '正在获取播放地址' : '正在加载视频',
             ),
             PlayerTopBar(
               title: _displayTitle.isNotEmpty ? _displayTitle : '加载中...',

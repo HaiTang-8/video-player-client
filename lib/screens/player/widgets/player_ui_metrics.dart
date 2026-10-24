@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 import '../../../core/window/window_controls.dart';
 
 abstract final class PlayerUiMetrics {
@@ -12,4 +14,7 @@ abstract final class PlayerUiMetrics {
   static const double speedSize = 16;
 
   static double get hit => WindowControls.isDesktop ? 48 : 44;
+
+  static bool isCompact(BuildContext context) =>
+      MediaQuery.sizeOf(context).shortestSide < 600;
 }

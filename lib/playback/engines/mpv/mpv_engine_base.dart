@@ -54,6 +54,7 @@ abstract class MpvEngineBase
     maxVolume: 2.0,
     maxRate: 100,
     subtitleDelay: true,
+    reportsBufferingProgress: true,
   );
 
   @override
@@ -182,6 +183,11 @@ abstract class MpvEngineBase
       ..add(s.buffer.listen((v) => _hub.update(bufferedPosition: v)))
       ..add(s.playing.listen((v) => _hub.update(playing: v)))
       ..add(s.buffering.listen((v) => _hub.update(buffering: v)))
+      ..add(
+        s.bufferingPercentage.listen(
+          (v) => _hub.update(bufferingProgress: v / 100),
+        ),
+      )
       ..add(s.completed.listen((v) => _hub.update(completed: v)))
       ..add(s.rate.listen((v) => _hub.update(rate: v)))
       ..add(s.volume.listen((v) => _hub.update(volume: v / 100)))

@@ -993,6 +993,8 @@ protocol NativePlayerEventsApiProtocol {
   func onBufferedPosition(playerId playerIdArg: Int64, bufferedMs bufferedMsArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onPlaying(playerId playerIdArg: Int64, playing playingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onBuffering(playerId playerIdArg: Int64, buffering bufferingArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
+  /// 缓冲中恢复播放的进度 0~1，只在缓冲期间上报
+  func onBufferingProgress(playerId playerIdArg: Int64, progress progressArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void)
   func onCompleted(playerId playerIdArg: Int64, completed completedArg: Bool, completion: @escaping (Result<Void, PigeonError>) -> Void)
   /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
   func onFirstFrame(playerId playerIdArg: Int64, completion: @escaping (Result<Void, PigeonError>) -> Void)
@@ -1091,6 +1093,25 @@ class NativePlayerEventsApi: NativePlayerEventsApiProtocol {
     let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBuffering\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([playerIdArg, bufferingArg] as [Any?]) { response in
+      guard let listResponse = response as? [Any?] else {
+        completion(.failure(createConnectionError(withChannelName: channelName)))
+        return
+      }
+      if listResponse.count > 1 {
+        let code: String = listResponse[0] as! String
+        let message: String? = nilOrValue(listResponse[1])
+        let details: String? = nilOrValue(listResponse[2])
+        completion(.failure(PigeonError(code: code, message: message, details: details)))
+      } else {
+        completion(.success(()))
+      }
+    }
+  }
+  /// 缓冲中恢复播放的进度 0~1，只在缓冲期间上报
+  func onBufferingProgress(playerId playerIdArg: Int64, progress progressArg: Double, completion: @escaping (Result<Void, PigeonError>) -> Void) {
+    let channelName: String = "dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBufferingProgress\(messageChannelSuffix)"
+    let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
+    channel.sendMessage([playerIdArg, progressArg] as [Any?]) { response in
       guard let listResponse = response as? [Any?] else {
         completion(.failure(createConnectionError(withChannelName: channelName)))
         return

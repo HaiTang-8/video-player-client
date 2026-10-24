@@ -997,6 +997,9 @@ abstract class NativePlayerEventsApi {
 
   void onBuffering(int playerId, bool buffering);
 
+  /// 缓冲中恢复播放的进度 0~1，只在缓冲期间上报
+  void onBufferingProgress(int playerId, double progress);
+
   void onCompleted(int playerId, bool completed);
 
   /// 每次 open 后第一帧画面上屏时调用一次（后台重建、seek 不再调用）
@@ -1151,6 +1154,32 @@ abstract class NativePlayerEventsApi {
           final bool arg_buffering = args[1]! as bool;
           try {
             api.onBuffering(arg_playerId, arg_buffering);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.native_player.NativePlayerEventsApi.onBufferingProgress$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int arg_playerId = args[0]! as int;
+          final double arg_progress = args[1]! as double;
+          try {
+            api.onBufferingProgress(arg_playerId, arg_progress);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

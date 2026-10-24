@@ -223,9 +223,18 @@ final class AetherPlayerBackend: PlayerBackend {
     engine.$state
       .sink { [weak self] state in MainActor.assumeIsolated { self?.handle(state) } }
       .store(in: &subscriptions)
-    engine.$isBuffering
-      .combineLatest(engine.$state.map { $0 == .loading })
+    let buffering = engine.$isBuffering
+      .combineLatest(engine.$state.map { $0 == .loading || $0 == .seeking })
       .map { $0 || $1 }
+    // 先于 buffering 订阅，开始缓冲时 Dart 先收到本次的进度
+    buffering
+      .combineLatest(engine.$residentRanges, engine.clock.$currentTime)
+      .filter { $0.0 }
+      .map { Self.bufferingProgress(target: $0.2, resident: $0.1) }
+      .removeDuplicates()
+      .sink { [events] in events.bufferingProgress($0) }
+      .store(in: &subscriptions)
+    buffering
       .removeDuplicates()
       .sink { [events] in events.buffering($0) }
       .store(in: &subscriptions)
@@ -351,6 +360,22 @@ final class AetherPlayerBackend: PlayerBackend {
 
   private static func milliseconds(_ seconds: Double) -> Int64 {
     seconds.isFinite ? Int64((seconds * 1000).rounded()) : 0
+  }
+
+  /// AetherEngine 的分段时长：缓存到目标点之后一段，AVPlayer 才能起播
+  private static let bufferingGoalSeconds = 4.0
+  /// 起点比目标点早超过这个距离的缓存段不是本次生成的（AetherEngine 允许的最长关键帧间隔）
+  private static let maxKeyframeLeadSeconds = 30.0
+
+  /// 跳转后缓存从目标点之前的关键帧开始按段生成，进度 = 已生成的部分 ÷ 关键帧到「目标点 + 一段」
+  private static func bufferingProgress(target: Double, resident: [ClosedRange<Double>]) -> Double {
+    guard let range = resident.filter({ $0.lowerBound <= target })
+      .max(by: { $0.lowerBound < $1.lowerBound })
+    else { return 0 }
+    let anchor = target - range.lowerBound <= maxKeyframeLeadSeconds ? range.lowerBound : target
+    guard range.upperBound > anchor else { return 0 }
+    let progress = (range.upperBound - anchor) / (target + bufferingGoalSeconds - anchor)
+    return (min(progress, 1) * 100).rounded() / 100
   }
 
   private static func track(_ info: TrackInfo) -> NativeTrack {
