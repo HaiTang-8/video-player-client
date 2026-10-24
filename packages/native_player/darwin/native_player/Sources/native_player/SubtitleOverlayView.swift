@@ -1,4 +1,5 @@
 import AetherEngine
+import CoreImage
 import Libass
 import QuartzCore
 
@@ -42,6 +43,23 @@ final class SubtitleOverlayView: PlatformView {
       setNeedsRender()
     }
   }
+
+  /// HDR / 杜比视界片源按 HDR 送显时字幕相对 SDR 白的亮度，否则字幕在 HDR 画面里发灰；
+  /// 1 表示按 SDR 绘制。实际亮度由系统限制在屏幕当前的 EDR 余量内
+  var brightness: CGFloat = 1 {
+    didSet {
+      guard brightness != oldValue else { return }
+      applyDynamicRange()
+      setNeedsRender()
+    }
+  }
+
+  static let hdrBrightness: CGFloat = 1.6
+
+  private static let extendedLinearSRGB = CGColorSpace(name: CGColorSpace.extendedLinearSRGB)!
+  private lazy var ciContext = CIContext(options: [
+    .workingColorSpace: Self.extendedLinearSRGB, .cacheIntermediates: false,
+  ])
 
   /// 媒体信息面板中的“字幕”一行
   var summary: String { trackLabel }
@@ -221,8 +239,31 @@ final class SubtitleOverlayView: PlatformView {
     CATransaction.setDisableActions(true)
     contentLayer.frame = geometry.visible
     contentLayer.contentsScale = scale
-    contentLayer.contents = image
+    contentLayer.contents = brightness > 1 ? image.flatMap(boosted) : image
     CATransaction.commit()
+  }
+
+  private func applyDynamicRange() {
+    let hdr = brightness > 1
+    if #available(iOS 26.0, macOS 26.0, *) {
+      contentLayer.preferredDynamicRange = hdr ? .high : .standard
+      contentLayer.contentsHeadroom = hdr ? brightness : 0
+    } else {
+      contentLayer.wantsExtendedDynamicRangeContent = hdr
+    }
+  }
+
+  /// 在线性空间把颜色乘以 [brightness]，输出超出 1.0 的半精度扩展 sRGB 图像（GPU 完成，只在字幕变化时执行）
+  private func boosted(_ image: CGImage) -> CGImage? {
+    let scaled = CIImage(cgImage: image).applyingFilter(
+      "CIColorMatrix",
+      parameters: [
+        "inputRVector": CIVector(x: brightness, y: 0, z: 0, w: 0),
+        "inputGVector": CIVector(x: 0, y: brightness, z: 0, w: 0),
+        "inputBVector": CIVector(x: 0, y: 0, z: brightness, w: 0),
+      ])
+    return ciContext.createCGImage(
+      scaled, from: scaled.extent, format: .RGBAh, colorSpace: Self.extendedLinearSRGB)
   }
 
   private func compose(

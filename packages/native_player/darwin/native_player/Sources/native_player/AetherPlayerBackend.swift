@@ -266,6 +266,14 @@ final class AetherPlayerBackend: PlayerBackend {
   }
 
   private func bindSubtitles() {
+    // videoFormat 是屏幕实际呈现的格式，屏幕不支持 HDR 时为 .sdr，字幕不提亮
+    engine.$videoFormat
+      .sink { [weak self] format in
+        MainActor.assumeIsolated {
+          self?.subtitles.brightness = format == .sdr ? 1 : SubtitleOverlayView.hdrBrightness
+        }
+      }
+      .store(in: &subscriptions)
     engine.$subtitleCues
       .sink { [weak self] cues in MainActor.assumeIsolated { self?.subtitles.update(cues: cues) } }
       .store(in: &subscriptions)
