@@ -52,6 +52,8 @@ class ApiConstants {
   static String tvShowAiMatch(int id) => '$apiPrefix/tvshows/$id/ai-match';
   static String tvShowImages(int id) => '$apiPrefix/tvshows/$id/images';
   static String tvShowPoster(int id) => '$apiPrefix/tvshows/$id/poster';
+  static String tvShowSimpleName(int id) =>
+      '$apiPrefix/tvshows/$id/simple-name';
   static String seasonPoster(int tvShowId, int seasonId) =>
       '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/poster';
   static const String tvShowSearch = '$apiPrefix/tvshows/search';
@@ -75,6 +77,10 @@ class ApiConstants {
       '$apiPrefix/storages/$id/scan/tasks';
   static String storageScrapeTest(int id) =>
       '$apiPrefix/storages/$id/scrape/test';
+  static String storageSimpleScrape(int id) =>
+      '$apiPrefix/storages/$id/simple-scrape';
+  static String storageSimpleScrapeCheck(int id) =>
+      '$apiPrefix/storages/$id/simple-scrape/check';
   static String storageBrowse(int id) => '$apiPrefix/storages/$id/browse';
   static String storageBrowseRefresh(int id) =>
       '$apiPrefix/storages/$id/browse/refresh';

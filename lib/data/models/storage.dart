@@ -269,6 +269,35 @@ class FileInfo {
   }
 }
 
+/// 简洁刮削校验结果
+class SimpleScrapeCheck {
+  final String path;
+  final String defaultName;
+  final bool nameAvailable;
+  final String? nameError;
+  final String? pathError;
+
+  const SimpleScrapeCheck({
+    required this.path,
+    required this.defaultName,
+    required this.nameAvailable,
+    this.nameError,
+    this.pathError,
+  });
+
+  bool get canStart => nameAvailable && (pathError?.isEmpty ?? true);
+
+  factory SimpleScrapeCheck.fromJson(Map<String, dynamic> json) {
+    return SimpleScrapeCheck(
+      path: json['path'] as String? ?? '',
+      defaultName: json['default_name'] as String? ?? '',
+      nameAvailable: json['name_available'] as bool? ?? false,
+      nameError: json['name_error'] as String?,
+      pathError: json['path_error'] as String?,
+    );
+  }
+}
+
 class ScrapeTestResult {
   final String path;
   final String mediaName;

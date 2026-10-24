@@ -278,7 +278,7 @@ class DownloadService {
   }) async {
     final dir = await _downloadDir;
     final sanitizedTvShowName = sanitizeFileName(tvShowName);
-    final fileName = episode.filePath?.split('/').last ?? 'episode_${episode.id}.mp4';
+    final fileName = _localFileName(episode.filePath?.split('/').last, 'episode_${episode.id}.mp4');
     final sanitizedFileName = sanitizeFileName(fileName);
 
     final localPath = '$dir/$sanitizedTvShowName/S${seasonNumber.toString().padLeft(2, '0')}/$sanitizedFileName';
@@ -306,11 +306,20 @@ class DownloadService {
     return task;
   }
 
+  /// .strm 来源下载的是其指向的视频：去掉 .strm 后缀，无内层扩展名时补 .mp4
+  static String _localFileName(String? remoteName, String fallback) {
+    if (remoteName == null || remoteName.isEmpty) return fallback;
+    if (!remoteName.toLowerCase().endsWith('.strm')) return remoteName;
+    final name = remoteName.substring(0, remoteName.length - 5);
+    if (name.isEmpty) return fallback;
+    return p.extension(name).isEmpty ? '$name.mp4' : name;
+  }
+
   Future<DownloadTask> createMovieTask({
     required Movie movie,
   }) async {
     final dir = await _downloadDir;
-    final fileName = movie.filePath?.split('/').last ?? 'movie_${movie.id}.mp4';
+    final fileName = _localFileName(movie.filePath?.split('/').last, 'movie_${movie.id}.mp4');
     final sanitizedFileName = sanitizeFileName(fileName);
 
     final localPath = '$dir/Movies/$sanitizedFileName';

@@ -318,6 +318,15 @@ class MediaService {
     );
   }
 
+  /// 重命名简洁刮削条目
+  Future<ApiResponse<TvShow>> renameSimpleTvShow(int id, String name) async {
+    return _client.put<TvShow>(
+      ApiConstants.tvShowSimpleName(id),
+      data: {'name': name.trim()},
+      fromJson: (json) => TvShow.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 删除剧集
   Future<ApiResponse<void>> deleteTvShow(int id) async {
     return _client.delete(ApiConstants.tvShowDetail(id));

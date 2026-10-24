@@ -1283,28 +1283,32 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
                   );
                 },
               ),
-              shadcn.MenuButton(
-                leading: const Icon(
-                  CupertinoIcons.arrow_clockwise_circle,
-                  size: 18,
+              if (tvShow.isSimpleScrape)
+                ..._buildSimpleScrapeMenuItems(context, tvShow)
+              else ...[
+                shadcn.MenuButton(
+                  leading: const Icon(
+                    CupertinoIcons.arrow_clockwise_circle,
+                    size: 18,
+                  ),
+                  child: const Text('更新刮削'),
+                  onPressed: (menuContext) {
+                    shadcn.closeOverlay(menuContext);
+                    _updateTvShowScraping(context, tvShow, selectedSeason);
+                  },
                 ),
-                child: const Text('更新刮削'),
-                onPressed: (menuContext) {
-                  shadcn.closeOverlay(menuContext);
-                  _updateTvShowScraping(context, tvShow, selectedSeason);
-                },
-              ),
-              shadcn.MenuButton(
-                leading: const Icon(
-                  CupertinoIcons.arrow_2_circlepath,
-                  size: 18,
+                shadcn.MenuButton(
+                  leading: const Icon(
+                    CupertinoIcons.arrow_2_circlepath,
+                    size: 18,
+                  ),
+                  child: const Text('同步季度'),
+                  onPressed: (menuContext) {
+                    shadcn.closeOverlay(menuContext);
+                    _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+                  },
                 ),
-                child: const Text('同步季度'),
-                onPressed: (menuContext) {
-                  shadcn.closeOverlay(menuContext);
-                  _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
-                },
-              ),
+              ],
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.refresh, size: 18),
                 child: const Text('刷新'),
@@ -1364,28 +1368,32 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
                   );
                 },
               ),
-              shadcn.MenuButton(
-                leading: const Icon(
-                  CupertinoIcons.arrow_clockwise_circle,
-                  size: 18,
+              if (tvShow.isSimpleScrape)
+                ..._buildSimpleScrapeMenuItems(context, tvShow)
+              else ...[
+                shadcn.MenuButton(
+                  leading: const Icon(
+                    CupertinoIcons.arrow_clockwise_circle,
+                    size: 18,
+                  ),
+                  child: const Text('更新刮削'),
+                  onPressed: (menuContext) {
+                    shadcn.closeOverlay(menuContext);
+                    _updateTvShowScraping(context, tvShow, selectedSeason);
+                  },
                 ),
-                child: const Text('更新刮削'),
-                onPressed: (menuContext) {
-                  shadcn.closeOverlay(menuContext);
-                  _updateTvShowScraping(context, tvShow, selectedSeason);
-                },
-              ),
-              shadcn.MenuButton(
-                leading: const Icon(
-                  CupertinoIcons.arrow_2_circlepath,
-                  size: 18,
+                shadcn.MenuButton(
+                  leading: const Icon(
+                    CupertinoIcons.arrow_2_circlepath,
+                    size: 18,
+                  ),
+                  child: const Text('同步季度'),
+                  onPressed: (menuContext) {
+                    shadcn.closeOverlay(menuContext);
+                    _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
+                  },
                 ),
-                child: const Text('同步季度'),
-                onPressed: (menuContext) {
-                  shadcn.closeOverlay(menuContext);
-                  _syncTvShowSeasons(context, widget.tvShowId, tvShow.tmdbId);
-                },
-              ),
+              ],
               shadcn.MenuButton(
                 leading: const Icon(CupertinoIcons.refresh, size: 18),
                 child: const Text('刷新'),
@@ -1399,6 +1407,161 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
         );
       },
     );
+  }
+
+  List<shadcn.MenuItem> _buildSimpleScrapeMenuItems(
+    BuildContext context,
+    TvShow tvShow,
+  ) {
+    return [
+      shadcn.MenuButton(
+        leading: const Icon(CupertinoIcons.pencil, size: 18),
+        child: const Text('重命名'),
+        onPressed: (menuContext) {
+          shadcn.closeOverlay(menuContext);
+          _renameSimpleTvShow(context, tvShow);
+        },
+      ),
+      shadcn.MenuButton(
+        leading: const Icon(CupertinoIcons.arrow_2_circlepath, size: 18),
+        child: const Text('刷新 TMDB 资料'),
+        onPressed: (menuContext) {
+          shadcn.closeOverlay(menuContext);
+          _refreshSimpleTvShowMetadata(context);
+        },
+      ),
+      shadcn.MenuButton(
+        leading: const Icon(CupertinoIcons.link, size: 18),
+        child: const Text('绑定 TMDB'),
+        onPressed: (menuContext) {
+          shadcn.closeOverlay(menuContext);
+          _bindSimpleTvShowTmdb(context, tvShow);
+        },
+      ),
+      shadcn.MenuButton(
+        leading: const Icon(CupertinoIcons.folder, size: 18),
+        child: const Text('同步文件'),
+        onPressed: (menuContext) {
+          shadcn.closeOverlay(menuContext);
+          _syncSimpleTvShowFiles(context, tvShow);
+        },
+      ),
+    ];
+  }
+
+  Future<void> _renameSimpleTvShow(BuildContext context, TvShow tvShow) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final name = await DialogUtils.showInputDialog(
+      context: context,
+      title: '重命名',
+      initialValue: tvShow.name,
+      placeholder: '名称（在简洁刮削条目中不可重复）',
+      maxLength: 200,
+    );
+    if (name == null || name.trim().isEmpty || !context.mounted) return;
+    if (name.trim() == tvShow.name) return;
+    final resp = await service.renameSimpleTvShow(tvShow.id, name);
+    if (!context.mounted) return;
+    if (resp.isSuccess) {
+      _invalidateTvShowDetail();
+      DialogUtils.showToast(context: context, message: '已重命名');
+      return;
+    }
+    DialogUtils.showToast(
+      context: context,
+      message: resp.error ?? '重命名失败',
+      isError: true,
+    );
+  }
+
+  Future<void> _refreshSimpleTvShowMetadata(BuildContext context) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    DialogUtils.showLoadingDialog(context: context, message: '正在获取 TMDB 资料...');
+    final resp = await service.scrapeTvShow(widget.tvShowId);
+    if (context.mounted) Navigator.pop(context);
+    if (!context.mounted) return;
+    if (resp.isSuccess) {
+      _invalidateTvShowDetail();
+      DialogUtils.showToast(context: context, message: '资料已更新');
+      return;
+    }
+    DialogUtils.showToast(
+      context: context,
+      message: resp.error ?? '获取资料失败',
+      isError: true,
+    );
+  }
+
+  Future<void> _bindSimpleTvShowTmdb(
+    BuildContext context,
+    TvShow tvShow,
+  ) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final input = await DialogUtils.showInputDialog(
+      context: context,
+      title: '绑定 TMDB',
+      initialValue: tvShow.tmdbId == '0' ? null : tvShow.tmdbId,
+      placeholder: 'TMDB 剧集 ID，例如 1429',
+      keyboardType: TextInputType.number,
+    );
+    if (input == null || !context.mounted) return;
+    final tmdbId = int.tryParse(input.trim());
+    if (tmdbId == null || tmdbId <= 0) {
+      DialogUtils.showToast(
+        context: context,
+        message: '请输入有效的 TMDB ID',
+        isError: true,
+      );
+      return;
+    }
+    DialogUtils.showLoadingDialog(context: context, message: '正在绑定...');
+    final resp = await service.syncTvShowSeasons(
+      widget.tvShowId,
+      tmdbId: tmdbId,
+    );
+    if (context.mounted) Navigator.pop(context);
+    if (!context.mounted) return;
+    if (resp.isSuccess) {
+      _invalidateTvShowDetail();
+      DialogUtils.showToast(context: context, message: '绑定成功');
+      return;
+    }
+    DialogUtils.showToast(
+      context: context,
+      message: resp.error ?? '绑定失败',
+      isError: true,
+    );
+  }
+
+  Future<void> _syncSimpleTvShowFiles(
+    BuildContext context,
+    TvShow tvShow,
+  ) async {
+    final storageId = tvShow.storageId;
+    final root = _firstNonEmptySourceFolder(tvShow.sourceFolders)?.trim();
+    if (storageId == null || root == null || root.isEmpty) {
+      DialogUtils.showToast(
+        context: context,
+        message: '缺少存储路径，无法同步',
+        isError: true,
+      );
+      return;
+    }
+    final success = await DialogUtils.showCustomDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => PathScanDialog(
+            storageId: storageId,
+            path: root,
+            showRematchOption: false,
+          ),
+    );
+    if (!context.mounted) return;
+    if (success == true) _invalidateTvShowDetail();
   }
 
   /// 构建播放按钮

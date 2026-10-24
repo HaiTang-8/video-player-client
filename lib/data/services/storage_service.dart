@@ -175,6 +175,36 @@ class StorageService {
     );
   }
 
+  /// 校验简洁刮削的文件夹与名称
+  Future<ApiResponse<SimpleScrapeCheck>> checkSimpleScrape(
+    int storageId, {
+    required String path,
+    String? name,
+  }) async {
+    return _client.get<SimpleScrapeCheck>(
+      ApiConstants.storageSimpleScrapeCheck(storageId),
+      queryParameters: {
+        'path': path,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+      },
+      fromJson:
+          (json) => SimpleScrapeCheck.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 启动简洁刮削
+  Future<ApiResponse<ScanProgress>> startSimpleScrape(
+    int storageId, {
+    required String path,
+    required String name,
+  }) async {
+    return _client.post<ScanProgress>(
+      ApiConstants.storageSimpleScrape(storageId),
+      data: {'path': path, 'name': name.trim()},
+      fromJson: (json) => ScanProgress.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 取消扫描任务
   Future<ApiResponse<void>> cancelScan(int taskId) async {
     return _client.post(ApiConstants.taskCancel(taskId));

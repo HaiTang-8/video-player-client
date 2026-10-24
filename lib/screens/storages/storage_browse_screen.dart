@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -308,6 +310,19 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
     );
   }
 
+  Future<void> _startSimpleScrape(String targetPath) async {
+    await DialogUtils.showCustomDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder:
+          (_) => PathScanDialog(
+            storageId: widget.storageId,
+            path: targetPath.trim(),
+            simpleScrape: true,
+          ),
+    );
+  }
+
   Future<void> _startScrapeTest(String targetPath) async {
     final normalizedPath = targetPath.trim().isEmpty ? '/' : targetPath.trim();
     await DialogUtils.showCustomDialog<void>(
@@ -493,6 +508,21 @@ class _StorageBrowseScreenState extends ConsumerState<StorageBrowseScreen> {
                     onTap: () async {
                       Navigator.pop(context);
                       await _startPathScan(file.path);
+                    },
+                  ),
+                if (file.isDir)
+                  ListTile(
+                    leading: const Icon(CupertinoIcons.square_stack_3d_up),
+                    title: const Text('简洁刮削此目录'),
+                    subtitle: Text(
+                      '剧集与季资料走 TMDB，集直接按文件生成',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(context);
+                      await _startSimpleScrape(file.path);
                     },
                   ),
                 if (file.isDir)
@@ -1420,10 +1450,18 @@ class PathScanDialog extends ConsumerStatefulWidget {
   final int storageId;
   final String path;
 
+  /// 简洁刮削模式：确认阶段填写名称，剧集/季走 TMDB，集按本地文件生成
+  final bool simpleScrape;
+
+  /// 是否展示"重新匹配 TMDB 条目"选项（简洁刮削条目同步文件时不适用）
+  final bool showRematchOption;
+
   const PathScanDialog({
     super.key,
     required this.storageId,
     required this.path,
+    this.simpleScrape = false,
+    this.showRematchOption = true,
   });
 
   @override
@@ -1440,10 +1478,76 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
   final ScrollController _logScrollController = ScrollController();
   int _lastLogCount = 0;
 
+  TextEditingController? _nameController;
+  SimpleScrapeCheck? _simpleCheck;
+  String? _simpleCheckError;
+  bool _simpleChecking = false;
+  Timer? _simpleCheckDebounce;
+  int _simpleCheckSeq = 0;
+
+  String get _folderName {
+    final segments = widget.path.split('/').where((e) => e.isNotEmpty);
+    return segments.isEmpty ? widget.path : segments.last;
+  }
+
+  String get _simpleName {
+    final name = _nameController?.text.trim() ?? '';
+    return name.isEmpty ? _folderName : name;
+  }
+
+  bool get _simpleCanStart =>
+      !_simpleChecking && (_simpleCheck?.canStart ?? false);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.simpleScrape) {
+      _nameController = TextEditingController(text: _folderName);
+      _simpleChecking = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _runSimpleCheck());
+    }
+  }
+
   @override
   void dispose() {
+    _simpleCheckDebounce?.cancel();
+    _nameController?.dispose();
     _logScrollController.dispose();
     super.dispose();
+  }
+
+  void _scheduleSimpleCheck(String _) {
+    _simpleCheckDebounce?.cancel();
+    setState(() => _simpleChecking = true);
+    _simpleCheckDebounce = Timer(
+      const Duration(milliseconds: 350),
+      _runSimpleCheck,
+    );
+  }
+
+  Future<void> _runSimpleCheck() async {
+    final seq = ++_simpleCheckSeq;
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      setState(() {
+        _simpleChecking = false;
+        _simpleCheckError = '服务不可用';
+      });
+      return;
+    }
+    setState(() => _simpleChecking = true);
+    final response = await service.checkSimpleScrape(
+      widget.storageId,
+      path: widget.path,
+      name: _simpleName,
+    );
+    if (!mounted || seq != _simpleCheckSeq) return;
+    setState(() {
+      _simpleChecking = false;
+      _simpleCheck = response.isSuccess ? response.data : null;
+      _simpleCheckError =
+          response.isSuccess ? null : (response.error ?? '校验失败');
+    });
   }
 
   /// 当日志条目数量发生变化时，自动滚动到底部。
@@ -1474,14 +1578,20 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
       _activeTaskId = null;
       _waitingForTaskStart = true;
     });
-    final result = await ref
-        .read(scanStateProvider.notifier)
-        .startPathScanWithSse(
-          widget.storageId,
-          forceScrape: true,
-          rematchTmdb: _rematchTmdb,
-          path: widget.path,
-        );
+    final notifier = ref.read(scanStateProvider.notifier);
+    final result =
+        widget.simpleScrape
+            ? await notifier.startSimpleScrapeWithSse(
+              widget.storageId,
+              path: widget.path,
+              name: _simpleName,
+            )
+            : await notifier.startPathScanWithSse(
+              widget.storageId,
+              forceScrape: true,
+              rematchTmdb: _rematchTmdb,
+              path: widget.path,
+            );
     if (!mounted) return;
     if (!result.success) {
       setState(() {
@@ -1561,7 +1671,7 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
           const SizedBox(width: 8),
           Text(
             _phase == _ScanDialogPhase.confirm
-                ? '更新刮削'
+                ? (widget.simpleScrape ? '简洁刮削' : '更新刮削')
                 : _phase == _ScanDialogPhase.done
                 ? (_error != null ? '刮削失败' : '刮削完成')
                 : '正在刮削...',
@@ -1577,6 +1687,7 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
   Widget _buildContent(shadcn.ThemeData theme, ScanProgress? progress) {
     switch (_phase) {
       case _ScanDialogPhase.confirm:
+        if (widget.simpleScrape) return _buildSimpleConfirm(theme);
         return SizedBox(
           width: 540,
           child: Column(
@@ -1626,54 +1737,56 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              shadcn.SurfaceCard(
-                padding: const EdgeInsets.all(14),
-                borderRadius: BorderRadius.circular(12),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      shadcn.LucideIcons.searchCheck,
-                      size: 18,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '重新匹配 TMDB 条目',
-                                  style: theme.typography.small.copyWith(
-                                    fontWeight: FontWeight.w600,
+              if (widget.showRematchOption) ...[
+                const SizedBox(height: 12),
+                shadcn.SurfaceCard(
+                  padding: const EdgeInsets.all(14),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        shadcn.LucideIcons.searchCheck,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '重新匹配 TMDB 条目',
+                                    style: theme.typography.small.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              shadcn.Switch(
-                                value: _rematchTmdb,
-                                onChanged: (value) {
-                                  setState(() => _rematchTmdb = value);
-                                },
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '开启后会按当前目录识别出的名称重新搜索，并覆盖已绑定的 TMDB ID，用于修正绑定错误。',
-                            style: theme.typography.small.copyWith(
-                              color: theme.colorScheme.mutedForeground,
+                                shadcn.Switch(
+                                  value: _rematchTmdb,
+                                  onChanged: (value) {
+                                    setState(() => _rematchTmdb = value);
+                                  },
+                                ),
+                              ],
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 6),
+                            Text(
+                              '开启后会按当前目录识别出的名称重新搜索，并覆盖已绑定的 TMDB ID，用于修正绑定错误。',
+                              style: theme.typography.small.copyWith(
+                                color: theme.colorScheme.mutedForeground,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         );
@@ -1742,6 +1855,112 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
           ),
         );
     }
+  }
+
+  Widget _buildSimpleConfirm(shadcn.ThemeData theme) {
+    final check = _simpleCheck;
+    final pathError =
+        (check?.pathError?.isNotEmpty ?? false) ? check!.pathError : null;
+    final nameError = check?.nameError ?? _simpleCheckError;
+    final (statusText, statusColor) =
+        _simpleChecking
+            ? ('正在检查…', theme.colorScheme.mutedForeground)
+            : nameError != null
+            ? (nameError, theme.colorScheme.destructive)
+            : check?.nameAvailable == true
+            ? ('名称可用', const Color(0xFF16A34A))
+            : ('', theme.colorScheme.mutedForeground);
+
+    return SizedBox(
+      width: 540,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '剧集与季的海报、简介、演员等从 TMDB 获取；集直接按文件生成，不与 TMDB 的集逐一匹配。',
+            style: theme.typography.small.copyWith(
+              color: theme.colorScheme.mutedForeground,
+            ),
+          ),
+          const SizedBox(height: 14),
+          shadcn.SurfaceCard(
+            padding: const EdgeInsets.all(14),
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  pathError != null
+                      ? shadcn.LucideIcons.circleAlert
+                      : shadcn.LucideIcons.folder,
+                  size: 18,
+                  color:
+                      pathError != null
+                          ? theme.colorScheme.destructive
+                          : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '目标文件夹',
+                        style: theme.typography.small.copyWith(
+                          color: theme.colorScheme.mutedForeground,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      SelectableText(
+                        widget.path,
+                        style: theme.typography.small.copyWith(
+                          fontFamily: 'monospace',
+                          color: theme.colorScheme.foreground,
+                        ),
+                      ),
+                      if (pathError != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          pathError,
+                          style: theme.typography.small.copyWith(
+                            color: theme.colorScheme.destructive,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '名称',
+            style: theme.typography.small.copyWith(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          shadcn.TextField(
+            controller: _nameController,
+            placeholder: Text(_folderName),
+            onChanged: _scheduleSimpleCheck,
+          ),
+          const SizedBox(height: 6),
+          if (statusText.isNotEmpty)
+            Text(
+              statusText,
+              style: theme.typography.small.copyWith(color: statusColor),
+            ),
+          const SizedBox(height: 4),
+          Text(
+            '默认使用文件夹名，只需在简洁刮削条目中不重复，也会用于搜索 TMDB。',
+            style: theme.typography.small.copyWith(
+              color: theme.colorScheme.mutedForeground,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildProgressContent(shadcn.ThemeData theme, ScanProgress? progress) {
@@ -1989,7 +2208,7 @@ class _PathScanDialogState extends ConsumerState<PathScanDialog> {
             child: const Text('取消'),
           ),
           shadcn.PrimaryButton(
-            onPressed: _start,
+            onPressed: widget.simpleScrape && !_simpleCanStart ? null : _start,
             leading: const Icon(shadcn.LucideIcons.refreshCw, size: 16),
             child: const Text('开始'),
           ),

@@ -35,6 +35,9 @@ class TvShow {
   final int? storageId;
   final String? storageName;
   final List<String>? sourceFolders;
+
+  /// 刮削模式：空为普通刮削，simple 为简洁刮削（集按本地文件生成）
+  final String? scrapeMode;
   final DateTime? fileModTime;
   final DateTime? createdAt;
   final DateTime? updatedAt;
@@ -63,6 +66,7 @@ class TvShow {
     this.storageId,
     this.storageName,
     this.sourceFolders,
+    this.scrapeMode,
     this.fileModTime,
     this.createdAt,
     this.updatedAt,
@@ -99,6 +103,7 @@ class TvShow {
       storageId: (json['storage_id'] as num?)?.toInt(),
       storageName: json['storage_name'] as String?,
       sourceFolders: _parseGenres(json['source_folders']),
+      scrapeMode: json['scrape_mode'] as String?,
       fileModTime:
           json['file_mod_time'] != null
               ? DateTime.tryParse(json['file_mod_time'].toString())
@@ -138,10 +143,13 @@ class TvShow {
     'storage_id': storageId,
     'storage_name': storageName,
     'source_folders': sourceFolders,
+    'scrape_mode': scrapeMode,
     'file_mod_time': fileModTime?.toIso8601String(),
     'created_at': createdAt?.toIso8601String(),
     'updated_at': updatedAt?.toIso8601String(),
   };
+
+  bool get isSimpleScrape => scrapeMode == 'simple';
 
   /// 获取状态显示文本
   String get statusText {

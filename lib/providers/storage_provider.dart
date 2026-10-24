@@ -495,7 +495,31 @@ class ScanStateNotifier extends Notifier<ScanState> {
       rematchTmdb: rematchTmdb,
       path: path,
     );
+    return _trackStartedPathTask(storageId, response, '启动扫描失败');
+  }
 
+  Future<({bool success, String? error, int? taskId})> startSimpleScrapeWithSse(
+    int storageId, {
+    required String path,
+    required String name,
+  }) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) {
+      return (success: false, error: '服务不可用', taskId: null);
+    }
+    final response = await service.startSimpleScrape(
+      storageId,
+      path: path,
+      name: name,
+    );
+    return _trackStartedPathTask(storageId, response, '启动简洁刮削失败');
+  }
+
+  ({bool success, String? error, int? taskId}) _trackStartedPathTask(
+    int storageId,
+    ApiResponse<ScanProgress> response,
+    String fallbackError,
+  ) {
     if (response.isSuccess && response.data != null) {
       _cancelLiveProgressSubscription(storageId);
       _autoDismissTaskIds.remove(storageId);
@@ -512,7 +536,11 @@ class ScanStateNotifier extends Notifier<ScanState> {
       }
       return (success: true, error: null, taskId: taskId > 0 ? taskId : null);
     }
-    return (success: false, error: response.error ?? '启动扫描失败', taskId: null);
+    return (
+      success: false,
+      error: response.error ?? fallbackError,
+      taskId: null,
+    );
   }
 
   void _pollProgress(int storageId) async {
