@@ -256,14 +256,14 @@ class _WatchHistoryScreenState extends ConsumerState<WatchHistoryScreen> {
     if (item.mediaType == 'movie') {
       await context.push(
         '/player/movie/${item.mediaId}',
-        extra: {'position': item.position, 'title': title},
+        extra: {'position': item.completed ? null : item.position, 'title': title},
       );
     } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
       final episodeInfo = item.mediaInfo!.episodeInfo!;
       if (!mounted) return;
       await context.push(
         '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-        extra: {'position': item.position, 'title': title},
+        extra: {'position': item.completed ? null : item.position, 'title': title},
       );
     } else {
       context.push('/tvshow/${item.mediaId}');

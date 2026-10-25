@@ -55,6 +55,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   List<Episode>? _episodes;
   int? _routeInitialPosition;
   bool _initialLoadStarted = false;
+  bool _nextPending = false;
 
   @override
   void initState() {
@@ -406,12 +407,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     if (_hasPrevious) _switchEpisode(_currentEpisodeIndex - 1);
   }
 
-  void _playNext() {
-    if (_hasNext) {
+  Future<void> _playNext() async {
+    if (!_hasNext || _nextPending) return;
+    _nextPending = true;
+    try {
       // 点击“下一集”也需要走进度判断与确认逻辑
-      unawaited(
-        _prepareEpisodePlayback(episodeIndex: _currentEpisodeIndex + 1),
-      );
+      await _prepareEpisodePlayback(episodeIndex: _currentEpisodeIndex + 1);
+    } finally {
+      _nextPending = false;
     }
   }
 

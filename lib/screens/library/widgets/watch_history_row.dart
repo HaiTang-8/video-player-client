@@ -184,7 +184,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
     if (item.mediaType == 'movie') {
       await context.push(
         '/player/movie/${item.mediaId}',
-        extra: {'position': item.position, 'title': title},
+        extra: {'position': item.completed ? null : item.position, 'title': title},
       );
     } else if (item.episodeId != null && item.mediaInfo?.episodeInfo != null) {
       final episodeInfo = item.mediaInfo!.episodeInfo!;
@@ -192,7 +192,7 @@ class _WatchHistoryRowState extends ConsumerState<WatchHistoryRow> {
       // 不等待剧集列表加载，直接跳转播放器
       await context.push(
         '/player/episode/${item.mediaId}/${episodeInfo.seasonId}/${item.episodeId}',
-        extra: {'position': item.position, 'title': title},
+        extra: {'position': item.completed ? null : item.position, 'title': title},
       );
     } else {
       context.push('/tvshow/${item.mediaId}');
