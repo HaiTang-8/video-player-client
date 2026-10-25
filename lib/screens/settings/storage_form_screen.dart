@@ -6,11 +6,12 @@ import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/dialog_utils.dart';
+import '../../core/widgets/form_page.dart';
 import '../../core/widgets/password_text_field.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import 'storage_type.dart';
-import 'widgets/storage_form_widgets.dart';
+
 
 /// 添加 / 编辑存储源页面；保存成功后 pop(true)
 class StorageFormScreen extends ConsumerStatefulWidget {
@@ -97,11 +98,11 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     final title = _isEditing ? '编辑存储源' : '添加存储源';
 
     if (_isEditing && _storage == null) {
-      return StorageFormScaffold(
+      return FormPageScaffold(
         title: title,
         children: [
           const SizedBox(height: 16),
-          StorageFormNotice(
+          FormNotice(
             icon: CupertinoIcons.exclamationmark_circle,
             message: '找不到该存储源，可能已被删除',
             color: Theme.of(context).colorScheme.error,
@@ -110,7 +111,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       );
     }
 
-    return StorageFormScaffold(
+    return FormPageScaffold(
       title: title,
       bottomAction: shadcn.PrimaryButton(
         onPressed: _isSubmitting ? null : _handleSubmit,
@@ -125,11 +126,11 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
                 : Text(_isEditing ? '保存' : '添加'),
       ),
       children: [
-        StorageFormSection(title: '类型', children: [_buildTypeSelector()]),
-        StorageFormSection(
+        FormSection(title: '类型', children: [_buildTypeSelector()]),
+        FormSection(
           title: '基本信息',
           children: [
-            StorageFormField(
+            FormFieldBlock(
               label: '名称',
               child: shadcn.TextField(
                 controller: _nameController,
@@ -138,8 +139,8 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
             ),
           ],
         ),
-        StorageFormSection(title: '连接', children: _buildConnectionFields()),
-        StorageFormSection(title: '播放', children: _buildPlaybackFields()),
+        FormSection(title: '连接', children: _buildConnectionFields()),
+        FormSection(title: '播放', children: _buildPlaybackFields()),
       ],
     );
   }
@@ -150,7 +151,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
         for (final type in StorageType.values) ...[
           if (type != StorageType.values.first) const SizedBox(width: 8),
           Expanded(
-            child: _OptionCard(
+            child: FormOptionCard(
               selected: _selectedType == type,
               color: type.color,
               onTap: () {
@@ -197,7 +198,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     switch (_selectedType) {
       case StorageType.webdav:
         return [
-          StorageFormField(
+          FormFieldBlock(
             label: 'WebDAV URL',
             child: shadcn.TextField(
               controller: _urlController,
@@ -205,14 +206,14 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
               keyboardType: TextInputType.url,
             ),
           ),
-          StorageFormField(
+          FormFieldBlock(
             label: '用户名',
             child: shadcn.TextField(
               controller: _usernameController,
               placeholder: const Text('用户名'),
             ),
           ),
-          StorageFormField(
+          FormFieldBlock(
             label: '密码',
             child: PasswordTextField(
               controller: _passwordController,
@@ -222,7 +223,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
         ];
       case StorageType.local:
         return [
-          StorageFormField(
+          FormFieldBlock(
             label: '路径',
             helper: '服务器上的媒体目录',
             child: shadcn.TextField(
@@ -233,7 +234,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
         ];
       case StorageType.openlist:
         return [
-          StorageFormField(
+          FormFieldBlock(
             label: 'OpenList 地址',
             child: shadcn.TextField(
               controller: _urlController,
@@ -241,21 +242,21 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
               keyboardType: TextInputType.url,
             ),
           ),
-          StorageFormField(
+          FormFieldBlock(
             label: 'Token（可选）',
             child: PasswordTextField(
               controller: _tokenController,
               placeholder: const Text('访问令牌'),
             ),
           ),
-          StorageFormField(
+          FormFieldBlock(
             label: '用户名（可选）',
             child: shadcn.TextField(
               controller: _usernameController,
               placeholder: const Text('用户名'),
             ),
           ),
-          StorageFormField(
+          FormFieldBlock(
             label: '密码（可选）',
             child: PasswordTextField(
               controller: _passwordController,
@@ -269,11 +270,11 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
 
   List<Widget> _buildPlaybackFields() {
     return [
-      StorageFormField(label: '流媒体模式', child: _buildStreamModeSelector()),
+      FormFieldBlock(label: '流媒体模式', child: _buildStreamModeSelector()),
       if (_selectedType == StorageType.webdav) ...[
         _buildProxySwitch(),
         if (_useProxy)
-          StorageFormField(
+          FormFieldBlock(
             label: '代理地址',
             child: shadcn.TextField(
               controller: _proxyUrlController,
@@ -283,7 +284,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
           ),
       ],
       if (_selectedType == StorageType.local && _streamMode == 'redirect')
-        StorageFormField(
+        FormFieldBlock(
           label: '直连基地址',
           helper: '直连模式下客户端访问媒体文件的地址',
           child: shadcn.TextField(
@@ -300,7 +301,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       final colors = context.appColors;
       final selected = _streamMode == mode;
       return Expanded(
-        child: _OptionCard(
+        child: FormOptionCard(
           selected: selected,
           color: Theme.of(context).colorScheme.primary,
           onTap: () => setState(() => _streamMode = mode),
@@ -510,54 +511,5 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
         isError: true,
       );
     }
-  }
-}
-
-/// 可选中的选项卡片
-class _OptionCard extends StatelessWidget {
-  final bool selected;
-  final Color color;
-  final VoidCallback onTap;
-  final Widget child;
-  final CrossAxisAlignment alignment;
-
-  const _OptionCard({
-    required this.selected,
-    required this.color,
-    required this.onTap,
-    required this.child,
-    this.alignment = CrossAxisAlignment.center,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.appColors;
-    return Material(
-      color: selected ? color.withValues(alpha: 0.1) : colors.cardBackgroundSecondary,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(
-          color: selected ? color : Colors.transparent,
-          width: 1.5,
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          child: Column(
-            crossAxisAlignment: alignment,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DefaultTextStyle.merge(
-                style: TextStyle(color: colors.textPrimary),
-                child: child,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }

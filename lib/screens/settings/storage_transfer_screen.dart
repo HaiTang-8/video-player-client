@@ -6,10 +6,10 @@ import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
 
 import '../../core/theme/app_colors.dart';
+import '../../core/widgets/form_page.dart';
 import '../../core/widgets/password_text_field.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
-import 'widgets/storage_form_widgets.dart';
 
 const _successColor = Color(0xFF34C759);
 
@@ -79,7 +79,7 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
     if (result != null) return _buildResult(context, result);
 
     final theme = Theme.of(context);
-    return StorageFormScaffold(
+    return FormPageScaffold(
       title: '导入存储源',
       bottomAction: shadcn.PrimaryButton(
         onPressed: _importing ? null : _handleImport,
@@ -87,10 +87,10 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
         child: _buttonLabel(_importing, '导入'),
       ),
       children: [
-        StorageFormSection(
+        FormSection(
           title: '导入数据',
           children: [
-            StorageFormField(
+            FormFieldBlock(
               label: '加密数据',
               helper: '粘贴从“导出”获得的数据，已存在的同名存储源会被跳过',
               child: shadcn.TextField(
@@ -103,7 +103,7 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
                 },
               ),
             ),
-            StorageFormField(
+            FormFieldBlock(
               label: '导入密码（可选）',
               helper: '导出时设置过密码才需要填写',
               child: PasswordTextField(
@@ -112,7 +112,7 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
               ),
             ),
             if (_error != null)
-              StorageFormNotice(
+              FormNotice(
                 icon: CupertinoIcons.exclamationmark_circle,
                 message: _error!,
                 color: theme.colorScheme.error,
@@ -126,7 +126,7 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
   Widget _buildResult(BuildContext context, StorageImportResult result) {
     final colors = context.appColors;
     final errors = result.errors ?? const <String>[];
-    return StorageFormScaffold(
+    return FormPageScaffold(
       title: '导入存储源',
       bottomAction: shadcn.PrimaryButton(
         onPressed: () => context.pop(true),
@@ -134,17 +134,17 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
         child: const Text('完成'),
       ),
       children: [
-        StorageFormSection(
+        FormSection(
           title: '导入结果',
           children: [
-            StorageFormNotice(
+            FormNotice(
               icon: CupertinoIcons.checkmark_circle,
               message:
                   '导入完成：成功 ${result.successCount} 个，跳过 ${result.skippedCount} 个',
               color: _successColor,
             ),
             if (result.skippedNames.isNotEmpty)
-              StorageFormField(
+              FormFieldBlock(
                 label: '已存在，已跳过',
                 child: _NameList(
                   names: result.skippedNames,
@@ -152,7 +152,7 @@ class _StorageImportScreenState extends ConsumerState<StorageImportScreen> {
                 ),
               ),
             if (errors.isNotEmpty)
-              StorageFormField(
+              FormFieldBlock(
                 label: '错误',
                 child: _NameList(
                   names: errors,
@@ -267,7 +267,7 @@ class _StorageExportScreenState extends ConsumerState<StorageExportScreen> {
     final colors = context.appColors;
     final data = _data;
 
-    return StorageFormScaffold(
+    return FormPageScaffold(
       title: '导出存储源',
       bottomAction:
           data == null
@@ -282,10 +282,10 @@ class _StorageExportScreenState extends ConsumerState<StorageExportScreen> {
                 child: const Text('再次复制'),
               ),
       children: [
-        StorageFormSection(
+        FormSection(
           title: '加密设置',
           children: [
-            StorageFormField(
+            FormFieldBlock(
               label: '导出密码（可选）',
               helper: '设置后，导入时需要输入相同密码',
               child: PasswordTextField(
@@ -303,7 +303,7 @@ class _StorageExportScreenState extends ConsumerState<StorageExportScreen> {
               ),
             ),
             if (_error != null)
-              StorageFormNotice(
+              FormNotice(
                 icon: CupertinoIcons.exclamationmark_circle,
                 message: _error!,
                 color: theme.colorScheme.error,
@@ -311,11 +311,11 @@ class _StorageExportScreenState extends ConsumerState<StorageExportScreen> {
           ],
         ),
         if (data != null)
-          StorageFormSection(
+          FormSection(
             title: '导出数据',
             children: [
               if (_copied)
-                const StorageFormNotice(
+                const FormNotice(
                   icon: CupertinoIcons.checkmark_circle,
                   message: '已复制到剪贴板，可在其他设备的“导入”中粘贴',
                   color: _successColor,

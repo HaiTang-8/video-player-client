@@ -15,6 +15,7 @@ import '../../screens/settings/storage_form_screen.dart';
 import '../../screens/settings/storage_transfer_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/server_config/server_config_screen.dart';
+import '../../screens/server_config/server_form_screen.dart';
 import '../../screens/storages/resources_screen.dart';
 import '../../screens/storages/storage_browse_screen.dart';
 import '../../screens/library/category_detail_screen.dart';
@@ -62,11 +63,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isConfigured = serverUrl != null && serverUrl.isNotEmpty;
       final isConnected = connectionState == ServerConnectionState.connected;
       final isError = connectionState == ServerConnectionState.error;
-      final isOnConfigPage = state.matchedLocation == '/config';
+      bool isUnder(String path) =>
+          state.matchedLocation == path ||
+          state.matchedLocation.startsWith('$path/');
+      final isOnConfigPage = isUnder('/config');
       final isOnErrorPage = state.matchedLocation == '/connection-error';
       final isOnLoginPage = state.matchedLocation == '/login';
       final isOnSetupPage = state.matchedLocation == '/setup';
-      final isOnServerConfigPage = state.matchedLocation == '/server-config';
+      final isOnServerConfigPage = isUnder('/server-config');
       final isAuthPage = isOnLoginPage || isOnSetupPage;
 
       if (!isConfigured && !isOnConfigPage) {
@@ -108,6 +112,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/config',
         builder: (context, state) => const ServerConfigScreen(),
+        routes: _serverFormRoutes(),
       ),
 
       // 连接错误页面（不在 Shell 内）
@@ -340,6 +345,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/server-config',
         builder: (context, state) => const ServerConfigScreen(),
+        routes: _serverFormRoutes(),
       ),
 
       // 剧情简介页面
@@ -398,3 +404,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
   );
 });
+
+/// 添加 / 编辑服务器，挂在 /config 与 /server-config 下
+List<RouteBase> _serverFormRoutes() => [
+  GoRoute(
+    path: 'new',
+    builder: (context, state) => const ServerFormScreen(),
+  ),
+  GoRoute(
+    path: ':id/edit',
+    builder:
+        (context, state) =>
+            ServerFormScreen(serverId: state.pathParameters['id']),
+  ),
+];

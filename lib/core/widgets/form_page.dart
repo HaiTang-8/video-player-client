@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/desktop_app_bar.dart';
-import '../../../core/widgets/mobile_app_bar.dart';
-import '../../../core/window/window_controls.dart';
+import '../theme/app_colors.dart';
+import '../window/window_controls.dart';
+import 'desktop_app_bar.dart';
+import 'mobile_app_bar.dart';
 
 const double _maxFormWidth = 640;
 
-/// 存储源相关表单页骨架：标题栏 + 居中限宽内容 + 底部固定操作区
-class StorageFormScaffold extends StatelessWidget {
+/// 表单页骨架：标题栏 + 居中限宽内容 + 底部固定操作区
+class FormPageScaffold extends StatelessWidget {
   final String title;
   final List<Widget> children;
   final Widget? bottomAction;
 
-  const StorageFormScaffold({
+  const FormPageScaffold({
     super.key,
     required this.title,
     required this.children,
@@ -76,11 +76,11 @@ class StorageFormScaffold extends StatelessWidget {
 }
 
 /// 分组：标题 + 卡片
-class StorageFormSection extends StatelessWidget {
+class FormSection extends StatelessWidget {
   final String title;
   final List<Widget> children;
 
-  const StorageFormSection({
+  const FormSection({
     super.key,
     required this.title,
     required this.children,
@@ -126,12 +126,12 @@ class StorageFormSection extends StatelessWidget {
 }
 
 /// 带标签的表单项
-class StorageFormField extends StatelessWidget {
+class FormFieldBlock extends StatelessWidget {
   final String label;
   final Widget child;
   final String? helper;
 
-  const StorageFormField({
+  const FormFieldBlock({
     super.key,
     required this.label,
     required this.child,
@@ -167,12 +167,12 @@ class StorageFormField extends StatelessWidget {
 }
 
 /// 页内结果提示（替代弹窗反馈）
-class StorageFormNotice extends StatelessWidget {
+class FormNotice extends StatelessWidget {
   final IconData icon;
   final String message;
   final Color color;
 
-  const StorageFormNotice({
+  const FormNotice({
     super.key,
     required this.icon,
     required this.message,
@@ -197,6 +197,56 @@ class StorageFormNotice extends StatelessWidget {
             child: Text(message, style: TextStyle(fontSize: 13, color: color)),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 可选中的选项卡片
+class FormOptionCard extends StatelessWidget {
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+  final Widget child;
+  final CrossAxisAlignment alignment;
+
+  const FormOptionCard({
+    super.key,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+    required this.child,
+    this.alignment = CrossAxisAlignment.center,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Material(
+      color: selected ? color.withValues(alpha: 0.1) : colors.cardBackgroundSecondary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: selected ? color : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Column(
+            crossAxisAlignment: alignment,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DefaultTextStyle.merge(
+                style: TextStyle(color: colors.textPrimary),
+                child: child,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
