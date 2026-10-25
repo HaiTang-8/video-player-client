@@ -2,38 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' as shadcn;
+import '../../core/theme/app_colors.dart';
+import '../../core/utils/responsive.dart';
 import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/dialog_utils.dart';
-import '../../core/widgets/password_text_field.dart';
 import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
-
-/// 存储源类型枚举
-enum StorageType {
-  webdav('webdav', 'WebDAV', CupertinoIcons.cloud),
-  local('local', '本地存储', CupertinoIcons.folder),
-  openlist('openlist', 'OpenList', CupertinoIcons.link);
-
-  final String value;
-  final String label;
-  final IconData icon;
-
-  const StorageType(this.value, this.label, this.icon);
-
-  static StorageType fromString(String value) {
-    return StorageType.values.firstWhere(
-      (e) => e.value == value.toLowerCase(),
-      orElse: () => StorageType.webdav,
-    );
-  }
-}
+import 'storage_type.dart';
 
 /// 存储源管理页面
 class StoragesScreen extends ConsumerStatefulWidget {
@@ -48,6 +29,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   // 否则会出现：首次点击弹窗闪一下无响应、第二次点击叠两个弹窗、点击确定像“没反应”等问题。
   bool _exporting = false;
   bool _importing = false;
+  StorageType? _typeFilter;
 
   @override
   void initState() {
@@ -60,10 +42,15 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
   @override
   Widget build(BuildContext context) {
     final storagesAsync = ref.watch(storagesProvider);
-    final scanState = ref.watch(scanStateProvider);
     final isDesktop = WindowControls.isDesktop;
+    final compact = context.windowSizeClass.isCompact;
 
     final actions = [
+      if (compact)
+        shadcn.IconButton.ghost(
+          icon: const Icon(CupertinoIcons.add),
+          onPressed: () => _openAddStorage(context),
+        ),
       Builder(
         builder:
             (buttonContext) => shadcn.IconButton.ghost(
@@ -130,23 +117,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
               message: error.toString(),
               onRetry: () => ref.read(storagesProvider.notifier).loadStorages(),
             ),
-        data: (storages) {
-          if (storages.isEmpty) {
-            return _buildEmptyState(context);
-          }
-          return _buildStorageList(context, storages, scanState, isDesktop);
-        },
-      ),
-      floatingActionButton: shadcn.PrimaryButton(
-        onPressed: () => _showAddStorageDialog(context),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(CupertinoIcons.add, size: 18),
-            SizedBox(width: 8),
-            Text('添加存储源'),
-          ],
-        ),
+        data: (storages) => _buildStorageList(context, storages, compact),
       ),
     );
   }
@@ -155,37 +126,7 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     if (_exporting) return;
     _exporting = true;
     try {
-      final password = await DialogUtils.showInputDialog(
-        context: context,
-        title: '导出密码（可选）',
-        placeholder: '留空使用默认加密',
-        obscureText: true,
-      );
-
-      if (password == null || !mounted) return;
-
-      final (success, data, error) = await ref
-          .read(storagesProvider.notifier)
-          .exportStorages(
-            password: password.isEmpty ? null : password,
-          );
-
-      if (!success || data == null) {
-        if (mounted) {
-          DialogUtils.showToast(
-            context: context,
-            message: error ?? '导出失败',
-            isError: true,
-          );
-        }
-        return;
-      }
-
-      if (mounted) {
-        await Clipboard.setData(ClipboardData(text: data));
-        if (!mounted) return;
-        DialogUtils.showToast(context: context, message: '已复制到剪贴板');
-      }
+      await context.push('/storage-manage/export');
     } finally {
       _exporting = false;
     }
@@ -195,88 +136,55 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     if (_importing) return;
     _importing = true;
     try {
-      final result = await _showImportDialog();
-      if (result == null || result.data.isEmpty || !mounted) return;
-
-      final (success, importResult, error) = await ref
-          .read(storagesProvider.notifier)
-          .importStorages(
-            data: result.data,
-            password: result.password.isEmpty ? null : result.password,
-          );
-
-      if (!mounted) return;
-
-      if (success && importResult != null) {
-        final message =
-            '导入成功: ${importResult.successCount}, 跳过: ${importResult.skippedCount}';
-        DialogUtils.showToast(context: context, message: message);
-
-        if (importResult.skippedNames.isNotEmpty) {
-          await DialogUtils.showConfirmDialog(
-            context: context,
-            title: '已跳过的存储源',
-            content: '以下存储源已存在，已跳过:\n${importResult.skippedNames.join('\n')}',
-            confirmText: '确定',
-            cancelText: '',
-          );
-        }
-      }
+      await context.push<bool>('/storage-manage/import');
     } finally {
       _importing = false;
     }
   }
 
-  Future<({String data, String password})?> _showImportDialog() async {
-    final dataController = TextEditingController();
-    final passwordController = TextEditingController();
-    var hasData = false;
-
-    return DialogUtils.showCustomDialog<({String data, String password})>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => shadcn.AlertDialog(
-          barrierColor: Colors.transparent,
-          surfaceOpacity: 1,
-          title: const Text('导入存储源'),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 16),
-                const Text('加密数据'),
-                const SizedBox(height: 8),
-                shadcn.TextField(
-                  controller: dataController,
-                  autofocus: true,
-                  maxLines: 3,
-                  onChanged: (value) => setState(() => hasData = value.isNotEmpty),
-                ),
-                const SizedBox(height: 16),
-                const Text('导入密码（可选）'),
-                const SizedBox(height: 8),
-                PasswordTextField(
-                  controller: passwordController,
-                  placeholder: const Text('留空使用默认加密'),
-                ),
-              ],
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = context.appColors;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                CupertinoIcons.folder_badge_plus,
+                size: 32,
+                color: theme.colorScheme.primary,
+              ),
             ),
-          ),
-          actions: [
-            shadcn.OutlineButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+            const SizedBox(height: 20),
+            Text(
+              '还没有存储源',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              '添加 WebDAV、OpenList 或本地目录，扫描后即可在媒体库中浏览',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
             shadcn.PrimaryButton(
-              onPressed: hasData
-                  ? () => Navigator.pop(
-                        context,
-                        (data: dataController.text, password: passwordController.text),
-                      )
-                  : null,
-              child: const Text('导入'),
+              onPressed: () => _openAddStorage(context),
+              leading: const Icon(CupertinoIcons.add, size: 16),
+              child: const Text('添加存储源'),
             ),
           ],
         ),
@@ -284,100 +192,231 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildStorageList(
+    BuildContext context,
+    List<Storage> storages,
+    bool compact,
+  ) {
+    final bottomInset = MediaQuery.paddingOf(context).bottom + 24;
+    final groups = StorageType.group(storages);
+    final filter =
+        !compact && groups.containsKey(_typeFilter) ? _typeFilter : null;
+    final visibleGroups =
+        filter == null ? groups : {filter: groups[filter]!};
+
+    return RefreshIndicator(
+      onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontal =
+              compact
+                  ? 16.0
+                  : ((constraints.maxWidth - _maxContentWidth) / 2).clamp(
+                    24.0,
+                    double.infinity,
+                  );
+
+          return CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (storages.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmptyState(context),
+                )
+              else ...[
+                SliverPadding(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontal,
+                    compact ? 12 : 24,
+                    horizontal,
+                    compact ? 4 : 8,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildHeader(
+                      context,
+                      storages,
+                      groups,
+                      filter,
+                      compact,
+                    ),
+                  ),
+                ),
+                for (final entry in visibleGroups.entries) ...[
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(
+                      horizontal + 4,
+                      compact ? 16 : 20,
+                      horizontal,
+                      compact ? 8 : 12,
+                    ),
+                    sliver: SliverToBoxAdapter(
+                      child: _TypeSectionHeader(
+                        type: entry.key,
+                        count: entry.value.length,
+                      ),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: EdgeInsets.symmetric(horizontal: horizontal),
+                    sliver:
+                        compact
+                            ? SliverToBoxAdapter(
+                              child: _buildGroupedList(context, entry.value),
+                            )
+                            : _buildGrid(context, entry.value),
+                  ),
+                ],
+                SliverToBoxAdapter(child: SizedBox(height: bottomInset)),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  static const double _maxContentWidth = 1120;
+
+  Widget _buildHeader(
+    BuildContext context,
+    List<Storage> storages,
+    Map<StorageType, List<Storage>> groups,
+    StorageType? filter,
+    bool compact,
+  ) {
     final theme = Theme.of(context);
-    return Center(
+    final colors = context.appColors;
+    final enabledCount = storages.where((s) => s.enabled).length;
+    final summary = '${storages.length} 个存储源 · $enabledCount 个已启用';
+
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          summary,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.textSecondary,
+          ),
+        ),
+      );
+    }
+
+    final titleRow = Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '全部存储源',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                summary,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        shadcn.PrimaryButton(
+          onPressed: () => _openAddStorage(context),
+          leading: const Icon(CupertinoIcons.add, size: 16),
+          child: const Text('添加存储源'),
+        ),
+      ],
+    );
+
+    if (groups.length < 2) return titleRow;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        titleRow,
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _TypeFilterButton(
+              label: '全部 ${storages.length}',
+              selected: filter == null,
+              onPressed: () => setState(() => _typeFilter = null),
+            ),
+            for (final entry in groups.entries)
+              _TypeFilterButton(
+                icon: entry.key.icon,
+                label: '${entry.key.label} ${entry.value.length}',
+                selected: filter == entry.key,
+                onPressed: () => setState(() => _typeFilter = entry.key),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGroupedList(BuildContext context, List<Storage> storages) {
+    final colors = context.appColors;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: colors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            CupertinoIcons.folder_badge_plus,
-            size: 64,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '暂无存储源',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+          for (var i = 0; i < storages.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.only(left: 68),
+                child: Divider(height: 1, thickness: 0.5, color: colors.divider),
+              ),
+            _StorageListTile(
+              storage: storages[i],
+              onBrowse: () => _browseStorage(context, storages[i]),
+              onEdit: () => _openEditStorage(context, storages[i]),
+              onDelete: () => _deleteStorage(storages[i]),
+              onToggleEnabled:
+                  (enabled) => _toggleStorageEnabled(storages[i], enabled),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '点击右下角按钮添加存储源',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.outline,
-            ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildStorageList(
-    BuildContext context,
-    List<Storage> storages,
-    ScanState scanState,
-    bool isDesktop,
-  ) {
-    return RefreshIndicator(
-      onRefresh: () => ref.read(storagesProvider.notifier).loadStorages(),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final crossAxisCount =
-              isDesktop && constraints.maxWidth > 800
-                  ? (constraints.maxWidth > 1200 ? 3 : 2)
-                  : 1;
-
-          if (crossAxisCount == 1) {
-            return ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: storages.length,
-              separatorBuilder: (context, index) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
-                final storage = storages[index];
-                return _StorageCard(
-                  storage: storage,
-                  onEdit: () => _showEditStorageDialog(context, storage),
-                  onDelete: () => _deleteStorage(storage),
-                  onBrowse:
-                      () => context.push(
-                        '/storages/${storage.id}',
-                        extra: storage,
-                      ),
-                  onToggleEnabled:
-                      (enabled) => _toggleStorageEnabled(storage, enabled),
-                );
-              },
-            );
-          }
-
-          return GridView.builder(
-            padding: const EdgeInsets.all(16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: crossAxisCount,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 2.8,
-            ),
-            itemCount: storages.length,
-            itemBuilder: (context, index) {
-              final storage = storages[index];
-              return _StorageCard(
-                storage: storage,
-                onEdit: () => _showEditStorageDialog(context, storage),
-                onDelete: () => _deleteStorage(storage),
-                onBrowse:
-                    () =>
-                        context.push('/storages/${storage.id}', extra: storage),
-                onToggleEnabled:
-                    (enabled) => _toggleStorageEnabled(storage, enabled),
-              );
-            },
-          );
-        },
+  Widget _buildGrid(BuildContext context, List<Storage> storages) {
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    return SliverGrid(
+      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 420,
+        mainAxisExtent: 172 * textScale,
+        crossAxisSpacing: 16,
+        mainAxisSpacing: 16,
       ),
+      delegate: SliverChildBuilderDelegate((context, index) {
+        final storage = storages[index];
+        return _StorageCard(
+          storage: storage,
+          onBrowse: () => _browseStorage(context, storage),
+          onEdit: () => _openEditStorage(context, storage),
+          onDelete: () => _deleteStorage(storage),
+          onToggleEnabled: (enabled) => _toggleStorageEnabled(storage, enabled),
+        );
+      }, childCount: storages.length),
     );
+  }
+
+  void _browseStorage(BuildContext context, Storage storage) {
+    context.push('/storages/${storage.id}', extra: storage);
   }
 
   Future<void> _deleteStorage(Storage storage) async {
@@ -467,153 +506,389 @@ class _StoragesScreenState extends ConsumerState<StoragesScreen> {
     );
   }
 
-  void _showAddStorageDialog(BuildContext context) {
-    DialogUtils.showCustomDialog(
-      context: context,
-      builder:
-          (context) => _StorageFormDialog(
-            onSubmit: (name, type, settings) async {
-              final success = await ref
-                  .read(storagesProvider.notifier)
-                  .addStorage(name: name, type: type, settings: settings);
-              if (context.mounted) {
-                Navigator.pop(context);
-                DialogUtils.showToast(
-                  context: context,
-                  message: success ? '添加成功' : '添加失败',
-                  isError: !success,
-                );
-              }
-            },
-          ),
-    );
+  Future<void> _openAddStorage(BuildContext context) async {
+    final saved = await context.push<bool>('/storage-manage/new');
+    if (saved == true && mounted) {
+      DialogUtils.showToast(context: this.context, message: '添加成功');
+    }
   }
 
-  void _showEditStorageDialog(BuildContext context, Storage storage) {
-    DialogUtils.showCustomDialog(
-      context: context,
-      builder:
-          (context) => _StorageFormDialog(
-            storage: storage,
-            onSubmit: (name, type, settings) async {
-              final success = await ref
-                  .read(storagesProvider.notifier)
-                  .updateStorage(
-                    id: storage.id,
-                    name: name,
-                    type: type,
-                    settings: settings,
-                  );
-              if (context.mounted) {
-                Navigator.pop(context);
-                DialogUtils.showToast(
-                  context: context,
-                  message: success ? '更新成功' : '更新失败',
-                  isError: !success,
-                );
-              }
-            },
+  Future<void> _openEditStorage(
+    BuildContext context,
+    Storage storage,
+  ) async {
+    final saved = await context.push<bool>(
+      '/storage-manage/${storage.id}/edit',
+      extra: storage,
+    );
+    if (saved == true && mounted) {
+      DialogUtils.showToast(context: this.context, message: '更新成功');
+    }
+  }
+}
+
+String? _storageAddress(Storage storage) {
+  final value = storage.settings?['url'] ?? storage.settings?['path'];
+  if (value == null || value.trim().isEmpty) return null;
+  return value.trim();
+}
+
+String _storageShortAddress(Storage storage) {
+  final address = _storageAddress(storage);
+  if (address == null) return '未配置地址';
+  final host = Uri.tryParse(address)?.host ?? '';
+  return host.isNotEmpty ? host : address;
+}
+
+String? _streamModeLabel(Storage storage) {
+  return switch (storage.settings?['stream_mode']) {
+    'proxy' => '代理',
+    'redirect' => '直连',
+    _ => null,
+  };
+}
+
+/// 存储源类型分组标题
+class _TypeSectionHeader extends StatelessWidget {
+  final StorageType type;
+  final int count;
+
+  const _TypeSectionHeader({required this.type, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return Row(
+      children: [
+        Icon(type.icon, size: 16, color: type.color),
+        const SizedBox(width: 6),
+        Text(
+          type.label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: colors.textSecondary,
           ),
+        ),
+        const SizedBox(width: 6),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: colors.cardBackground,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            '$count',
+            style: TextStyle(fontSize: 11, color: colors.textSecondary),
+          ),
+        ),
+      ],
     );
   }
 }
 
-/// 存储源卡片
-class _StorageCard extends StatelessWidget {
+/// 桌面端类型筛选按钮
+class _TypeFilterButton extends StatelessWidget {
+  final IconData? icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+
+  const _TypeFilterButton({
+    this.icon,
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final leading = icon == null ? null : Icon(icon, size: 14);
+    return selected
+        ? shadcn.PrimaryButton(
+          size: shadcn.ButtonSize.small,
+          onPressed: onPressed,
+          leading: leading,
+          child: Text(label),
+        )
+        : shadcn.OutlineButton(
+          size: shadcn.ButtonSize.small,
+          onPressed: onPressed,
+          leading: leading,
+          child: Text(label),
+        );
+  }
+}
+
+/// 存储源类型图标
+class _StorageTypeIcon extends StatelessWidget {
+  final StorageType type;
+  final bool enabled;
+
+  const _StorageTypeIcon({required this.type, required this.enabled});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final color = enabled ? type.color : colors.iconSecondary;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: enabled ? 0.14 : 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Icon(type.icon, size: 20, color: color),
+    );
+  }
+}
+
+/// 存储源状态标签
+class _StatusBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _StatusBadge({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          height: 1.3,
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
+      ),
+    );
+  }
+}
+
+List<Widget> _buildStatusBadges(
+  BuildContext context,
+  Storage storage, {
+  required bool showStreamMode,
+}) {
+  final colors = context.appColors;
+  final streamMode = showStreamMode ? _streamModeLabel(storage) : null;
+  return [
+    if (!storage.enabled)
+      _StatusBadge(label: '已停用', color: colors.textSecondary),
+    if (!storage.enabled && storage.hideWhenDisabled)
+      _StatusBadge(
+        label: '媒体已隐藏',
+        color: Theme.of(context).colorScheme.error,
+      ),
+    if (streamMode != null)
+      _StatusBadge(label: streamMode, color: colors.textSecondary),
+  ];
+}
+
+/// 存储源更多操作（底部面板）
+class _StorageMoreButton extends StatelessWidget {
   final Storage storage;
+  final VoidCallback onBrowse;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
-  final VoidCallback onBrowse;
-  final ValueChanged<bool> onToggleEnabled;
 
-  const _StorageCard({
+  const _StorageMoreButton({
     required this.storage,
+    required this.onBrowse,
     required this.onEdit,
     required this.onDelete,
+  });
+
+  Future<void> _showActionSheet(BuildContext context) async {
+    final colors = context.appColors;
+    final action = await showModalBottomSheet<VoidCallback>(
+      context: context,
+      useRootNavigator: true,
+      showDragHandle: true,
+      backgroundColor: colors.cardBackground,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final destructive = theme.colorScheme.error;
+        final type = StorageType.fromString(storage.type);
+        final address = _storageAddress(storage);
+
+        Widget actionTile(
+          IconData icon,
+          String label,
+          VoidCallback callback, {
+          Color? color,
+        }) {
+          final foreground = color ?? colors.textPrimary;
+          return InkWell(
+            onTap: () => Navigator.pop(sheetContext, callback),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                children: [
+                  Icon(icon, size: 20, color: color ?? colors.iconSecondary),
+                  const SizedBox(width: 14),
+                  Text(
+                    label,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: foreground,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+                child: Row(
+                  children: [
+                    _StorageTypeIcon(type: type, enabled: storage.enabled),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            storage.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            address ?? '未配置地址',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Divider(height: 1, thickness: 0.5, color: colors.divider),
+              actionTile(CupertinoIcons.folder, '浏览', onBrowse),
+              actionTile(CupertinoIcons.pencil, '编辑', onEdit),
+              Divider(
+                height: 1,
+                thickness: 0.5,
+                indent: 20,
+                endIndent: 20,
+                color: colors.divider,
+              ),
+              actionTile(
+                CupertinoIcons.trash,
+                '删除',
+                onDelete,
+                color: destructive,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    action?.call();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return shadcn.IconButton.ghost(
+      icon: Icon(
+        CupertinoIcons.ellipsis,
+        size: 18,
+        color: context.appColors.iconSecondary,
+      ),
+      onPressed: () => _showActionSheet(context),
+    );
+  }
+}
+
+/// 移动端存储源列表行
+class _StorageListTile extends StatelessWidget {
+  final Storage storage;
+  final VoidCallback onBrowse;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onToggleEnabled;
+
+  const _StorageListTile({
+    required this.storage,
     required this.onBrowse,
+    required this.onEdit,
+    required this.onDelete,
     required this.onToggleEnabled,
   });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final storageType = StorageType.fromString(storage.type);
+    final colors = context.appColors;
+    final type = StorageType.fromString(storage.type);
+    final badges = _buildStatusBadges(
+      context,
+      storage,
+      showStreamMode: false,
+    );
 
-    return shadcn.Card(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onBrowse,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+          child: Row(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(
-                    alpha: storage.enabled ? 0.1 : 0.05,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  storageType.icon,
-                  color:
-                      storage.enabled
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.outline,
-                  size: 22,
-                ),
-              ),
-              const SizedBox(width: 16),
+              _StorageTypeIcon(type: type, enabled: storage.enabled),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       storage.name,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color:
-                            storage.enabled ? null : theme.colorScheme.outline,
-                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        _buildTypeBadge(context, storageType),
-                        if (!storage.enabled && storage.hideWhenDisabled) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: theme.colorScheme.errorContainer,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '媒体已隐藏',
-                              style: theme.textTheme.labelSmall?.copyWith(
-                                color: theme.colorScheme.onErrorContainer,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (storage.settings?['url'] != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        storage.settings!['url']!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.outline,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color:
+                            storage.enabled
+                                ? colors.textPrimary
+                                : colors.textSecondary,
                       ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      _storageShortAddress(storage),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    if (badges.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(spacing: 6, runSpacing: 4, children: badges),
                     ],
                   ],
                 ),
@@ -623,592 +898,185 @@ class _StorageCard extends StatelessWidget {
                 value: storage.enabled,
                 onChanged: onToggleEnabled,
               ),
+              _StorageMoreButton(
+                storage: storage,
+                onBrowse: onBrowse,
+                onEdit: onEdit,
+                onDelete: onDelete,
+              ),
             ],
           ),
-          const SizedBox(height: 16),
-          _buildActionButtons(context),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTypeBadge(BuildContext context, StorageType type) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        type.label,
-        style: theme.textTheme.labelSmall?.copyWith(
-          color: theme.colorScheme.onSecondaryContainer,
         ),
       ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        shadcn.OutlineButton(
-          onPressed: onEdit,
-          size: shadcn.ButtonSize.small,
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(CupertinoIcons.pencil, size: 14),
-              SizedBox(width: 6),
-              Text('编辑'),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        shadcn.OutlineButton(
-          onPressed: onDelete,
-          size: shadcn.ButtonSize.small,
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(CupertinoIcons.trash, size: 14),
-              SizedBox(width: 6),
-              Text('删除'),
-            ],
-          ),
-        ),
-        const SizedBox(width: 8),
-        shadcn.PrimaryButton(
-          onPressed: onBrowse,
-          size: shadcn.ButtonSize.small,
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(CupertinoIcons.folder, size: 14),
-              SizedBox(width: 6),
-              Text('浏览'),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
 
-/// 存储源表单对话框
-class _StorageFormDialog extends ConsumerStatefulWidget {
-  final Storage? storage;
-  final Future<void> Function(
-    String name,
-    String type,
-    Map<String, String> settings,
-  )
-  onSubmit;
+/// 桌面/宽屏存储源卡片
+class _StorageCard extends StatefulWidget {
+  final Storage storage;
+  final VoidCallback onBrowse;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<bool> onToggleEnabled;
 
-  const _StorageFormDialog({this.storage, required this.onSubmit});
+  const _StorageCard({
+    required this.storage,
+    required this.onBrowse,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onToggleEnabled,
+  });
 
   @override
-  ConsumerState<_StorageFormDialog> createState() => _StorageFormDialogState();
+  State<_StorageCard> createState() => _StorageCardState();
 }
 
-class _StorageFormDialogState extends ConsumerState<_StorageFormDialog> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _urlController;
-  late final TextEditingController _usernameController;
-  late final TextEditingController _passwordController;
-  late final TextEditingController _proxyUrlController;
-  late final TextEditingController _publicBaseUrlController;
-  late final TextEditingController _tokenController;
-
-  late StorageType _selectedType;
-  bool _useProxy = false;
-  String _streamMode = 'redirect';
-  bool _isSubmitting = false;
-  bool _isTesting = false;
-
-  bool get isEditing => widget.storage != null;
-
-  @override
-  void initState() {
-    super.initState();
-    final storage = widget.storage;
-    final settings = storage?.settings ?? {};
-
-    _nameController = TextEditingController(text: storage?.name ?? '');
-    _urlController = TextEditingController(
-      text: settings['url'] ?? settings['path'] ?? '',
-    );
-    _usernameController = TextEditingController(
-      text: settings['username'] ?? '',
-    );
-    _passwordController = TextEditingController(
-      text: settings['password'] ?? '',
-    );
-    _proxyUrlController = TextEditingController(
-      text: settings['proxy_url'] ?? '',
-    );
-    _publicBaseUrlController = TextEditingController(
-      text: settings['public_base_url'] ?? '',
-    );
-    _tokenController = TextEditingController(text: settings['token'] ?? '');
-
-    _selectedType =
-        storage != null
-            ? StorageType.fromString(storage.type)
-            : StorageType.webdav;
-    _useProxy = settings['use_proxy'] == 'true';
-    _streamMode = settings['stream_mode'] ?? 'redirect';
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _urlController.dispose();
-    _usernameController.dispose();
-    _passwordController.dispose();
-    _proxyUrlController.dispose();
-    _publicBaseUrlController.dispose();
-    _tokenController.dispose();
-    super.dispose();
-  }
+class _StorageCardState extends State<_StorageCard> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    final isDesktop = WindowControls.isDesktop;
-    final dialogWidth =
-        isDesktop ? 480.0 : MediaQuery.of(context).size.width * 0.9;
+    final theme = Theme.of(context);
+    final colors = context.appColors;
+    final storage = widget.storage;
+    final type = StorageType.fromString(storage.type);
+    final address = _storageAddress(storage);
+    final addressText = Text(
+      address ?? '未配置地址',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),
+    );
 
-    return shadcn.AlertDialog(
-      barrierColor: Colors.transparent,
-      surfaceOpacity: 1,
-      title: Text(isEditing ? '编辑存储源' : '添加存储源'),
-      content: SizedBox(
-        width: dialogWidth,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 16),
-              _buildNameField(),
-              const SizedBox(height: 16),
-              _buildTypeSelector(),
-              const SizedBox(height: 16),
-              ..._buildTypeSpecificFields(),
-            ],
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: colors.cardBackground,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color:
+                _hovered
+                    ? theme.colorScheme.primary.withValues(alpha: 0.4)
+                    : colors.divider,
           ),
         ),
-      ),
-      actions: [
-        shadcn.OutlineButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        shadcn.PrimaryButton(
-          onPressed: _isSubmitting ? null : _handleSubmit,
-          child:
-              _isSubmitting
-                  ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                  : Text(isEditing ? '保存' : '添加'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNameField() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('名称').semiBold().small(),
-        const SizedBox(height: 8),
-        shadcn.TextField(
-          controller: _nameController,
-          placeholder: const Text('如：我的媒体库'),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTypeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('类型').semiBold().small(),
-        const SizedBox(height: 8),
-        shadcn.Select<StorageType>(
-          value: _selectedType,
-          itemBuilder: (context, item) => Row(
-            children: [
-              Icon(item.icon, size: 18),
-              const SizedBox(width: 8),
-              Text(item.label),
-            ],
-          ),
-          onChanged: (value) {
-            if (value != null && value != _selectedType) {
-              setState(() {
-                _selectedType = value;
-                _resetTypeDefaults();
-              });
-            }
-          },
-          popup: shadcn.SelectPopup(
-            items: shadcn.SelectItemList(
-              children: StorageType.values
-                  .map((type) => shadcn.SelectItemButton(
-                        value: type,
-                        child: Row(
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: widget.onBrowse,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 12, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _StorageTypeIcon(type: type, enabled: storage.enabled),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(type.icon, size: 18),
-                            const SizedBox(width: 8),
-                            Text(type.label),
+                            Text(
+                              storage.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    storage.enabled
+                                        ? colors.textPrimary
+                                        : colors.textSecondary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                _StatusBadge(
+                                  label: type.label,
+                                  color:
+                                      storage.enabled
+                                          ? type.color
+                                          : colors.textSecondary,
+                                ),
+                                ..._buildStatusBadges(
+                                  context,
+                                  storage,
+                                  showStreamMode: true,
+                                ),
+                              ],
+                            ),
                           ],
                         ),
-                      ))
-                  .toList(),
-            ),
-          ).call,
-        ),
-      ],
-    );
-  }
-
-  void _resetTypeDefaults() {
-    setState(() {
-      if (_selectedType == StorageType.webdav) {
-        _streamMode = 'redirect';
-        _publicBaseUrlController.clear();
-      } else if (_selectedType == StorageType.local) {
-        _streamMode = 'proxy';
-      } else if (_selectedType == StorageType.openlist) {
-        _streamMode = 'redirect';
-      }
-    });
-  }
-
-  List<Widget> _buildTypeSpecificFields() {
-    switch (_selectedType) {
-      case StorageType.webdav:
-        return _buildWebDAVFields();
-      case StorageType.local:
-        return _buildLocalFields();
-      case StorageType.openlist:
-        return _buildOpenListFields();
-    }
-  }
-
-  List<Widget> _buildWebDAVFields() {
-    return [
-      _buildFieldLabel('WebDAV URL'),
-      shadcn.TextField(
-        controller: _urlController,
-        placeholder: const Text('https://example.com/dav'),
-        keyboardType: TextInputType.url,
-      ),
-      const SizedBox(height: 16),
-      _buildFieldLabel('用户名'),
-      shadcn.TextField(
-        controller: _usernameController,
-        placeholder: const Text('用户名'),
-      ),
-      const SizedBox(height: 16),
-      _buildFieldLabel('密码'),
-      shadcn.TextField(
-        controller: _passwordController,
-        placeholder: const Text('密码'),
-        obscureText: true,
-      ),
-      const SizedBox(height: 16),
-      _buildProxySwitch(),
-      if (_useProxy) ...[
-        const SizedBox(height: 16),
-        _buildFieldLabel('代理地址'),
-        shadcn.TextField(
-          controller: _proxyUrlController,
-          placeholder: const Text('代理地址（可选）'),
-          keyboardType: TextInputType.url,
-        ),
-      ],
-      const SizedBox(height: 16),
-      _buildStreamModeSelector(),
-    ];
-  }
-
-  List<Widget> _buildLocalFields() {
-    return [
-      _buildFieldLabel('路径'),
-      shadcn.TextField(
-        controller: _urlController,
-        placeholder: const Text('/path/to/media'),
-      ),
-      const SizedBox(height: 16),
-      _buildStreamModeSelector(),
-      if (_streamMode == 'redirect') ...[
-        const SizedBox(height: 16),
-        _buildFieldLabel('直连基地址'),
-        shadcn.TextField(
-          controller: _publicBaseUrlController,
-          placeholder: const Text('http://nas.local:8081/media'),
-          keyboardType: TextInputType.url,
-        ),
-      ],
-    ];
-  }
-
-  List<Widget> _buildOpenListFields() {
-    return [
-      _buildFieldLabel('OpenList 地址'),
-      shadcn.TextField(
-        controller: _urlController,
-        placeholder: const Text('https://openlist.example.com'),
-        keyboardType: TextInputType.url,
-      ),
-      const SizedBox(height: 16),
-      _buildFieldLabel('Token（可选）'),
-      shadcn.TextField(
-        controller: _tokenController,
-        placeholder: const Text('访问令牌'),
-        obscureText: true,
-      ),
-      const SizedBox(height: 16),
-      _buildFieldLabel('用户名（可选）'),
-      shadcn.TextField(
-        controller: _usernameController,
-        placeholder: const Text('用户名'),
-      ),
-      const SizedBox(height: 16),
-      _buildFieldLabel('密码（可选）'),
-      shadcn.TextField(
-        controller: _passwordController,
-        placeholder: const Text('密码'),
-        obscureText: true,
-      ),
-      const SizedBox(height: 16),
-      _buildStreamModeSelector(),
-      const SizedBox(height: 16),
-      _buildTestConnectionButton(),
-    ];
-  }
-
-  Widget _buildTestConnectionButton() {
-    return shadcn.OutlineButton(
-      onPressed: _isTesting ? null : _handleTestConnection,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_isTesting)
-            const SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            const Icon(CupertinoIcons.wifi, size: 14),
-          const SizedBox(width: 6),
-          Text(_isTesting ? '测试中...' : '测试连接'),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleTestConnection() async {
-    final url = _urlController.text.trim();
-    if (url.isEmpty) {
-      DialogUtils.showToast(
-        context: context,
-        message: '请输入 OpenList 地址',
-        isError: true,
-      );
-      return;
-    }
-
-    setState(() => _isTesting = true);
-
-    final settings = <String, String>{'url': url, 'stream_mode': _streamMode};
-    final token = _tokenController.text.trim();
-    if (token.isNotEmpty) {
-      settings['token'] = token;
-    }
-    final username = _usernameController.text.trim();
-    if (username.isNotEmpty) {
-      settings['username'] = username;
-    }
-    final password = _passwordController.text;
-    if (password.isNotEmpty) {
-      settings['password'] = password;
-    }
-
-    final (success, error) = await ref
-        .read(storagesProvider.notifier)
-        .testConnection(type: 'openlist', settings: settings);
-
-    if (mounted) {
-      setState(() => _isTesting = false);
-      DialogUtils.showToast(
-        context: context,
-        message: success ? '连接成功' : (error ?? '连接失败'),
-        isError: !success,
-      );
-    }
-  }
-
-  Widget _buildFieldLabel(String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(label).semiBold().small(),
-    );
-  }
-
-  Widget _buildProxySwitch() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Text('使用代理访问').small(),
-        shadcn.Switch(
-          value: _useProxy,
-          onChanged: (value) {
-            setState(() {
-              _useProxy = value;
-              if (!_useProxy) {
-                _proxyUrlController.clear();
-              }
-            });
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStreamModeSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('流媒体模式').semiBold().small(),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child:
-                  _streamMode == 'proxy'
-                      ? shadcn.PrimaryButton(
-                        onPressed: () => setState(() => _streamMode = 'proxy'),
-                        child: const Text('代理'),
-                      )
-                      : shadcn.OutlineButton(
-                        onPressed: () => setState(() => _streamMode = 'proxy'),
-                        child: const Text('代理'),
                       ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child:
-                  _streamMode == 'redirect'
-                      ? shadcn.PrimaryButton(
-                        onPressed:
-                            () => setState(() => _streamMode = 'redirect'),
-                        child: const Text('直连'),
-                      )
-                      : shadcn.OutlineButton(
-                        onPressed:
-                            () => setState(() => _streamMode = 'redirect'),
-                        child: const Text('直连'),
+                      const SizedBox(width: 8),
+                      CupertinoSwitch(
+                        value: storage.enabled,
+                        onChanged: widget.onToggleEnabled,
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (address != null)
+                    Tooltip(message: address, child: addressText)
+                  else
+                    addressText,
+                  const Spacer(),
+                  Divider(height: 1, thickness: 0.5, color: colors.divider),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Tooltip(
+                        message: '编辑',
+                        child: shadcn.IconButton.ghost(
+                          size: shadcn.ButtonSize.small,
+                          icon: Icon(
+                            CupertinoIcons.pencil,
+                            size: 18,
+                            color: colors.iconSecondary,
+                          ),
+                          onPressed: widget.onEdit,
+                        ),
+                      ),
+                      Tooltip(
+                        message: '删除',
+                        child: shadcn.IconButton.ghost(
+                          size: shadcn.ButtonSize.small,
+                          icon: Icon(
+                            CupertinoIcons.trash,
+                            size: 18,
+                            color: colors.iconSecondary,
+                          ),
+                          onPressed: widget.onDelete,
+                        ),
+                      ),
+                      const Spacer(),
+                      shadcn.GhostButton(
+                        size: shadcn.ButtonSize.small,
+                        onPressed: widget.onBrowse,
+                        leading: const Icon(CupertinoIcons.folder, size: 16),
+                        trailing: const Icon(
+                          CupertinoIcons.chevron_right,
+                          size: 14,
+                        ),
+                        child: const Text('浏览'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ],
+          ),
         ),
-      ],
-    );
-  }
-
-  Future<void> _handleSubmit() async {
-    final name = _nameController.text.trim();
-    if (name.isEmpty) {
-      DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
-      return;
-    }
-
-    Map<String, String> settings;
-    switch (_selectedType) {
-      case StorageType.webdav:
-        settings = {
-          'url': _urlController.text.trim(),
-          'username': _usernameController.text.trim(),
-          'password': _passwordController.text,
-          'use_proxy': _useProxy.toString(),
-          'stream_mode': _streamMode,
-        };
-        final proxyUrl = _proxyUrlController.text.trim();
-        if (proxyUrl.isNotEmpty) {
-          settings['proxy_url'] = proxyUrl;
-        }
-        break;
-      case StorageType.local:
-        if (_streamMode == 'redirect' &&
-            _publicBaseUrlController.text.trim().isEmpty) {
-          DialogUtils.showToast(
-            context: context,
-            message: '直连模式需要填写直连基地址',
-            isError: true,
-          );
-          return;
-        }
-        settings = {
-          'path': _urlController.text.trim(),
-          'stream_mode': _streamMode,
-        };
-        final publicBaseUrl = _publicBaseUrlController.text.trim();
-        if (publicBaseUrl.isNotEmpty) {
-          settings['public_base_url'] = publicBaseUrl;
-        }
-        break;
-      case StorageType.openlist:
-        settings = {
-          'url': _urlController.text.trim(),
-          'stream_mode': _streamMode,
-        };
-        final token = _tokenController.text.trim();
-        if (token.isNotEmpty) {
-          settings['token'] = token;
-        }
-        final username = _usernameController.text.trim();
-        if (username.isNotEmpty) {
-          settings['username'] = username;
-        }
-        final password = _passwordController.text;
-        if (password.isNotEmpty) {
-          settings['password'] = password;
-        }
-        break;
-    }
-
-    setState(() => _isSubmitting = true);
-    await widget.onSubmit(name, _selectedType.value, settings);
-    if (mounted) {
-      setState(() => _isSubmitting = false);
-    }
-  }
-}
-
-extension on Text {
-  Widget semiBold() {
-    return DefaultTextStyle.merge(
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      child: this,
-    );
-  }
-
-  Widget small() {
-    return DefaultTextStyle.merge(
-      style: const TextStyle(fontSize: 13),
-      child: this,
+      ),
     );
   }
 }

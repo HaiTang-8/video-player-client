@@ -11,6 +11,8 @@ import '../../screens/player/player_screen.dart';
 import '../../screens/search/search_screen.dart';
 import '../../screens/settings/settings_screen.dart';
 import '../../screens/settings/storages_screen.dart';
+import '../../screens/settings/storage_form_screen.dart';
+import '../../screens/settings/storage_transfer_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/server_config/server_config_screen.dart';
 import '../../screens/storages/resources_screen.dart';
@@ -272,6 +274,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/storage-manage',
         builder: (context, state) => const StoragesScreen(),
+        routes: [
+          GoRoute(
+            path: 'new',
+            builder: (context, state) => const StorageFormScreen(),
+          ),
+          GoRoute(
+            path: ':id/edit',
+            builder: (context, state) {
+              final extra = state.extra;
+              return StorageFormScreen(
+                storageId: int.parse(state.pathParameters['id']!),
+                storage: extra is Storage ? extra : null,
+              );
+            },
+          ),
+          GoRoute(
+            path: 'import',
+            builder: (context, state) => const StorageImportScreen(),
+          ),
+          GoRoute(
+            path: 'export',
+            builder: (context, state) => const StorageExportScreen(),
+          ),
+        ],
       ),
 
       // 播放设置页面
