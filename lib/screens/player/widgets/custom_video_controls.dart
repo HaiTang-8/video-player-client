@@ -1276,7 +1276,14 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   }
                 },
                 onDoubleTap:
-                    WindowControls.isDesktop ? widget.onToggleFullscreen : null,
+                    WindowControls.isDesktop
+                        ? widget.onToggleFullscreen
+                        : _isLocked
+                        ? null
+                        : () {
+                          widget.engine.playOrPause();
+                          _showControlsTemporarily();
+                        },
                 onLongPressStart:
                     WindowControls.isDesktop || _isLocked
                         ? null
