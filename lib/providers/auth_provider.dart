@@ -25,6 +25,9 @@ class AuthState {
     this.authEnabled = false,
   });
 
+  /// 是否可管理媒体（删除等）：未启用鉴权时放行，否则仅管理员
+  bool get canManageMedia => !authEnabled || (user?.isAdmin ?? false);
+
   AuthState copyWith({
     AuthStatus? status,
     User? user,

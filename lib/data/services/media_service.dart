@@ -332,6 +332,14 @@ class MediaService {
     return _client.delete(ApiConstants.tvShowDetail(id));
   }
 
+  /// 删除剧集的某一季，data 为该剧集是否因已无季而被一并删除
+  Future<ApiResponse<bool>> deleteSeason(int tvShowId, int seasonId) async {
+    return _client.delete<bool>(
+      ApiConstants.tvShowSeason(tvShowId, seasonId),
+      fromJson: (json) => json is Map && json['show_deleted'] == true,
+    );
+  }
+
   /// 获取电视剧所有可用图片
   Future<ApiResponse<MediaImages>> getTvShowImages(int id) async {
     return _client.get<MediaImages>(

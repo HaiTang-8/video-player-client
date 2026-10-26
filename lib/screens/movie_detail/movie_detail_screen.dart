@@ -13,6 +13,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/detail_hero_background.dart';
 import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/dialog_utils.dart';
+import '../../core/widgets/media_delete_action.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/overview_preview_text.dart';
@@ -805,6 +806,12 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen>
                   _invalidateMovieDetail();
                 },
               ),
+              if (ref.read(authProvider).canManageMedia)
+                mediaDeleteMenuButton(
+                  context: dropdownContext,
+                  label: '删除电影',
+                  onPressed: () => _deleteMovie(context, movie),
+                ),
             ],
           ),
         );
@@ -871,11 +878,30 @@ class _MovieDetailScreenState extends ConsumerState<MovieDetailScreen>
                   _invalidateMovieDetail();
                 },
               ),
+              if (ref.read(authProvider).canManageMedia)
+                mediaDeleteMenuButton(
+                  context: dropdownContext,
+                  label: '删除电影',
+                  onPressed: () => _deleteMovie(context, movie),
+                ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _deleteMovie(BuildContext context, Movie movie) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final resp = await confirmAndDeleteMedia(
+      context: context,
+      ref: ref,
+      title: '删除电影',
+      content: '确定从媒体库删除「${movie.title}」吗？\n\n$mediaDeleteKeepFilesNote',
+      request: () => service.deleteMovie(movie.id),
+    );
+    if (resp != null && context.mounted) context.pop();
   }
 
   /// 构建播放按钮

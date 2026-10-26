@@ -54,6 +54,8 @@ class ApiConstants {
   static String tvShowPoster(int id) => '$apiPrefix/tvshows/$id/poster';
   static String tvShowSimpleName(int id) =>
       '$apiPrefix/tvshows/$id/simple-name';
+  static String tvShowSeason(int tvShowId, int seasonId) =>
+      '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId';
   static String seasonPoster(int tvShowId, int seasonId) =>
       '$apiPrefix/tvshows/$tvShowId/seasons/$seasonId/poster';
   static const String tvShowSearch = '$apiPrefix/tvshows/search';

@@ -14,6 +14,7 @@ import '../../core/widgets/desktop_app_bar.dart';
 import '../../core/widgets/detail_hero_background.dart';
 import '../../core/widgets/image_selector_sheet.dart';
 import '../../core/widgets/dialog_utils.dart';
+import '../../core/widgets/media_delete_action.dart';
 import '../../core/window/window_controls.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../../core/widgets/overview_preview_text.dart';
@@ -1317,6 +1318,20 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
                   _invalidateTvShowDetail();
                 },
               ),
+              if (ref.read(authProvider).canManageMedia) ...[
+                if (selectedSeason != null && (tvShow.seasons?.length ?? 0) > 1)
+                  mediaDeleteMenuButton(
+                    context: dropdownContext,
+                    label: '删除本季（${selectedSeason.displayName}）',
+                    onPressed:
+                        () => _deleteSeason(context, tvShow, selectedSeason),
+                  ),
+                mediaDeleteMenuButton(
+                  context: dropdownContext,
+                  label: '删除剧集',
+                  onPressed: () => _deleteTvShow(context, tvShow),
+                ),
+              ],
             ],
           ),
         );
@@ -1402,11 +1417,67 @@ class _TvShowDetailScreenState extends ConsumerState<TvShowDetailScreen>
                   _invalidateTvShowDetail();
                 },
               ),
+              if (ref.read(authProvider).canManageMedia) ...[
+                if (selectedSeason != null && (tvShow.seasons?.length ?? 0) > 1)
+                  mediaDeleteMenuButton(
+                    context: dropdownContext,
+                    label: '删除本季（${selectedSeason.displayName}）',
+                    onPressed:
+                        () => _deleteSeason(context, tvShow, selectedSeason),
+                  ),
+                mediaDeleteMenuButton(
+                  context: dropdownContext,
+                  label: '删除剧集',
+                  onPressed: () => _deleteTvShow(context, tvShow),
+                ),
+              ],
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _deleteTvShow(BuildContext context, TvShow tvShow) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final simpleNote = tvShow.isSimpleScrape ? '简洁刮削设置也会一并移除。' : '';
+    final resp = await confirmAndDeleteMedia(
+      context: context,
+      ref: ref,
+      title: '删除剧集',
+      content:
+          '确定从媒体库删除「${tvShow.name}」吗？\n\n将移除该剧的所有季、集和播放源记录。$simpleNote$mediaDeleteKeepFilesNote',
+      request: () => service.deleteTvShow(tvShow.id),
+    );
+    if (resp != null && context.mounted) context.pop();
+  }
+
+  Future<void> _deleteSeason(
+    BuildContext context,
+    TvShow tvShow,
+    Season season,
+  ) async {
+    final service = ref.read(mediaServiceProvider);
+    if (service == null) return;
+    final resp = await confirmAndDeleteMedia<bool>(
+      context: context,
+      ref: ref,
+      title: '删除本季',
+      content:
+          '确定删除「${tvShow.name}」的「${season.displayName}」吗？\n\n将移除该季所有集和播放源记录，不会删除存储中的源文件。之后执行同步季度、更新刮削或重新扫描时，该季可能会被重新创建。',
+      request: () => service.deleteSeason(tvShow.id, season.id),
+    );
+    if (resp == null || !context.mounted) return;
+    if (resp.data == true) {
+      context.pop();
+      return;
+    }
+    _invalidateTvShowDetail();
+    setState(() {
+      _selectedSeasonId = null;
+      _selectedSeasonIndex = 0;
+    });
   }
 
   List<shadcn.MenuItem> _buildSimpleScrapeMenuItems(
