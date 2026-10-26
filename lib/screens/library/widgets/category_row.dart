@@ -80,6 +80,17 @@ class _CategoryRowState extends ConsumerState<CategoryRow> {
     final itemsState = ref.watch(categoryItemsProvider(widget.category.id));
     final rowCount = ref.watch(librarySettingsProvider).desktopRowCount;
 
+    // 行被复用但缓存已被清空（如删除媒体后刷新分类）：currentPage 回到 0 说明尚未重新加载
+    if (_loaded &&
+        itemsState.currentPage == 0 &&
+        !itemsState.isLoading &&
+        itemsState.error == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _retry();
+      });
+    }
+
     // 优先使用缓存数据，避免 widget 回收后重建时闪烁 loading 状态
     if (itemsState.items.isNotEmpty) {
       if (WindowControls.isDesktop) {
