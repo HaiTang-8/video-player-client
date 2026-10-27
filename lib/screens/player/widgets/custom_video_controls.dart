@@ -7,16 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     as shadcn
-    show
-        AlertDialog,
-        DropdownMenu,
-        MenuButton,
-        MenuDivider,
-        MenuItem,
-        PrimaryButton,
-        Theme,
-        ThemeData,
-        showDropdown;
+    show AlertDialog, PrimaryButton, Theme, ThemeData;
 import 'package:shadcn_flutter/shadcn_flutter.dart'
     show LucideIcons;
 import '../../../core/device/device_status.dart';
@@ -28,6 +19,7 @@ import '../../../data/services/log_service.dart';
 import '../../../playback/domain/playback_domain.dart';
 import 'media_info_rows.dart';
 import 'player_glyphs.dart';
+import 'player_popover_menu.dart';
 import 'player_top_bar.dart';
 import 'player_ui_metrics.dart';
 import 'player_overlay_notice.dart';
@@ -1653,67 +1645,22 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  void _showSpeedMenu(BuildContext context, List<double> speeds) {
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-    final padding = MediaQuery.of(context).padding;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.7;
-
-    shadcn.showDropdown(
-      context: context,
-      margin:
-          isMobile
-              ? EdgeInsets.only(
-                left: padding.left,
-                right: padding.right,
-                top: padding.top,
-                bottom: padding.bottom,
-              )
-              : null,
-      builder: (dropdownContext) {
-        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme:
-              () => shadcn.Theme.of(
-                dropdownContext,
-              ).colorScheme.copyWith(accent: () => Colors.transparent),
-        );
-        final children = <shadcn.MenuItem>[];
-        for (var i = 0; i < speeds.length; i++) {
-          final s = speeds[i];
-          final selected = (_playbackSpeed - s).abs() < 0.01;
-          children.add(
-            shadcn.MenuButton(
-              trailing:
-                  selected
-                      ? const Icon(Icons.check, size: 16, color: Colors.black)
-                      : null,
-              child: Text('${s}x'),
-              onPressed: (_) {
-                widget.engine.setRate(s);
-                widget.onSpeedChanged?.call(s);
-                _showSpeedChangeHint(s);
-                _startHideTimer();
-              },
-            ),
-          );
-          if (i < speeds.length - 1) {
-            children.add(const shadcn.MenuDivider());
-          }
-        }
-        return shadcn.Theme(
-          data: noAccentTheme,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(
-                dropdownContext,
-              ).copyWith(scrollbars: false),
-              child: shadcn.DropdownMenu(children: children),
-            ),
+  Future<void> _showSpeedMenu(BuildContext context, List<double> speeds) async {
+    await showPlayerPopoverMenu(context, [
+      [
+        for (final s in speeds)
+          PlayerMenuItem.option(
+            '${s}x',
+            selected: (_playbackSpeed - s).abs() < 0.01,
+            onSelected: () {
+              widget.engine.setRate(s);
+              widget.onSpeedChanged?.call(s);
+              _showSpeedChangeHint(s);
+            },
           ),
-        );
-      },
-    );
+      ],
+    ]);
+    if (mounted) _startHideTimer();
   }
 
   Widget _buildAudioTrackButton() {
@@ -1726,76 +1673,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  void _showAudioTrackMenu(BuildContext context) {
+  Future<void> _showAudioTrackMenu(BuildContext context) async {
     final tracks = _audioTracks;
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-    final padding = MediaQuery.of(context).padding;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.7;
-
-    shadcn.showDropdown(
-      context: context,
-      margin:
-          isMobile
-              ? EdgeInsets.only(
-                left: padding.left,
-                right: padding.right,
-                top: padding.top,
-                bottom: padding.bottom,
-              )
-              : null,
-      builder: (dropdownContext) {
-        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme:
-              () => shadcn.Theme.of(
-                dropdownContext,
-              ).colorScheme.copyWith(accent: () => Colors.transparent),
-        );
-        if (tracks.isEmpty) {
-          return shadcn.Theme(
-            data: noAccentTheme,
-            child: shadcn.DropdownMenu(
-              children: [
-                shadcn.MenuButton(onPressed: null, child: const Text('无可用音轨')),
-              ],
-            ),
-          );
-        }
-        final children = <shadcn.MenuItem>[];
-        for (var i = 0; i < tracks.length; i++) {
-          final t = tracks[i];
-          final selected = _currentAudioTrack?.id == t.id;
-          children.add(
-            shadcn.MenuButton(
-              trailing:
-                  selected
-                      ? const Icon(Icons.check, size: 16, color: Colors.black)
-                      : null,
-              child: Text(t.title ?? t.language ?? t.id),
-              onPressed: (_) {
-                widget.engine.selectAudioTrack(t);
-                _startHideTimer();
-              },
-            ),
-          );
-          if (i < tracks.length - 1) {
-            children.add(const shadcn.MenuDivider());
-          }
-        }
-        return shadcn.Theme(
-          data: noAccentTheme,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(
-                dropdownContext,
-              ).copyWith(scrollbars: false),
-              child: shadcn.DropdownMenu(children: children),
-            ),
+    await showPlayerPopoverMenu(context, [
+      [
+        if (tracks.isEmpty) const PlayerMenuItem.disabled('无可用音轨'),
+        for (final t in tracks)
+          PlayerMenuItem.option(
+            t.title ?? t.language ?? t.id,
+            selected: _currentAudioTrack?.id == t.id,
+            onSelected: () => widget.engine.selectAudioTrack(t),
           ),
-        );
-      },
-    );
+      ],
+    ]);
+    if (mounted) _startHideTimer();
   }
 
   Widget _buildSubtitleButton() {
@@ -1808,124 +1699,46 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     );
   }
 
-  void _showSubtitleMenu(BuildContext context) {
+  Future<void> _showSubtitleMenu(BuildContext context) async {
     final embeddedTracks = _subtitleTracks;
     final externalSubs = widget.externalSubtitles;
     final currentId = _currentSubtitleTrack?.id;
-    final isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-    final padding = MediaQuery.of(context).padding;
-    final screenHeight = MediaQuery.of(context).size.height;
-    final maxHeight = screenHeight * 0.7;
-
-    shadcn.showDropdown(
-      context: context,
-      margin:
-          isMobile
-              ? EdgeInsets.only(
-                left: padding.left,
-                right: padding.right,
-                top: padding.top,
-                bottom: padding.bottom,
-              )
-              : null,
-      builder: (dropdownContext) {
-        final noAccentTheme = shadcn.Theme.of(dropdownContext).copyWith(
-          colorScheme:
-              () => shadcn.Theme.of(
-                dropdownContext,
-              ).colorScheme.copyWith(accent: () => Colors.transparent),
-        );
-        final closeSelected = _subtitleOff;
-        final children = <shadcn.MenuItem>[
-          if (widget.subtitleDelay != null) ...[
-            shadcn.MenuButton(
-              leading: const Icon(LucideIcons.slidersHorizontal, size: 16),
-              child: const Text('字幕设置'),
-              onPressed: (_) => _showSubtitleSettings(),
-            ),
-            const shadcn.MenuDivider(),
-          ],
-          shadcn.MenuButton(
-            trailing:
-                closeSelected
-                    ? const Icon(Icons.check, size: 16, color: Colors.black)
-                    : null,
-            child: const Text('关闭'),
-            onPressed: (_) {
-              widget.engine.selectSubtitleTrack(null);
-              _startHideTimer();
-            },
+    await showPlayerPopoverMenu(context, [
+      if (widget.subtitleDelay != null)
+        [
+          PlayerMenuItem.action(
+            '字幕设置',
+            icon: LucideIcons.slidersHorizontal,
+            onAction: _showSubtitleSettings,
           ),
-        ];
-
-        if (embeddedTracks.isNotEmpty) {
-          children.add(const shadcn.MenuDivider());
-          for (var i = 0; i < embeddedTracks.length; i++) {
-            final t = embeddedTracks[i];
-            final selected = currentId == t.id;
-            children.add(
-              shadcn.MenuButton(
-                trailing:
-                    selected
-                        ? const Icon(Icons.check, size: 16, color: Colors.black)
-                        : null,
-                child: Text(t.title ?? t.language ?? t.id),
-                onPressed: (_) {
-                  widget.engine.selectSubtitleTrack(t);
-                  _startHideTimer();
-                },
-              ),
-            );
-            if (i < embeddedTracks.length - 1) {
-              children.add(const shadcn.MenuDivider());
-            }
-          }
-        }
-
-        if (externalSubs.isNotEmpty) {
-          children.add(const shadcn.MenuDivider());
-          for (var i = 0; i < externalSubs.length; i++) {
-            final sub = externalSubs[i];
-            final selected = _currentSubtitleTrack?.title == sub.displayName;
-            children.add(
-              shadcn.MenuButton(
-                trailing:
-                    selected
-                        ? const Icon(Icons.check, size: 16, color: Colors.black)
-                        : null,
-                child: Text(sub.displayName),
-                onPressed: (_) {
-                  widget.onSelectExternalSubtitle?.call(sub);
-                  _startHideTimer();
-                },
-              ),
-            );
-            if (i < externalSubs.length - 1) {
-              children.add(const shadcn.MenuDivider());
-            }
-          }
-        }
-
-        if (embeddedTracks.isEmpty && externalSubs.isEmpty) {
-          children.add(
-            shadcn.MenuButton(onPressed: null, child: const Text('无可用字幕')),
-          );
-        }
-
-        return shadcn.Theme(
-          data: noAccentTheme,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxHeight),
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(
-                dropdownContext,
-              ).copyWith(scrollbars: false),
-              child: shadcn.DropdownMenu(children: children),
-            ),
+        ],
+      [
+        PlayerMenuItem.option(
+          '关闭',
+          selected: _subtitleOff,
+          onSelected: () => widget.engine.selectSubtitleTrack(null),
+        ),
+        if (embeddedTracks.isEmpty && externalSubs.isEmpty)
+          const PlayerMenuItem.disabled('无可用字幕'),
+      ],
+      [
+        for (final t in embeddedTracks)
+          PlayerMenuItem.option(
+            t.title ?? t.language ?? t.id,
+            selected: currentId == t.id,
+            onSelected: () => widget.engine.selectSubtitleTrack(t),
           ),
-        );
-      },
-    );
+      ],
+      [
+        for (final sub in externalSubs)
+          PlayerMenuItem.option(
+            sub.displayName,
+            selected: _currentSubtitleTrack?.title == sub.displayName,
+            onSelected: () => widget.onSelectExternalSubtitle?.call(sub),
+          ),
+      ],
+    ]);
+    if (mounted) _startHideTimer();
   }
 
   Future<void> _showSubtitleSettings() async {
