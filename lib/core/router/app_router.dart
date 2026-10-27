@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,6 +34,32 @@ import '../../screens/download/download_manager_screen.dart';
 import '../../screens/connection_error/connection_error_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/setup_screen.dart';
+
+final bool _mobileSwipeBack = !kIsWeb &&
+    (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android);
+
+GoRouterPageBuilder _page(GoRouterWidgetBuilder builder) => (context, state) {
+  final child = builder(context, state);
+  final name = state.name ?? state.path;
+  final arguments = {...state.pathParameters, ...state.uri.queryParameters};
+  final restorationId = state.pageKey.value;
+  return _mobileSwipeBack
+      ? MaterialPage<void>(
+          key: state.pageKey,
+          name: name,
+          arguments: arguments,
+          restorationId: restorationId,
+          child: child,
+        )
+      : NoTransitionPage<void>(
+          key: state.pageKey,
+          name: name,
+          arguments: arguments,
+          restorationId: restorationId,
+          child: child,
+        );
+};
 
 /// 路由刷新通知器
 class RouterRefreshNotifier extends ChangeNotifier {
@@ -155,7 +182,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               // 存储源目录浏览
               GoRoute(
                 path: ':id',
-                builder: (context, state) {
+                pageBuilder: _page((context, state) {
                   final id = int.parse(state.pathParameters['id']!);
                   final extra = state.extra;
                   final storage = extra is Storage
@@ -164,7 +191,7 @@ final routerProvider = Provider<GoRouter>((ref) {
                           ? Storage.fromJson(extra)
                           : null);
                   return StorageBrowseScreen(storageId: id, storage: storage);
-                },
+                }),
               ),
             ],
           ),
@@ -184,19 +211,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 电影详情
       GoRoute(
         path: '/movie/:id',
-        builder: (context, state) {
+        pageBuilder: _page((context, state) {
           final id = int.parse(state.pathParameters['id']!);
           return MovieDetailScreen(movieId: id);
-        },
+        }),
       ),
 
       // 剧集详情
       GoRoute(
         path: '/tvshow/:id',
-        builder: (context, state) {
+        pageBuilder: _page((context, state) {
           final id = int.parse(state.pathParameters['id']!);
           return TvShowDetailScreen(tvShowId: id);
-        },
+        }),
       ),
 
       // 电影播放器
@@ -244,63 +271,63 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 搜索页面
       GoRoute(
         path: '/search',
-        builder: (context, state) => const SearchScreen(),
+        pageBuilder: _page((context, state) => const SearchScreen()),
       ),
 
       // 分类详情页面
       GoRoute(
         path: '/category/:id',
-        builder: (context, state) {
+        pageBuilder: _page((context, state) {
           final id = state.pathParameters['id']!;
           final name = state.uri.queryParameters['name'] ?? '';
           return CategoryDetailScreen(categoryId: id, categoryName: name);
-        },
+        }),
       ),
 
       // 观看历史页面
       GoRoute(
         path: '/watch-history',
-        builder: (context, state) => const WatchHistoryScreen(),
+        pageBuilder: _page((context, state) => const WatchHistoryScreen()),
       ),
 
       // 本地影片页面
       GoRoute(
         path: '/downloads',
-        builder: (context, state) => const LocalMediaScreen(),
+        pageBuilder: _page((context, state) => const LocalMediaScreen()),
       ),
 
       // 设置页面
       GoRoute(
         path: '/settings',
-        builder: (context, state) => const SettingsScreen(),
+        pageBuilder: _page((context, state) => const SettingsScreen()),
       ),
 
       // 存储源管理页面（从设置进入，不在 Shell 内）
       GoRoute(
         path: '/storage-manage',
-        builder: (context, state) => const StoragesScreen(),
+        pageBuilder: _page((context, state) => const StoragesScreen()),
         routes: [
           GoRoute(
             path: 'new',
-            builder: (context, state) => const StorageFormScreen(),
+            pageBuilder: _page((context, state) => const StorageFormScreen()),
           ),
           GoRoute(
             path: ':id/edit',
-            builder: (context, state) {
+            pageBuilder: _page((context, state) {
               final extra = state.extra;
               return StorageFormScreen(
                 storageId: int.parse(state.pathParameters['id']!),
                 storage: extra is Storage ? extra : null,
               );
-            },
+            }),
           ),
           GoRoute(
             path: 'import',
-            builder: (context, state) => const StorageImportScreen(),
+            pageBuilder: _page((context, state) => const StorageImportScreen()),
           ),
           GoRoute(
             path: 'export',
-            builder: (context, state) => const StorageExportScreen(),
+            pageBuilder: _page((context, state) => const StorageExportScreen()),
           ),
         ],
       ),
@@ -308,62 +335,62 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 播放设置页面
       GoRoute(
         path: '/playback-settings',
-        builder: (context, state) => const PlaybackSettingsScreen(),
+        pageBuilder: _page((context, state) => const PlaybackSettingsScreen()),
       ),
 
       // 播放缓存明细页面
       GoRoute(
         path: '/video-cache-detail',
-        builder: (context, state) => const VideoCacheDetailScreen(),
+        pageBuilder: _page((context, state) => const VideoCacheDetailScreen()),
       ),
 
       // 数据库备份页面
       GoRoute(
         path: '/database-backup',
-        builder: (context, state) => const DatabaseBackupScreen(),
+        pageBuilder: _page((context, state) => const DatabaseBackupScreen()),
       ),
 
       // aria2 设置页面
       GoRoute(
         path: '/aria2-settings',
-        builder: (context, state) => const Aria2SettingsScreen(),
+        pageBuilder: _page((context, state) => const Aria2SettingsScreen()),
       ),
 
       // 存储空间管理页面
       GoRoute(
         path: '/storage-management',
-        builder: (context, state) => const StorageManagementScreen(),
+        pageBuilder: _page((context, state) => const StorageManagementScreen()),
       ),
 
       // 日志查看页面
       GoRoute(
         path: '/log-viewer',
-        builder: (context, state) => const LogViewerScreen(),
+        pageBuilder: _page((context, state) => const LogViewerScreen()),
       ),
 
       // 服务器管理页面（从设置进入）
       GoRoute(
         path: '/server-config',
-        builder: (context, state) => const ServerConfigScreen(),
+        pageBuilder: _page((context, state) => const ServerConfigScreen()),
         routes: _serverFormRoutes(),
       ),
 
       // 剧情简介页面
       GoRoute(
         path: '/overview',
-        builder: (context, state) {
+        pageBuilder: _page((context, state) {
           final extra = state.extra as Map<String, dynamic>;
           return OverviewScreen(
             title: extra['title'] as String,
             overview: extra['overview'] as String,
           );
-        },
+        }),
       ),
 
       // 下载选择页面
       GoRoute(
         path: '/download-episodes',
-        builder: (context, state) {
+        pageBuilder: _page((context, state) {
           final extra = state.extra as Map<String, dynamic>;
           final seasonData = extra['season'];
           final season = seasonData is Season
@@ -375,13 +402,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             season: season,
             storageName: extra['storageName'] as String?,
           );
-        },
+        }),
       ),
 
       // 下载管理页面
       GoRoute(
         path: '/download-manager',
-        builder: (context, state) => const DownloadManagerScreen(),
+        pageBuilder: _page((context, state) => const DownloadManagerScreen()),
       ),
     ],
     errorBuilder:
@@ -409,12 +436,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 List<RouteBase> _serverFormRoutes() => [
   GoRoute(
     path: 'new',
-    builder: (context, state) => const ServerFormScreen(),
+    pageBuilder: _page((context, state) => const ServerFormScreen()),
   ),
   GoRoute(
     path: ':id/edit',
-    builder:
-        (context, state) =>
-            ServerFormScreen(serverId: state.pathParameters['id']),
+    pageBuilder: _page(
+      (context, state) =>
+          ServerFormScreen(serverId: state.pathParameters['id']),
+    ),
   ),
 ];
