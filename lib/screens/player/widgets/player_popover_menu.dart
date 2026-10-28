@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:shadcn_flutter/shadcn_flutter.dart' show LucideIcons;
@@ -249,27 +248,24 @@ class _PlayerPopoverMenuState extends State<_PlayerPopoverMenu> {
         ),
         child: ClipRRect(
           borderRadius: _radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: const Color(0xE0232325),
-                borderRadius: _radius,
-                border: Border.all(color: _hairline, width: 0.5),
-              ),
-              child: Material(
-                type: MaterialType.transparency,
-                child: IntrinsicWidth(
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(
-                      context,
-                    ).copyWith(scrollbars: false),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: rows,
-                      ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xF2232325),
+              borderRadius: _radius,
+              border: Border.all(color: _hairline, width: 0.5),
+            ),
+            child: Material(
+              type: MaterialType.transparency,
+              child: IntrinsicWidth(
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(
+                    context,
+                  ).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: rows,
                     ),
                   ),
                 ),
