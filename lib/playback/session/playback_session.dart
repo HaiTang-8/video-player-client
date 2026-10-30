@@ -247,6 +247,10 @@ class PlaybackSession extends ChangeNotifier {
       _currentUrl = resolved.source.url;
       _filePath = resolved.filePath;
       _setStatus(const PlaybackSessionLoading(resolvingSource: false));
+      // 与打开视频并行获取，起播时画质菜单已就绪
+      if (_variants.isEmpty && !resolved.source.isLocalFile) {
+        unawaited(_loadVariants(item, generation));
+      }
 
       // 画面在原生视图里的内核先暂停打开，视图挂载后再播放：
       // 页面在 Ready 之后才创建视图，自动播放会在画面显示前先出声（命中缓存时缓冲瞬间完成，尤其明显）
@@ -274,9 +278,6 @@ class PlaybackSession extends ChangeNotifier {
       unawaited(
         _loadExternalSubtitles(item, resolved, generation, restoreSubtitle),
       );
-      if (_variants.isEmpty && !resolved.source.isLocalFile) {
-        unawaited(_loadVariants(item, generation));
-      }
       if (waitForView) _armPendingStart();
       _setStatus(const PlaybackSessionReady());
     } on PlaybackSourceUnavailable catch (e) {

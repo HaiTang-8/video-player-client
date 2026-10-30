@@ -16,6 +16,9 @@ class FakePlaybackEngine implements PlaybackEngine {
 
   /// 设置后 seek 会等待它完成，用于模拟慢 seek
   Completer<void>? seekGate;
+
+  /// 设置后 open 会等待它完成，用于模拟内核打开耗时
+  Completer<void>? openGate;
   bool disposed = false;
 
   @override
@@ -51,6 +54,7 @@ class FakePlaybackEngine implements PlaybackEngine {
     openedSource = source;
     openedStartPosition = startPosition;
     openedAutoPlay = autoPlay;
+    await openGate?.future;
     final error = openError;
     if (error != null) throw error;
     hub.resetForNewMedia();

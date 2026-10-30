@@ -856,6 +856,21 @@ void main() {
       expect(session.currentVariant, original);
     });
 
+    test('are fetched while the engine is still opening', () async {
+      final gate = engine.openGate = Completer<void>();
+      final loading = session.load(movie);
+      await pumpEventQueue();
+
+      expect(sourceGateway.variantRequests, 1);
+      expect(session.variants, [original, superHd]);
+      expect(session.status, isA<PlaybackSessionLoading>());
+
+      gate.complete();
+      await loading;
+      expect(session.status, isA<PlaybackSessionReady>());
+      expect(session.currentVariant, original);
+    });
+
     test('are not fetched for local files', () async {
       resolver.resultFor = null;
       resolver.result = const ResolvedPlayback(
