@@ -94,7 +94,7 @@ void main() {
   test(
     'throughput scales with connections under a per-connection limit',
     () async {
-      upstream.bytesPerSecond = 128 * 1024;
+      upstream.bytesPerSecond = 512 * 1024;
       final proxy = newProxy();
       final uri = await proxy.register(
         upstream.mediaUri,
@@ -103,12 +103,12 @@ void main() {
       );
 
       final watch = Stopwatch()..start();
-      final (_, body) = await get(uri, range: 'bytes=0-${(512 << 10) - 1}');
+      final (_, body) = await get(uri);
       watch.stop();
-      expect(body, bytes.sublist(0, 512 << 10));
-      // 单连接需要 4 秒；8 个连接并发应明显更快
-      expect(watch.elapsed, lessThan(const Duration(milliseconds: 2000)));
-      expect((await proxy.stats())['peakBlocks'], greaterThanOrEqualTo(6));
+      expect(body, bytes);
+      // 单连接需要 6 秒；并发（128 KiB 首块 + 3 个 1 MiB 块）约 2 秒
+      expect(watch.elapsed, lessThan(const Duration(seconds: 4)));
+      expect((await proxy.stats())['peakBlocks'], greaterThanOrEqualTo(3));
     },
   );
 
@@ -237,5 +237,86 @@ void main() {
       'bytes ${size + 900}-${size + 999}/${size + 1000}',
     );
     expect(body, changed.sublist(size + 900));
+  });
+  group('dynamic segmentation', () {
+    // 首块 128 KiB，之后每块 1 MiB；从 1152 KiB 开始的块首字节慢、速度也慢（实测冷门位置的典型表现）
+    const slowStart = 1152 << 10;
+    const slowRate = 128 * 1024;
+
+    void slowBlock() {
+      upstream
+        ..bytesPerSecondFor = ((start) => start == slowStart ? slowRate : null)
+        ..firstByteLatencyFor =
+            ((start) => start == slowStart ? const Duration(seconds: 1) : null);
+    }
+
+    test('a slow block is split across idle connections', () async {
+      slowBlock();
+      final proxy = newProxy();
+      final uri = await proxy.register(
+        upstream.mediaUri,
+        cookie,
+        maxConnections: 4,
+      );
+
+      final watch = Stopwatch()..start();
+      final (_, body) = await get(uri, range: 'bytes=0-');
+      watch.stop();
+      expect(body, bytes);
+      // 不切分时这个块要 1 + 1 MiB ÷ 128 KiB/s = 9 秒；后一半交给空闲连接后约 5 秒
+      expect(watch.elapsed, lessThan(const Duration(seconds: 7)));
+      final stats = await proxy.stats();
+      expect(stats['splits'], greaterThan(0));
+      expect(stats['peakBlocks'], lessThanOrEqualTo(4));
+    });
+
+    test('split blocks are written to the cache in order', () async {
+      slowBlock();
+      final proxy = newProxy(quota: 64 << 20);
+      final uri = await proxy.register(
+        upstream.mediaUri,
+        cookie,
+        cacheId: 'split',
+        maxConnections: 4,
+      );
+
+      final (_, first) = await get(uri, range: 'bytes=0-');
+      expect(first, bytes);
+      expect((await proxy.stats())['splits'], greaterThan(0));
+
+      final requests = upstream.requestCount;
+      final (_, again) = await get(uri, range: 'bytes=0-');
+      expect(again, bytes);
+      expect(upstream.requestCount, requests, reason: '第二次全部从缓存读取');
+    });
+
+    test('a disconnect during a split cancels every piece', () async {
+      slowBlock();
+      final proxy = newProxy();
+      final uri = await proxy.register(
+        upstream.mediaUri,
+        cookie,
+        maxConnections: 4,
+      );
+
+      final request = await client.openUrl('GET', uri);
+      final response = await request.close();
+      final sub = response.listen((_) {});
+      final deadline = DateTime.now().add(const Duration(seconds: 5));
+      while (((await proxy.stats())['splits'] ?? 0) == 0 &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect((await proxy.stats())['splits'], greaterThan(0));
+      await sub.cancel();
+      client.close(force: true);
+
+      final idle = DateTime.now().add(const Duration(seconds: 3));
+      while (upstream.active > 0 && DateTime.now().isBefore(idle)) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      expect(upstream.active, 0);
+      client = HttpClient()..findProxy = (_) => 'DIRECT';
+    });
   });
 }

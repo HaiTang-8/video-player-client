@@ -212,7 +212,7 @@ class MultiThreadDownloader: NSObject {
 
     private func parseParentTaskId(from description: String) -> String? {
         let parts = description.split(separator: "|")
-        guard parts.count == 2 else { return nil }
+        guard parts.count >= 2 else { return nil }
         return String(parts[0])
     }
 
@@ -424,6 +424,10 @@ class BackgroundDownloadTask {
     private let lock = NSLock()
     private var progressTimer: Timer?
     private var tempDirectory: String = ""
+    private var requestHeaders: [String: String] = [:]
+
+    /// 已完成分片的速率（字节/秒），用来判断哪些分片明显慢
+    private var completedRates: [Double] = []
 
     private var is115Link: Bool {
         return url.contains("115cdn.net") || url.contains("cdnfhnfile") || url.contains("115.com")
@@ -444,6 +448,10 @@ class BackgroundDownloadTask {
         var downloadedBytes: Int64 = 0
         var completed: Bool = false
         var tempFile: String = ""
+        var startedAt: Date?
+        var primaryTask: Int?
+        /// 慢分片的重复请求：后台任务的范围发出后改不了，只能整段再请求一次，先完成的生效
+        var hedgeTask: Int?
     }
 
     init(taskId: String, url: String, savePath: String, headers: [String: String],
@@ -548,11 +556,18 @@ class BackgroundDownloadTask {
 
         // Attach in-flight URLSession tasks and reconcile progress from disk/tasks.
         lock.lock()
+        requestHeaders = effectiveHeaders
         for task in tasks {
             urlSessionTasks[task.taskIdentifier] = task
             guard let desc = task.taskDescription, let idx = parseChunkIndex(from: desc) else { continue }
             if var info = chunkInfo[idx], !info.completed {
                 info.downloadedBytes = max(info.downloadedBytes, task.countOfBytesReceived)
+                if desc.hasSuffix("|h") {
+                    info.hedgeTask = task.taskIdentifier
+                } else {
+                    info.primaryTask = task.taskIdentifier
+                }
+                info.startedAt = info.startedAt ?? Date()
                 chunkInfo[idx] = info
             }
         }
@@ -649,6 +664,10 @@ class BackgroundDownloadTask {
             effectiveHeaders["User-Agent"] = MultiThreadDownloader.defaultUserAgent
         }
 
+        lock.lock()
+        requestHeaders = effectiveHeaders
+        lock.unlock()
+
         guard let fileSize = getFileSize(url: url, headers: effectiveHeaders) else {
             onProgress(DownloadProgress(taskId: taskId, downloadedBytes: 0, totalBytes: 0,
                                         speed: 0, activeThreads: 0, status: "failed", error: "Cannot get file size"))
@@ -705,10 +724,10 @@ class BackgroundDownloadTask {
         }
     }
 
-    private func startChunkDownload(index: Int, headers: [String: String]) {
+    private func startChunkDownload(index: Int, headers: [String: String], hedge: Bool = false) {
         guard let urlObj = URL(string: url),
               let session = session else {
-            markChunkCompleted(index: index, success: false)
+            if !hedge { markChunkCompleted(index: index, success: false) }
             return
         }
 
@@ -730,13 +749,54 @@ class BackgroundDownloadTask {
 
         lock.lock()
         urlSessionTasks[task.taskIdentifier] = task
-        chunkInfo[index]?.downloadedBytes = 0
+        if hedge {
+            chunkInfo[index]?.hedgeTask = task.taskIdentifier
+        } else {
+            chunkInfo[index]?.downloadedBytes = 0
+            chunkInfo[index]?.primaryTask = task.taskIdentifier
+            chunkInfo[index]?.startedAt = Date()
+        }
         lock.unlock()
 
-        task.taskDescription = "\(taskId)|\(index)"
+        task.taskDescription = hedge ? "\(taskId)|\(index)|h" : "\(taskId)|\(index)"
         task.resume()
 
-        NSLog("[iOS-Downloader] Started chunk %d, task %d", index, task.taskIdentifier)
+        NSLog("[iOS-Downloader] Started %@ %d, task %d", hedge ? "hedge for chunk" : "chunk", index, task.taskIdentifier)
+    }
+
+    /// 收尾阶段（一半以上的连接名额空闲）给明显慢的分片（速率不到已完成分片平均值的 1/4、已下载 5 秒以上）整段再发一个请求
+    private func hedgeSlowChunks() {
+        lock.lock()
+        guard !cancelled, !isPaused, !isFinished, totalChunks > 1, completedRates.count >= 3 else {
+            lock.unlock()
+            return
+        }
+        let pending = chunkInfo.values.filter { !$0.completed }
+        let inFlight = pending.count + pending.filter { $0.hedgeTask != nil }.count
+        let idle = effectiveThreadCount - inFlight
+        guard idle > 0, pending.count * 2 <= effectiveThreadCount else {
+            lock.unlock()
+            return
+        }
+        let average = completedRates.reduce(0, +) / Double(completedRates.count)
+        let now = Date()
+        let slow = pending
+            .compactMap { info -> (Int, Double)? in
+                guard info.hedgeTask == nil, info.primaryTask != nil, let started = info.startedAt else { return nil }
+                let elapsed = now.timeIntervalSince(started)
+                guard elapsed > 5 else { return nil }
+                let rate = Double(info.downloadedBytes) / elapsed
+                return rate < average / 4 ? (info.index, rate) : nil
+            }
+            .sorted { $0.1 < $1.1 }
+            .prefix(idle)
+            .map { $0.0 }
+        let headers = requestHeaders
+        lock.unlock()
+
+        for index in slow {
+            startChunkDownload(index: index, headers: headers, hedge: true)
+        }
     }
 
     func handleProgress(downloadTask: URLSessionDownloadTask, bytesWritten: Int64, totalBytesWritten: Int64) {
@@ -744,11 +804,12 @@ class BackgroundDownloadTask {
               let index = parseChunkIndex(from: desc) else { return }
 
         lock.lock()
-        if var info = chunkInfo[index] {
+        if var info = chunkInfo[index], !info.completed {
+            // 重复请求与原请求下载的是同一段，进度取两者中较多的一个
             let prevBytes = info.downloadedBytes
-            info.downloadedBytes = totalBytesWritten
+            info.downloadedBytes = max(prevBytes, totalBytesWritten)
             chunkInfo[index] = info
-            downloadedBytes += (totalBytesWritten - prevBytes)
+            downloadedBytes += (info.downloadedBytes - prevBytes)
         }
         let currentBytes = downloadedBytes
         let total = totalBytes
@@ -786,6 +847,12 @@ class BackgroundDownloadTask {
             lock.unlock()
             return
         }
+        if info.completed {
+            // 重复请求中后完成的一个
+            lock.unlock()
+            try? FileManager.default.removeItem(at: location)
+            return
+        }
 
         let tempFile = info.tempFile
         lock.unlock()
@@ -798,9 +865,19 @@ class BackgroundDownloadTask {
             try fileManager.moveItem(at: location, to: URL(fileURLWithPath: tempFile))
 
             lock.lock()
+            let size = info.end - info.start + 1
+            downloadedBytes += size - info.downloadedBytes
+            info.downloadedBytes = size
             info.completed = true
+            if let started = info.startedAt {
+                let duration = Date().timeIntervalSince(started)
+                if duration > 0 { completedRates.append(Double(size) / duration) }
+            }
+            let loser = downloadTask.taskIdentifier == info.hedgeTask ? info.primaryTask : info.hedgeTask
+            let loserTask = loser.flatMap { urlSessionTasks[$0] }
             chunkInfo[index] = info
             lock.unlock()
+            loserTask?.cancel()
 
             NSLog("[iOS-Downloader] Chunk %d completed, saved to %@", index, tempFile)
             markChunkCompleted(index: index, success: true)
@@ -815,12 +892,34 @@ class BackgroundDownloadTask {
               let index = parseChunkIndex(from: desc) else { return }
 
         NSLog("[iOS-Downloader] Chunk %d error: %@", index, error.localizedDescription)
+        lock.lock()
+        if var info = chunkInfo[index] {
+            let id = sessionTask.taskIdentifier
+            // 已完成，或者重复请求中的另一个还在下载：等它的结果
+            if info.completed {
+                lock.unlock()
+                return
+            }
+            if id == info.hedgeTask, info.primaryTask != nil {
+                info.hedgeTask = nil
+                chunkInfo[index] = info
+                lock.unlock()
+                return
+            }
+            if id == info.primaryTask, info.hedgeTask != nil {
+                info.primaryTask = nil
+                chunkInfo[index] = info
+                lock.unlock()
+                return
+            }
+        }
+        lock.unlock()
         markChunkCompleted(index: index, success: false)
     }
 
     private func parseChunkIndex(from description: String) -> Int? {
         let parts = description.split(separator: "|")
-        guard parts.count == 2, let index = Int(parts[1]) else { return nil }
+        guard parts.count >= 2, let index = Int(parts[1]) else { return nil }
         return index
     }
 
@@ -937,6 +1036,7 @@ class BackgroundDownloadTask {
     }
 
     private func reportProgress() {
+        hedgeSlowChunks()
         let now = Date()
 
         lock.lock()

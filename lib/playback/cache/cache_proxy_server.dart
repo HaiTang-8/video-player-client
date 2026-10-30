@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -168,6 +167,13 @@ class _CacheProxyServer {
   static const _upstreamTimeout = Duration(seconds: 30);
   static const _enforceInterval = Duration(seconds: 1);
 
+  /// 拖动耗时日志记录交付前 4 MiB 的时间（大致是播放器恢复播放所需的数据量）
+  static const _leadBytes = 4 << 20;
+
+  /// 切出的每一半至少这么大：新请求的首字节延迟（实测约 0.45 秒）要抵得过省下的时间。
+  /// 实测 256 KiB 时切分次数翻倍、拖动反而变慢
+  static const _minSplit = 512 << 10;
+
   final String _token;
   final CacheStore? _store;
   final SendPort? _events;
@@ -202,6 +208,7 @@ class _CacheProxyServer {
     'refreshes': 0,
     'blocks': 0,
     'peakBlocks': 0,
+    'splits': 0,
   };
   int _activeBlocks = 0;
 
@@ -833,12 +840,22 @@ class _CacheProxyServer {
     String? id,
   }) {
     final priority = ++_streamSeq;
-    final pending = Queue<_Block>();
+    final pending = <_Block>[];
     final controller = StreamController<List<int>>();
     var cancelled = false;
     Completer<void>? resumed;
+    final clock = Stopwatch()..start();
+    var delivered = 0;
+    int? firstMs;
+    int? leadMs;
+    var splits = 0;
 
     Future<void> emit(List<int> chunk) async {
+      firstMs ??= clock.elapsedMilliseconds;
+      delivered += chunk.length;
+      if (leadMs == null && delivered >= _leadBytes) {
+        leadMs = clock.elapsedMilliseconds;
+      }
       controller.add(chunk);
       while (controller.isPaused && !cancelled) {
         await (resumed ??= Completer<void>()).future;
@@ -850,26 +867,58 @@ class _CacheProxyServer {
           store != null && _writable ? store.writer(id!, from) : null;
       var next = from;
       var index = 0;
+      late final void Function() splitIdle;
+
+      void launch(_Block block) {
+        block.result = _fetchBlock(entry, block, size, etag)..ignore();
+        block.result.then<void>(
+          (_) => splitIdle(),
+          onError: (Object _) {},
+        );
+      }
+
       void fill() {
         while (!cancelled && pending.length < entry.connections && next < to) {
-          final range = ByteRange(
-            next,
-            math.min(next + _blockSizeAt(index, entry.connections), to),
+          final end = math.min(
+            next + _blockSizeAt(index),
+            to,
           );
-          final block = _Block(range, priority, index++);
-          block.result = _fetchBlock(entry, block, size, etag)..ignore();
+          final block = _Block(next, end, priority, index++);
+          launch(block);
           pending.add(block);
-          next = range.end;
+          next = end;
         }
       }
+
+      // 动态分段：有连接空闲时，把排在最前面、剩余最多的在途块对半切开，后一半交给空闲连接，
+      // 避免最慢的块拖住后面已经到达的数据
+      splitIdle = () {
+        if (cancelled || entry.connections <= 1) return;
+        while (pending.where((b) => !b.done).length < entry.connections) {
+          final at = pending.indexWhere(
+            (b) => !b.done && b.remaining >= 2 * _minSplit,
+          );
+          if (at < 0) return;
+          final victim = pending[at];
+          final tail = victim.end;
+          final mid = victim.splitPoint;
+          if (!victim.shrinkTo(mid)) return;
+          final piece = _Block(mid, tail, priority, victim.index);
+          launch(piece);
+          pending.insert(at + 1, piece);
+          splits++;
+          _count('splits');
+        }
+      };
 
       try {
         fill();
         while (pending.isNotEmpty && !cancelled) {
           final bytes = await pending.first.result;
           if (cancelled) return;
-          pending.removeFirst();
+          pending.removeAt(0);
           fill();
+          splitIdle();
           await writer?.add(bytes);
           _count('upstreamBytes', bytes.length);
           await emit(bytes);
@@ -928,6 +977,15 @@ class _CacheProxyServer {
           block.cancel();
         }
         pending.clear();
+        _events?.send({
+          'event': 'served',
+          'start': start,
+          'bytes': delivered,
+          'firstMs': firstMs,
+          'leadMs': leadMs,
+          'totalMs': clock.elapsedMilliseconds,
+          'splits': splits,
+        });
       }
     }
 
@@ -979,13 +1037,10 @@ class _CacheProxyServer {
     itemKey: entry.itemKey,
   );
 
-  /// 起播阶段用小块尽快交付第一批字节，之后逐步增大以减少请求数
-  static int _blockSizeAt(int index, int connections) =>
-      index < connections
-          ? 64 << 10
-          : index < connections * 2
-          ? 256 << 10
-          : 1 << 20;
+  /// 第一个块小，尽快交付首字节（打开时读封装头、索引都是小读取）；之后都用 1 MiB，慢块交给动态分段切开。
+  /// 实测（夸克冷门位置）每个请求首字节约 0.45 秒，小块爬坡（64 KiB → 256 KiB）拖动后拿到 8 MiB 要 6–8 秒，这样约 1.5 秒
+  static int _blockSizeAt(int index) =>
+      index == 0 ? 128 << 10 : 1 << 20;
 
   Future<Uint8List> _fetchBlock(
     _Entry entry,
@@ -999,11 +1054,10 @@ class _CacheProxyServer {
     _stats['peakBlocks'] = math.max(_stats['peakBlocks']!, ++_activeBlocks);
     try {
       if (block.cancelled) throw const _Cancelled();
-      final range = block.range;
       final upstream = await _openUpstream(
         'GET',
         entry,
-        'bytes=${range.start}-${range.end - 1}',
+        'bytes=${block.start}-${block.requestEnd - 1}',
       );
       if (upstream == null) throw const HttpException('upstream unavailable');
       final info = _UpstreamInfo(upstream);
@@ -1012,7 +1066,7 @@ class _CacheProxyServer {
           info.etag != null && etag != null && info.etag != etag;
       if (changed ||
           info.status != HttpStatus.partialContent ||
-          info.start != range.start) {
+          info.start != block.start) {
         await upstream.drain<void>().catchError((_) {});
         if (changed) throw _UpstreamChanged(info);
         throw HttpException('unexpected upstream status ${info.status}');
@@ -1264,40 +1318,63 @@ final class _SlotTicket {
   }
 }
 
-/// 并发回源的一个块
+/// 并发回源的一个块。读取期间可以被切短（[shrinkTo]），后一半交给其他连接；
+/// 收够新的长度就交付并断开上游
 final class _Block {
-  _Block(this.range, this.priority, this.index);
+  _Block(this.start, this.end, this.priority, this.index);
 
-  final ByteRange range;
+  final int start;
+  int end;
   final int priority;
   final int index;
   late Future<Uint8List> result;
   _SlotTicket? ticket;
   StreamSubscription<List<int>>? _subscription;
   Completer<Uint8List>? _body;
+  BytesBuilder? _builder;
   bool cancelled = false;
+  bool done = false;
+
+  /// 发起请求时的终点；之后被切短时不再重新请求，读到新终点即停
+  late final int requestEnd = end;
+
+  int get length => end - start;
+  int get received => _builder?.length ?? 0;
+  int get remaining => length - received;
+
+  /// 剩余部分的中点
+  int get splitPoint => start + received + remaining ~/ 2;
+
+  /// 把终点提前到 [newEnd]；已经读到或越过新终点时立即交付。不能缩短时返回 false
+  bool shrinkTo(int newEnd) {
+    if (done || newEnd >= end || newEnd <= start + received) return false;
+    end = newEnd;
+    _completeIfFull();
+    return true;
+  }
 
   /// 读满整个块；多出的字节丢弃，提前结束时报错
   Future<Uint8List> read(HttpClientResponse upstream) {
     final body = _body = Completer<Uint8List>();
-    final builder = BytesBuilder(copy: false);
+    final builder = _builder = BytesBuilder(copy: false);
     _subscription = upstream.listen(
-      builder.add,
+      (chunk) {
+        builder.add(chunk);
+        _completeIfFull();
+      },
       onDone: () {
         if (body.isCompleted) return;
-        final bytes = builder.takeBytes();
-        if (bytes.length < range.length) {
+        if (builder.length < length) {
+          done = true;
           body.completeError(const HttpException('upstream ended early'));
         } else {
-          body.complete(
-            bytes.length == range.length
-                ? bytes
-                : Uint8List.sublistView(bytes, 0, range.length),
-          );
+          _completeIfFull();
         }
       },
       onError: (Object e) {
-        if (!body.isCompleted) body.completeError(e);
+        if (body.isCompleted) return;
+        done = true;
+        body.completeError(e);
       },
       cancelOnError: true,
     );
@@ -1305,9 +1382,25 @@ final class _Block {
     return body.future;
   }
 
+  void _completeIfFull() {
+    final body = _body;
+    final builder = _builder;
+    if (body == null || builder == null || body.isCompleted) return;
+    if (builder.length < length) return;
+    done = true;
+    final bytes = builder.takeBytes();
+    body.complete(
+      bytes.length == length ? bytes : Uint8List.sublistView(bytes, 0, length),
+    );
+    final subscription = _subscription;
+    _subscription = null;
+    if (subscription != null) unawaited(subscription.cancel());
+  }
+
   /// 只让排队中的块让出名额；已拿到连接的块在 [_CacheProxyServer._fetchBlock] 结束时归还，避免超出上限
   void cancel() {
     cancelled = true;
+    done = true;
     final waiting = ticket;
     if (waiting != null && !waiting._granted) waiting.release();
     final subscription = _subscription;

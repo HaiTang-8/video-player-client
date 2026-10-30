@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../data/services/log_service.dart';
 import 'cache_proxy_server.dart';
 import 'playback_cache_catalog.dart';
 
@@ -293,6 +294,15 @@ class PlaybackProxy implements PlaybackCacheCatalog {
 
   Future<void> _onEvent(Object? message) async {
     final map = message as Map;
+    if (map['event'] == 'served') {
+      LogService.instance.info(
+        'PlaybackProxy',
+        'served start=${map['start']} bytes=${map['bytes']} '
+            'first=${map['firstMs']}ms 4MiB=${map['leadMs']}ms '
+            'total=${map['totalMs']}ms splits=${map['splits']}',
+      );
+      return;
+    }
     if (map['event'] != 'refresh') return;
     final reply = map['reply'] as SendPort;
     try {

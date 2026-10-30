@@ -33,8 +33,14 @@ class RangeTestServer {
   /// 每个请求（含 HEAD 与 302）返回响应头之前的等待时间
   Duration firstByteLatency = Duration.zero;
 
+  /// 按请求起点单独设置首字节延迟（返回 null 时用 [firstByteLatency]）
+  Duration? Function(int start)? firstByteLatencyFor;
+
   /// 单个连接的限速；null 表示不限速
   int? bytesPerSecond;
+
+  /// 按请求起点单独限速（返回 null 时用 [bytesPerSecond]），模拟个别连接特别慢
+  int? Function(int start)? bytesPerSecondFor;
 
   /// 请求必须带上的请求头，缺少或不一致时返回 [rejectStatus]
   Map<String, String> requiredHeaders = const {};
@@ -93,8 +99,11 @@ class RangeTestServer {
     _mark('> $line');
     final response = request.response;
     try {
-      if (firstByteLatency > Duration.zero) {
-        await Future<void>.delayed(firstByteLatency);
+      final rangeStart =
+          int.tryParse(RegExp(r'bytes=(\d+)-').firstMatch(range ?? '')?.group(1) ?? '') ?? 0;
+      final latency = firstByteLatencyFor?.call(rangeStart) ?? firstByteLatency;
+      if (latency > Duration.zero) {
+        await Future<void>.delayed(latency);
       }
       final segments = request.uri.pathSegments;
       final authorized = requiredHeaders.entries.every(
@@ -198,7 +207,7 @@ class RangeTestServer {
         remaining -= chunk.length;
         sent += chunk.length;
         bytesServed += chunk.length;
-        final limit = bytesPerSecond;
+        final limit = bytesPerSecondFor?.call(start) ?? bytesPerSecond;
         if (limit != null) {
           final due = Duration(microseconds: sent * 1000000 ~/ limit);
           final wait = due - watch.elapsed;

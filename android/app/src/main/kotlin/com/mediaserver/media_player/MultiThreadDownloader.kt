@@ -30,6 +30,9 @@ class MultiThreadDownloader(
         private val chunkDispatcher = Dispatchers.IO.limitedParallelism(256)
         private const val TAG = "MultiThreadDownloader"
         private const val MIN_CHUNK_SIZE = 1024 * 1024L // 1MB
+
+        /** 切出的每一半至少这么大：新请求约有 0.5 秒首字节延迟 */
+        private const val MIN_SPLIT = 2L * 1024 * 1024
         private const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57"
     }
 
@@ -107,19 +110,8 @@ class MultiThreadDownloader(
         val file = File(savePath)
         file.parentFile?.mkdirs()
 
-        // Calculate chunks - ensure chunk count equals thread count for 115 links
-        val chunkCount = threads
-        val chunkSize = (fileSize + chunkCount - 1) / chunkCount
-        val chunks = mutableListOf<LongRange>()
-
-        var offset = 0L
-        while (offset < fileSize) {
-            val end = minOf(offset + chunkSize - 1, fileSize - 1)
-            chunks.add(offset..end)
-            offset = end + 1
-        }
-
-        Log.d(TAG, "Created ${chunks.size} chunks")
+        // 分段数等于线程数（115 链接为 1）；之后由动态分段把慢的分段切给空闲连接
+        val plan = SegmentPlan(fileSize, threads, MIN_SPLIT)
 
         // Progress tracking
         val downloadedBytes = AtomicLong(0)
@@ -160,64 +152,64 @@ class MultiThreadDownloader(
                 raf.setLength(fileSize)
             }
 
-            // Start all chunks simultaneously (like aria2)
-            val chunkJobs = chunks.mapIndexed { index, range ->
+            // 每个连接循环领取分段，领不到（全部完成或剩余太小不值得再切）时退出
+            val workers = (1..threads).map {
                 CoroutineScope(chunkDispatcher).async {
                     activeThreads.incrementAndGet()
                     try {
-                        downloadChunk(
-                            url = url,
-                            headers = effectiveHeaders,
-                            range = range,
-                            file = file,
-                            cancelFlag = cancelFlag,
-                            pauseFlag = pauseFlag,
-                            onBytesDownloaded = { bytes ->
-                                downloadedBytes.addAndGet(bytes)
+                        while (!cancelFlag.get()) {
+                            val segment = plan.claim() ?: break
+                            var error = false
+                            try {
+                                downloadSegment(url, effectiveHeaders, plan, segment, file, cancelFlag, pauseFlag) { bytes ->
+                                    downloadedBytes.addAndGet(bytes)
+                                }
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Segment failed at ${segment.pos}", e)
+                                error = true
+                            } finally {
+                                plan.release(segment, error)
                             }
-                        )
-                        Log.d(TAG, "Chunk $index completed")
-                        true
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Chunk $index failed", e)
-                        false
+                        }
                     } finally {
                         activeThreads.decrementAndGet()
                     }
                 }
             }
-
-            // Wait for all chunks
-            val results = chunkJobs.awaitAll()
+            workers.awaitAll()
             progressJob.cancel()
+            Log.d(TAG, "Segments split ${plan.splits} times")
 
             if (cancelFlag.get()) {
                 onProgress(DownloadProgress(taskId, downloadedBytes.get(), fileSize, 0.0, 0, "cancelled"))
                 return
             }
 
-            if (results.all { it }) {
+            if (plan.isComplete()) {
                 onProgress(DownloadProgress(taskId, fileSize, fileSize, 0.0, 0, "completed"))
             } else {
-                onProgress(DownloadProgress(taskId, downloadedBytes.get(), fileSize, 0.0, 0, "failed", "Some chunks failed"))
+                onProgress(DownloadProgress(taskId, downloadedBytes.get(), fileSize, 0.0, 0, "failed", "Some segments failed"))
             }
         } finally {
             progressJob.cancel()
         }
     }
 
-    private suspend fun downloadChunk(
+    private suspend fun downloadSegment(
         url: String,
         headers: Map<String, String>,
-        range: LongRange,
+        plan: SegmentPlan,
+        segment: SegmentPlan.Segment,
         file: File,
         cancelFlag: AtomicBoolean,
         pauseFlag: AtomicBoolean,
         onBytesDownloaded: (Long) -> Unit
     ) {
+        val (from, to) = plan.window(segment)
+        if (from >= to) return
         val requestBuilder = Request.Builder()
             .url(url)
-            .header("Range", "bytes=${range.first}-${range.last}")
+            .header("Range", "bytes=$from-${to - 1}")
 
         headers.forEach { (key, value) ->
             requestBuilder.header(key, value)
@@ -233,25 +225,38 @@ class MultiThreadDownloader(
             val buffer = ByteArray(8192)
 
             RandomAccessFile(file, "rw").use { raf ->
-                raf.seek(range.first)
-
                 body.byteStream().use { input ->
                     var bytesRead: Int
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        if (cancelFlag.get()) break
+                    reading@ while (input.read(buffer).also { bytesRead = it } != -1) {
+                        if (cancelFlag.get()) return
 
                         while (pauseFlag.get() && !cancelFlag.get()) {
                             delay(100)
                         }
 
-                        if (cancelFlag.get()) break
+                        if (cancelFlag.get()) return
 
-                        raf.write(buffer, 0, bytesRead)
-                        onBytesDownloaded(bytesRead.toLong())
+                        var written = 0
+                        while (written < bytesRead) {
+                            val slice = plan.reserve(segment, bytesRead - written)
+                            // 分段被切短后写到新终点即停，后面的数据由领走后一半的连接负责
+                            if (slice.length == 0) break@reading
+                            try {
+                                raf.seek(slice.offset)
+                                raf.write(buffer, written, slice.length)
+                            } catch (e: java.io.IOException) {
+                                plan.fail()
+                                throw e
+                            }
+                            written += slice.length
+                            onBytesDownloaded(slice.length.toLong())
+                        }
                     }
                 }
             }
         }
+        val (pos, end) = plan.window(segment)
+        if (pos < end && !cancelFlag.get()) throw java.io.IOException("Segment ended early")
     }
 
     private fun getFileSize(url: String, headers: Map<String, String>): Long? {
