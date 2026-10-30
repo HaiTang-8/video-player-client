@@ -36,6 +36,26 @@ class StorageService {
     );
   }
 
+  /// 发起扫码登录
+  Future<ApiResponse<QrLoginChallenge>> startQrLogin(String type) async {
+    return _client.post<QrLoginChallenge>(
+      '${ApiConstants.storages}/auth/${Uri.encodeComponent(type)}/qr',
+      fromJson:
+          (json) => QrLoginChallenge.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  /// 查询扫码登录状态
+  Future<ApiResponse<QrLoginStatus>> pollQrLogin(
+    String type,
+    String sessionId,
+  ) async {
+    return _client.get<QrLoginStatus>(
+      '${ApiConstants.storages}/auth/${Uri.encodeComponent(type)}/qr/${Uri.encodeComponent(sessionId)}',
+      fromJson: (json) => QrLoginStatus.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 添加存储源
   Future<ApiResponse<Storage>> addStorage({
     required String name,

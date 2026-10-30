@@ -43,6 +43,24 @@ class DriverFieldsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 合并外部给出的配置（例如扫码登录得到的 Cookie）
+  void apply(Map<String, String> patch) {
+    final declared = {for (final f in meta.fields) f.key: f};
+    for (final e in patch.entries) {
+      final field = declared[e.key];
+      if (field == null) {
+        _extra[e.key] = e.value;
+      } else if (field.kind == FieldKind.select) {
+        if (field.options.any((o) => o.value == e.value)) {
+          _selected[e.key] = e.value;
+        }
+      } else {
+        _text[e.key]!.text = e.value;
+      }
+    }
+    notifyListeners();
+  }
+
   String _rawValue(FieldSpec field) {
     if (field.kind == FieldKind.select) return _selected[field.key] ?? '';
     final text = _text[field.key]!.text;

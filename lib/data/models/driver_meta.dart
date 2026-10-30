@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 /// 存储源驱动声明（`GET /storages/drivers`），前端按它渲染表单
 class DriverMeta {
   final String type;
@@ -137,5 +140,58 @@ class DriverCaps {
         if (m is String && m.isNotEmpty) m,
     ],
     qrLogin: json['qr_login'] as bool? ?? false,
+  );
+}
+
+enum QrLoginState {
+  pending,
+  scanned,
+  confirmed,
+  expired;
+
+  static QrLoginState fromString(String? value) => QrLoginState.values
+      .firstWhere((s) => s.name == value, orElse: () => QrLoginState.pending);
+}
+
+/// 扫码登录会话；[png] 为服务端生成的二维码图片，[url] 是二维码内容
+class QrLoginChallenge {
+  final String sessionId;
+  final Uint8List png;
+  final String url;
+
+  /// 本机时钟下的过期时间，按服务端返回的剩余秒数换算
+  final DateTime deadline;
+
+  const QrLoginChallenge({
+    required this.sessionId,
+    required this.png,
+    required this.url,
+    required this.deadline,
+  });
+
+  factory QrLoginChallenge.fromJson(Map<String, dynamic> json) =>
+      QrLoginChallenge(
+        sessionId: json['session_id'] as String? ?? '',
+        png: base64Decode(json['qr_png'] as String? ?? ''),
+        url: json['qr_url'] as String? ?? '',
+        deadline: DateTime.now().add(
+          Duration(seconds: (json['expires_in'] as num?)?.toInt() ?? 180),
+        ),
+      );
+}
+
+/// 扫码登录状态；confirmed 时 [settings] 是要填进表单的配置
+class QrLoginStatus {
+  final QrLoginState state;
+  final Map<String, String> settings;
+
+  const QrLoginStatus({required this.state, this.settings = const {}});
+
+  factory QrLoginStatus.fromJson(Map<String, dynamic> json) => QrLoginStatus(
+    state: QrLoginState.fromString(json['status'] as String?),
+    settings: {
+      for (final e in (json['settings'] as Map? ?? const {}).entries)
+        e.key.toString(): e.value?.toString() ?? '',
+    },
   );
 }

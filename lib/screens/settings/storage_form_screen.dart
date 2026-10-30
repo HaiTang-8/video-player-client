@@ -12,6 +12,7 @@ import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import 'driver_fields_form.dart';
+import 'qr_login_dialog.dart';
 import 'storage_type.dart';
 
 
@@ -372,6 +373,12 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       }
       final controller = _driverFieldsFor(meta);
       return [
+        if (meta.capabilities.qrLogin)
+          shadcn.OutlineButton(
+            onPressed: () => _handleQrLogin(controller),
+            leading: const Icon(CupertinoIcons.qrcode_viewfinder, size: 14),
+            child: const Text('扫码登录'),
+          ),
         DriverFieldsForm(controller: controller),
         _buildTestConnectionButton(() => _handleDeclaredTest(controller)),
       ];
@@ -606,6 +613,37 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       message: success ? '连接成功' : (message ?? '连接失败'),
       isError: !success,
     );
+  }
+
+  Future<void> _handleQrLogin(DriverFieldsController controller) async {
+    final service = ref.read(storageServiceProvider);
+    if (service == null) return;
+    final meta = controller.meta;
+    final settings = await showQrLoginDialog(
+      context,
+      title: '扫码登录${meta.label}',
+      appName:
+          _selectedType == StorageType.quark ? '夸克 App' : '${meta.label} App',
+      start: () async {
+        final res = await service.startQrLogin(meta.type);
+        final data = res.data;
+        if (!res.isSuccess || data == null) {
+          throw QrLoginException(res.error ?? '请求失败');
+        }
+        return data;
+      },
+      poll: (sessionId) async {
+        final res = await service.pollQrLogin(meta.type, sessionId);
+        final data = res.data;
+        if (!res.isSuccess || data == null) {
+          throw QrLoginException(res.error ?? '请求失败');
+        }
+        return data;
+      },
+    );
+    if (settings == null || settings.isEmpty || !mounted) return;
+    controller.apply(settings);
+    DialogUtils.showToast(context: context, message: '登录成功，保存后生效');
   }
 
   Map<String, String> _declaredSettings(DriverFieldsController controller) {
