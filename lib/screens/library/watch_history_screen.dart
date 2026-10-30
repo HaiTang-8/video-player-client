@@ -11,6 +11,7 @@ import '../../core/widgets/mobile_app_bar.dart';
 import '../../core/window/window_controls.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import 'widgets/watch_progress_label.dart';
 
 class WatchHistoryScreen extends ConsumerStatefulWidget {
   const WatchHistoryScreen({super.key});
@@ -352,6 +353,15 @@ class _WatchHistoryGridItem extends ConsumerWidget {
                                 ),
                               ),
                             ),
+                            if (primaryItem.duration > 0)
+                              Positioned(
+                                right: 6,
+                                bottom: 10,
+                                child: WatchProgressLabel(
+                                  position: primaryItem.position,
+                                  duration: primaryItem.duration,
+                                ),
+                              ),
                             if (showMultiBadge)
                               Positioned(
                                 top: 6,

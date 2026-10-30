@@ -7,6 +7,7 @@ import '../../../core/window/window_controls.dart';
 import '../../../data/models/models.dart';
 import '../../../core/utils/image_proxy.dart';
 import '../../../providers/providers.dart';
+import 'watch_progress_label.dart';
 
 /// 最近观看行组件
 class WatchHistoryRow extends ConsumerStatefulWidget {
@@ -355,6 +356,15 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
                                     ),
                                   ),
                                 ),
+                                if (_primaryItem.duration > 0)
+                                  Positioned(
+                                    right: 6,
+                                    bottom: 10,
+                                    child: WatchProgressLabel(
+                                      position: _primaryItem.position,
+                                      duration: _primaryItem.duration,
+                                    ),
+                                  ),
                                 if (_showMultiBadge)
                                   Positioned(
                                     top: 6,
@@ -399,7 +409,6 @@ class _WatchHistoryCardState extends ConsumerState<_WatchHistoryCard> {
     final progress = (_primaryItem.progress * 100).toInt();
     return '已观看 $progress%';
   }
-
   Widget _buildImage(String? serverBaseUrl, String? accessToken) {
     final imagePath = _imagePath;
     if (imagePath != null && imagePath.isNotEmpty) {
