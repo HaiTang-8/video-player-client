@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -142,6 +143,21 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
   static const _saveThrottleMs = 2000;
   static const int _maxConcurrentDownloads = 2;
   final Set<String> _startingTaskIds = <String>{};
+
+  /// 预计同时下载的任务数（含等待中的任务），用于分摊连接预算
+  int get _plannedConcurrency => math.min(
+    _maxConcurrentDownloads,
+    math.max(
+      1,
+      state.tasks
+          .where(
+            (t) =>
+                t.status == DownloadStatus.downloading ||
+                t.status == DownloadStatus.pending,
+          )
+          .length,
+    ),
+  );
 
   @override
   DownloadManagerState build() {
@@ -319,7 +335,10 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
         dir: dir,
         filename: filename,
         headers: info.headers,
-        connections: info.maxConnections,
+        connections: DownloadService.shareConnections(
+          info.maxConnections,
+          _plannedConcurrency,
+        ),
       );
 
       var updatedTask = task.copyWith(
@@ -478,6 +497,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
               _updateTask(updatedTask, forceSave: true);
               _processQueue();
             },
+            concurrentTasks: _plannedConcurrency,
           )
           .catchError((e, _) {
             _startingTaskIds.remove(task.id);

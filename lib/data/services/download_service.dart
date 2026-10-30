@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -224,6 +225,14 @@ class DownloadService {
   //   return null;
   // }
 
+  /// 全局下载连接预算（参照 quarklite）：同时下载的任务平分，单任务拿满
+  static const int connectionBudget = 256;
+
+  /// 直链建议的连接数按 [concurrentTasks] 分摊预算；不是直链（[max] 为空）时返回 null
+  static int? shareConnections(int? max, int concurrentTasks) => max == null
+      ? null
+      : math.min(max, (connectionBudget / math.max(1, concurrentTasks)).ceil());
+
   // aria2 使用的 User-Agent，必须与获取下载链接时一致
   static const String aria2UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57';
 
@@ -352,8 +361,9 @@ class DownloadService {
     DownloadTask task,
     void Function(DownloadTask) onProgress,
     void Function(DownloadTask) onComplete,
-    void Function(DownloadTask, String) onError,
-  ) async {
+    void Function(DownloadTask, String) onError, {
+    int concurrentTasks = 1,
+  }) async {
     StreamLink? link;
     int? storageId;
     String? fetchError;
@@ -403,7 +413,10 @@ class DownloadService {
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
 
     final headers = await _downloadHeaders(link, storageId, downloadUserAgent);
-    final connections = link.isDirect ? link.maxConnections : null;
+    final connections = shareConnections(
+      link.isDirect ? link.maxConnections : null,
+      concurrentTasks,
+    );
 
     // 优先使用原生下载器（iOS/Android）
     if (useNativeDownloader && (Platform.isIOS || Platform.isAndroid)) {

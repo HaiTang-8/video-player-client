@@ -142,7 +142,7 @@ class MainActivity : FlutterActivity() {
                     val savePath = call.argument<String>("savePath")!!
                     val headers = call.argument<Map<String, String>>("headers") ?: emptyMap()
                     val displayName = call.argument<String>("displayName")
-                    val threadCount = call.argument<Int>("threadCount")?.coerceIn(1, 32)
+                    val threadCount = call.argument<Int>("threadCount")?.coerceIn(1, 512)
 
                     ensureServiceStarted(onReady = { service ->
                         service.startDownload(taskId, url, savePath, headers, displayName, threadCount)

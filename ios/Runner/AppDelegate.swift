@@ -168,7 +168,7 @@ import ActivityKit
 
         let headers = args["headers"] as? [String: String] ?? [:]
         let displayName = args["displayName"] as? String
-        let threadCount = (args["threadCount"] as? Int).map { min(max($0, 1), 32) }
+        let threadCount = (args["threadCount"] as? Int).map { min(max($0, 1), 512) }
 
         MultiThreadDownloader.shared.startDownload(taskId: taskId, url: url, savePath: savePath, headers: headers, displayName: displayName, threadCount: threadCount)
         result(taskId)

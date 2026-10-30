@@ -25,6 +25,9 @@ class MultiThreadDownloader(
     private val threadCount: Int = 8
 ) {
     companion object {
+        // 分片连接数可达 256（参照 quarklite），Dispatchers.IO 默认最多 64 个线程
+        @OptIn(ExperimentalCoroutinesApi::class)
+        private val chunkDispatcher = Dispatchers.IO.limitedParallelism(256)
         private const val TAG = "MultiThreadDownloader"
         private const val MIN_CHUNK_SIZE = 1024 * 1024L // 1MB
         private const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57"
@@ -159,7 +162,7 @@ class MultiThreadDownloader(
 
             // Start all chunks simultaneously (like aria2)
             val chunkJobs = chunks.mapIndexed { index, range ->
-                CoroutineScope(Dispatchers.IO).async {
+                CoroutineScope(chunkDispatcher).async {
                     activeThreads.incrementAndGet()
                     try {
                         downloadChunk(

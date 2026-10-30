@@ -86,7 +86,8 @@ class MultiThreadDownloader: NSObject {
         config.shouldUseExtendedBackgroundIdleMode = true
         config.timeoutIntervalForRequest = 60
         config.timeoutIntervalForResource = 86400 * 7
-        config.httpMaximumConnectionsPerHost = 6
+        // 分片连接数可达 256（参照 quarklite 的全局连接预算）
+        config.httpMaximumConnectionsPerHost = 256
 
         backgroundSession = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         NSLog("[iOS-Downloader] Background session initialized")

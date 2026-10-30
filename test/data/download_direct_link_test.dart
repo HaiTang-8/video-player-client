@@ -80,6 +80,38 @@ void main() {
     });
   });
 
+  test('link headers override the default user agent', () async {
+    const desktop = 'quark-cloud-drive/2.5.56';
+    final adapter = _RouteAdapter(
+      routes({
+        'delivery': 'direct_link',
+        'url': 'https://cdn.example/a',
+        'headers': {
+          'Cookie': '__pus=a; __puus=x',
+          'User-Agent': desktop,
+          'Referer': 'https://pan.quark.cn/',
+        },
+        'max_connections': 512,
+      }),
+    );
+    final info = await service(adapter).getDownloadInfo(task, userAgent: 'UA');
+
+    expect(info.headers, {
+      'User-Agent': desktop,
+      'Cookie': '__pus=a; __puus=x',
+      'Referer': 'https://pan.quark.cn/',
+    });
+    expect(info.maxConnections, 512);
+  });
+
+  test('connections share the global budget across concurrent tasks', () {
+    expect(DownloadService.shareConnections(512, 1), 256);
+    expect(DownloadService.shareConnections(512, 2), 128);
+    expect(DownloadService.shareConnections(16, 2), 16);
+    expect(DownloadService.shareConnections(512, 0), 256);
+    expect(DownloadService.shareConnections(null, 1), isNull);
+  });
+
   test('an old server response keeps the server url and auth', () async {
     final adapter = _RouteAdapter(routes({'url': '/api/v1/stream/5/a.mkv'}));
     final info = await service(adapter).getDownloadInfo(task);
