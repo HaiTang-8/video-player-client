@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'byte_range.dart';
 import 'cache_eviction.dart';
@@ -66,9 +68,22 @@ class _Entry {
     this.storageId,
     this.serverId,
     this.itemKey,
+    this.connections = 1,
   }) {
     if (url != null) _upstream.complete(true);
   }
+
+  /// 并发回源连接数；大于 1 时按块并发（网盘单连接限速），同一条目的所有请求共用
+  int connections;
+  late final _Slots slots = _Slots(() => connections);
+
+  /// 每次换上游地址加一：请求失败时据此判断别的请求是否已经刷新过
+  int generation = 0;
+  Future<bool>? refreshing;
+
+  /// 透传模式下探测到的文件信息（并发回源需要先知道大小）
+  _UpstreamInfo? probed;
+  Future<_UpstreamInfo?>? probing;
 
   final String id;
   final String? filePath;
@@ -87,6 +102,7 @@ class _Entry {
   void setUpstream(Uri value, Map<String, String> newHeaders) {
     url = value;
     headers = newHeaders;
+    generation++;
     if (!_upstream.isCompleted) _upstream.complete(true);
   }
 
@@ -184,7 +200,13 @@ class _CacheProxyServer {
     'cancelledUpstreams': 0,
     'rebinds': 0,
     'refreshes': 0,
+    'blocks': 0,
+    'peakBlocks': 0,
   };
+  int _activeBlocks = 0;
+
+  /// 并发回源的请求序号：越新的请求越优先拿到连接（拖动进度、读取文件尾的索引）
+  int _streamSeq = 0;
 
   Future<int> bind() async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, _port);
@@ -214,6 +236,7 @@ class _CacheProxyServer {
           storageId: message['storageId'] as int?,
           serverId: message['serverId'] as String?,
           itemKey: message['itemKey'] as String?,
+          connections: math.max(1, message['connections'] as int? ?? 1),
         );
         _entries[id] = registered;
         final registeredCacheId = registered.cacheId;
@@ -228,6 +251,10 @@ class _CacheProxyServer {
         }
         return true;
       case 'upstream':
+        final connections = message['connections'] as int?;
+        if (entry != null && connections != null) {
+          entry.connections = math.max(1, connections);
+        }
         entry?.setUpstream(
           Uri.parse(message['url'] as String),
           Map<String, String>.from(message['headers'] as Map),
@@ -396,6 +423,8 @@ class _CacheProxyServer {
         } finally {
           store.release(cacheId);
         }
+      } else if (entry.connections > 1) {
+        await _serveParallel(request, entry);
       } else {
         await _passThrough(request, entry);
       }
@@ -448,6 +477,18 @@ class _CacheProxyServer {
     final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
     final meta = store[id];
     if (meta == null) {
+      if (entry.connections > 1) {
+        // 并发回源要先知道文件大小：探测后按已知大小的流程处理
+        final info = await _probeOnce(entry);
+        if (info == null) {
+          response.statusCode = HttpStatus.badGateway;
+          await response.close();
+          return;
+        }
+        await _prepare(store, id, entry, info);
+        await _serveCached(request, entry, id, store);
+        return;
+      }
       await _firstContact(request, entry, id, store, rangeHeader);
       return;
     }
@@ -491,6 +532,23 @@ class _CacheProxyServer {
     }
 
     _recordStart(entry, id, store, start);
+    if (entry.connections > 1) {
+      final delivered = await _sendDetached(
+        response,
+        _parallelBody(
+          entry,
+          start,
+          end,
+          meta.size,
+          meta.etag,
+          store: store,
+          id: id,
+        ),
+      );
+      if (delivered < end - start) _count('cancelledUpstreams');
+      _recordRead(entry, id, store, ByteRange(start, start + delivered));
+      return;
+    }
     var delivered = 0;
     try {
       await response.addStream(
@@ -661,6 +719,312 @@ class _CacheProxyServer {
     }
   }
 
+  /// 透传 + 并发回源：先探测文件大小，按播放器的 Range 自行组织响应头
+  Future<void> _serveParallel(HttpRequest request, _Entry entry) async {
+    final response = request.response;
+    final info = entry.probed ??= await _probeOnce(entry);
+    if (info == null) {
+      response.statusCode = HttpStatus.badGateway;
+      await response.close();
+      return;
+    }
+    final size = info.size!;
+    var start = 0;
+    var end = size;
+    final rangeHeader = request.headers.value(HttpHeaders.rangeHeader);
+    if (rangeHeader != null) {
+      final parsed = _parseRange(rangeHeader, size);
+      if (parsed == null) {
+        response
+          ..statusCode = HttpStatus.requestedRangeNotSatisfiable
+          ..headers.set(HttpHeaders.contentRangeHeader, 'bytes */$size');
+        await response.close();
+        return;
+      }
+      (start, end) = parsed;
+      response
+        ..statusCode = HttpStatus.partialContent
+        ..headers.set(
+          HttpHeaders.contentRangeHeader,
+          'bytes $start-${end - 1}/$size',
+        );
+    }
+    response.headers
+      ..set(HttpHeaders.acceptRangesHeader, 'bytes')
+      ..set(
+        HttpHeaders.contentTypeHeader,
+        info.contentType ?? 'application/octet-stream',
+      );
+    if (info.etag != null) {
+      response.headers.set(HttpHeaders.etagHeader, info.etag!);
+    }
+    if (info.lastModified != null) {
+      response.headers.set(HttpHeaders.lastModifiedHeader, info.lastModified!);
+    }
+    response.contentLength = end - start;
+    if (request.method == 'HEAD') {
+      await response.close();
+      return;
+    }
+    final delivered = await _sendDetached(
+      response,
+      _parallelBody(entry, start, end, size, info.etag),
+    );
+    if (delivered < end - start) _count('cancelledUpstreams');
+  }
+
+  /// 接管 socket 发送响应体：HttpResponse 只有在下一次写入失败时才发现播放器断开，
+  /// 并发回源时等待块的间隙可能很长，所以改为监听读端的 EOF，断开后立即取消响应体（中止在途块）。
+  /// 返回已发送的字节数；响应体出错时提前断开连接，交给播放器重试
+  Future<int> _sendDetached(
+    HttpResponse response,
+    Stream<List<int>> body,
+  ) async {
+    response.persistentConnection = false;
+    final socket = await response.detachSocket();
+    final gone = Completer<void>();
+    void markGone([Object? _]) {
+      if (!gone.isCompleted) gone.complete();
+    }
+
+    socket.listen(
+      (_) {},
+      onDone: markGone,
+      onError: markGone,
+      cancelOnError: true,
+    );
+    var sent = 0;
+    final finished = Completer<void>();
+    late final StreamSubscription<List<int>> subscription;
+    subscription = body.listen(
+      (chunk) {
+        socket.add(chunk);
+        sent += chunk.length;
+        _count('bytes', chunk.length);
+        subscription.pause();
+        Future.any([socket.flush(), gone.future]).then(
+          (_) => gone.isCompleted ? null : subscription.resume(),
+          onError: markGone,
+        );
+      },
+      onError: (Object _) => finished.isCompleted ? null : finished.complete(),
+      onDone: () => finished.isCompleted ? null : finished.complete(),
+      cancelOnError: true,
+    );
+    await Future.any([finished.future, gone.future]);
+    await subscription.cancel();
+    if (!gone.isCompleted && sent > 0) {
+      await socket.flush().catchError((Object _) {});
+    }
+    socket.destroy();
+    return sent;
+  }
+
+  /// 并发条目的响应体：缓存模式下已缓存的部分读盘、缺口并发回源并写入；透传模式全部并发回源。
+  /// 最多预读 connections 个块，下游暂停时不再发起新块；取消时立即中止在途块。
+  /// 上游文件变化时作废旧缓存（透传模式下清掉探测结果，下次请求重新探测）
+  Stream<List<int>> _parallelBody(
+    _Entry entry,
+    int start,
+    int end,
+    int size,
+    String? etag, {
+    CacheStore? store,
+    String? id,
+  }) {
+    final priority = ++_streamSeq;
+    final pending = Queue<_Block>();
+    final controller = StreamController<List<int>>();
+    var cancelled = false;
+    Completer<void>? resumed;
+
+    Future<void> emit(List<int> chunk) async {
+      controller.add(chunk);
+      while (controller.isPaused && !cancelled) {
+        await (resumed ??= Completer<void>()).future;
+      }
+    }
+
+    Future<void> fetchRange(int from, int to) async {
+      final writer =
+          store != null && _writable ? store.writer(id!, from) : null;
+      var next = from;
+      var index = 0;
+      void fill() {
+        while (!cancelled && pending.length < entry.connections && next < to) {
+          final range = ByteRange(
+            next,
+            math.min(next + _blockSizeAt(index, entry.connections), to),
+          );
+          final block = _Block(range, priority, index++);
+          block.result = _fetchBlock(entry, block, size, etag)..ignore();
+          pending.add(block);
+          next = range.end;
+        }
+      }
+
+      try {
+        fill();
+        while (pending.isNotEmpty && !cancelled) {
+          final bytes = await pending.first.result;
+          if (cancelled) return;
+          pending.removeFirst();
+          fill();
+          await writer?.add(bytes);
+          _count('upstreamBytes', bytes.length);
+          await emit(bytes);
+        }
+      } finally {
+        await writer?.close();
+        if (store != null) _maybeEnforce(store);
+      }
+    }
+
+    Future<void> pump() async {
+      try {
+        var cursor = start;
+        while (cursor < end && !cancelled) {
+          var to = end;
+          if (store != null) {
+            final meta = store[id!];
+            if (meta == null) {
+              throw StateError('cache entry $id was invalidated');
+            }
+            final run = math.min(meta.cachedRunFrom(cursor), end - cursor);
+            if (run > 0) {
+              await for (final chunk in store.openRead(
+                id,
+                ByteRange(cursor, cursor + run),
+              )) {
+                if (cancelled) return;
+                _count('cacheBytes', chunk.length);
+                await emit(chunk);
+              }
+              cursor += run;
+              continue;
+            }
+            to = meta.missing(ByteRange(cursor, end)).first.end;
+          }
+          await fetchRange(cursor, to);
+          cursor = to;
+        }
+        if (!cancelled) await controller.close();
+      } on _Cancelled {
+        // 播放器断开，在途块已中止
+      } catch (e, st) {
+        if (e is _UpstreamChanged) {
+          if (store != null) {
+            await _prepare(store, id!, entry, e.info, fallbackSize: size);
+          } else {
+            entry.probed = null;
+          }
+        }
+        if (!cancelled) {
+          controller.addError(e, st);
+          await controller.close();
+        }
+      } finally {
+        for (final block in pending) {
+          block.cancel();
+        }
+        pending.clear();
+      }
+    }
+
+    void wake() {
+      resumed?.complete();
+      resumed = null;
+    }
+
+    controller.onListen = () => unawaited(pump());
+    controller.onResume = wake;
+    controller.onCancel = () {
+      cancelled = true;
+      for (final block in pending) {
+        block.cancel();
+      }
+      wake();
+    };
+    return controller.stream;
+  }
+
+  /// 同一条目的并发探测只请求一次
+  Future<_UpstreamInfo?> _probeOnce(_Entry entry) =>
+      entry.probing ??= _probe(entry).whenComplete(() => entry.probing = null);
+
+  /// 探测文件大小、类型与校验信息
+  Future<_UpstreamInfo?> _probe(_Entry entry) async {
+    final upstream = await _openUpstream('GET', entry, 'bytes=0-0');
+    if (upstream == null) return null;
+    final info = _UpstreamInfo(upstream);
+    await upstream.drain<void>().catchError((_) {});
+    return info.usable ? info : null;
+  }
+
+  Future<void> _prepare(
+    CacheStore store,
+    String id,
+    _Entry entry,
+    _UpstreamInfo info, {
+    int? fallbackSize,
+  }) => store.prepare(
+    id,
+    size: info.size ?? fallbackSize!,
+    contentType: info.contentType,
+    etag: info.etag,
+    lastModified: info.lastModified,
+    filePath: entry.filePath,
+    storageId: entry.storageId,
+    serverId: entry.serverId,
+    itemKey: entry.itemKey,
+  );
+
+  /// 起播阶段用小块尽快交付第一批字节，之后逐步增大以减少请求数
+  static int _blockSizeAt(int index, int connections) =>
+      index < connections
+          ? 64 << 10
+          : index < connections * 2
+          ? 256 << 10
+          : 1 << 20;
+
+  Future<Uint8List> _fetchBlock(
+    _Entry entry,
+    _Block block,
+    int size,
+    String? etag,
+  ) async {
+    final ticket = entry.slots.acquire(block.priority, block.index);
+    block.ticket = ticket;
+    await ticket.ready;
+    _stats['peakBlocks'] = math.max(_stats['peakBlocks']!, ++_activeBlocks);
+    try {
+      if (block.cancelled) throw const _Cancelled();
+      final range = block.range;
+      final upstream = await _openUpstream(
+        'GET',
+        entry,
+        'bytes=${range.start}-${range.end - 1}',
+      );
+      if (upstream == null) throw const HttpException('upstream unavailable');
+      final info = _UpstreamInfo(upstream);
+      final changed =
+          info.size != null && info.size != size ||
+          info.etag != null && etag != null && info.etag != etag;
+      if (changed ||
+          info.status != HttpStatus.partialContent ||
+          info.start != range.start) {
+        await upstream.drain<void>().catchError((_) {});
+        if (changed) throw _UpstreamChanged(info);
+        throw HttpException('unexpected upstream status ${info.status}');
+      }
+      _count('blocks');
+      return await block.read(upstream);
+    } finally {
+      _activeBlocks--;
+      ticket.release();
+    }
+  }
+
   bool get _writable => _limit > 0;
 
   /// 有待配对的播放位置时，把这次读取的起点记为采样；文件首尾的读取（封装头、索引）不算
@@ -712,8 +1076,8 @@ class _CacheProxyServer {
     }
   }
 
-  /// 请求上游：401 / 403 / 410 时请主隔离区刷新一次地址；403 / 429 时退避重试。
-  /// 拿不到可用响应时返回 null
+  /// 请求上游：401 / 403 / 410 / 412 时请主隔离区刷新一次地址（同一条目并发失效时只刷新一次）；
+  /// 403 / 429 时退避重试。拿不到可用响应时返回 null
   Future<HttpClientResponse?> _openUpstream(
     String method,
     _Entry entry,
@@ -726,6 +1090,7 @@ class _CacheProxyServer {
     if (!ready) return null;
     var refreshed = false;
     for (var attempt = 0; attempt < 4; attempt++) {
+      final generation = entry.generation;
       final HttpClientResponse response;
       try {
         response = await _request(method, entry, range);
@@ -738,11 +1103,12 @@ class _CacheProxyServer {
       final expired =
           status == HttpStatus.unauthorized ||
           status == HttpStatus.forbidden ||
-          status == HttpStatus.gone;
+          status == HttpStatus.gone ||
+          status == HttpStatus.preconditionFailed;
       if (expired && !refreshed && entry.refreshable) {
         refreshed = true;
         await response.drain<void>().catchError((_) {});
-        if (await _refresh(entry)) continue;
+        if (await _refreshOnce(entry, generation)) continue;
         return null;
       }
       final throttled =
@@ -758,6 +1124,14 @@ class _CacheProxyServer {
     return null;
   }
 
+  /// 别的请求已经换过地址时直接重试；正在刷新时等它完成
+  Future<bool> _refreshOnce(_Entry entry, int seenGeneration) {
+    if (entry.generation != seenGeneration) return Future.value(true);
+    return entry.refreshing ??= _refresh(
+      entry,
+    ).whenComplete(() => entry.refreshing = null);
+  }
+
   Future<bool> _refresh(_Entry entry) async {
     final events = _events;
     if (events == null) return false;
@@ -771,7 +1145,8 @@ class _CacheProxyServer {
     if (result is! Map) return false;
     entry
       ..url = Uri.parse(result['url'] as String)
-      ..headers = Map<String, String>.from(result['headers'] as Map);
+      ..headers = Map<String, String>.from(result['headers'] as Map)
+      ..generation += 1;
     _count('refreshes');
     return true;
   }
@@ -823,4 +1198,136 @@ class _CacheProxyServer {
     final end = last.isEmpty ? size : math.min(int.parse(last) + 1, size);
     return end <= start ? null : (start, end);
   }
+}
+
+/// 条目级连接配额：同一条目同时回源的请求不超过上限。
+/// 等待时按请求序号从新到旧、同一请求内按块顺序分配
+final class _Slots {
+  _Slots(this._limit);
+
+  final int Function() _limit;
+  final List<_SlotTicket> _waiting = [];
+  int _active = 0;
+
+  _SlotTicket acquire(int priority, int order) {
+    final ticket = _SlotTicket._(this, priority, order);
+    if (_active < _limit()) {
+      _active++;
+      ticket._granted = true;
+      ticket._ready.complete();
+    } else {
+      _waiting.add(ticket);
+    }
+    return ticket;
+  }
+
+  void _release(_SlotTicket ticket) {
+    if (!ticket._granted) {
+      _waiting.remove(ticket);
+      return;
+    }
+    _active--;
+    while (_active < _limit() && _waiting.isNotEmpty) {
+      var best = _waiting.first;
+      for (final t in _waiting) {
+        if (t.priority > best.priority ||
+            t.priority == best.priority && t.order < best.order) {
+          best = t;
+        }
+      }
+      _waiting.remove(best);
+      _active++;
+      best._granted = true;
+      best._ready.complete();
+    }
+  }
+}
+
+final class _SlotTicket {
+  _SlotTicket._(this._slots, this.priority, this.order);
+
+  final _Slots _slots;
+  final int priority;
+  final int order;
+  final Completer<void> _ready = Completer<void>();
+  bool _granted = false;
+  bool _released = false;
+
+  Future<void> get ready => _ready.future;
+
+  /// 归还连接；还在排队时取消排队。可重复调用
+  void release() {
+    if (_released) return;
+    _released = true;
+    _slots._release(this);
+    if (!_ready.isCompleted) _ready.completeError(const _Cancelled());
+  }
+}
+
+/// 并发回源的一个块
+final class _Block {
+  _Block(this.range, this.priority, this.index);
+
+  final ByteRange range;
+  final int priority;
+  final int index;
+  late Future<Uint8List> result;
+  _SlotTicket? ticket;
+  StreamSubscription<List<int>>? _subscription;
+  Completer<Uint8List>? _body;
+  bool cancelled = false;
+
+  /// 读满整个块；多出的字节丢弃，提前结束时报错
+  Future<Uint8List> read(HttpClientResponse upstream) {
+    final body = _body = Completer<Uint8List>();
+    final builder = BytesBuilder(copy: false);
+    _subscription = upstream.listen(
+      builder.add,
+      onDone: () {
+        if (body.isCompleted) return;
+        final bytes = builder.takeBytes();
+        if (bytes.length < range.length) {
+          body.completeError(const HttpException('upstream ended early'));
+        } else {
+          body.complete(
+            bytes.length == range.length
+                ? bytes
+                : Uint8List.sublistView(bytes, 0, range.length),
+          );
+        }
+      },
+      onError: (Object e) {
+        if (!body.isCompleted) body.completeError(e);
+      },
+      cancelOnError: true,
+    );
+    if (cancelled) cancel();
+    return body.future;
+  }
+
+  /// 只让排队中的块让出名额；已拿到连接的块在 [_CacheProxyServer._fetchBlock] 结束时归还，避免超出上限
+  void cancel() {
+    cancelled = true;
+    final waiting = ticket;
+    if (waiting != null && !waiting._granted) waiting.release();
+    final subscription = _subscription;
+    if (subscription == null) return;
+    _subscription = null;
+    unawaited(subscription.cancel());
+    final body = _body;
+    if (body != null && !body.isCompleted) {
+      body.completeError(const _Cancelled());
+    }
+  }
+}
+
+final class _Cancelled implements Exception {
+  const _Cancelled();
+}
+
+/// 回源时发现上游文件的大小或 ETag 变了
+final class _UpstreamChanged implements Exception {
+  _UpstreamChanged(this.info);
+
+  final _UpstreamInfo info;
 }

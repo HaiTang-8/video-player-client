@@ -36,8 +36,15 @@ class RangeTestServer {
   /// 单个连接的限速；null 表示不限速
   int? bytesPerSecond;
 
-  /// 请求必须带上的请求头，缺少或不一致时返回 401
+  /// 请求必须带上的请求头，缺少或不一致时返回 [rejectStatus]
   Map<String, String> requiredHeaders = const {};
+
+  /// 请求头不符合时的状态码；网盘 CDN 在凭据失效时返回 412
+  int rejectStatus = HttpStatus.unauthorized;
+
+  /// 正在处理的请求数，以及出现过的最大并发数
+  int active = 0;
+  int peakActive = 0;
 
   int requestCount = 0;
   int bytesServed = 0;
@@ -71,6 +78,15 @@ class RangeTestServer {
 
   Future<void> _handle(HttpRequest request) async {
     requestCount++;
+    peakActive = math.max(peakActive, ++active);
+    try {
+      await _handleRequest(request);
+    } finally {
+      active--;
+    }
+  }
+
+  Future<void> _handleRequest(HttpRequest request) async {
     final range = request.headers.value(HttpHeaders.rangeHeader);
     final line = '${request.method} ${request.uri.path} ${range ?? '-'}';
     requestLog.add(line);
@@ -85,7 +101,7 @@ class RangeTestServer {
         (e) => request.headers.value(e.key) == e.value,
       );
       if (!authorized) {
-        response.statusCode = HttpStatus.unauthorized;
+        response.statusCode = rejectStatus;
       } else if (segments.length != 2) {
         response.statusCode = HttpStatus.notFound;
       } else if (segments.first == 'redirect') {

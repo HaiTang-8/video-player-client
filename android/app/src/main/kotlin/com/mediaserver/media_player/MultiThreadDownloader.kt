@@ -39,6 +39,7 @@ class MultiThreadDownloader(
         url: String,
         savePath: String,
         headers: Map<String, String>,
+        threads: Int? = null,
         onProgress: (DownloadProgress) -> Unit
     ) {
         val cancelFlag = AtomicBoolean(false)
@@ -48,7 +49,7 @@ class MultiThreadDownloader(
 
         val job = CoroutineScope(Dispatchers.IO).launch {
             try {
-                download(taskId, url, savePath, headers, cancelFlag, pauseFlag, onProgress)
+                download(taskId, url, savePath, headers, threads ?: threadCount, cancelFlag, pauseFlag, onProgress)
             } catch (e: CancellationException) {
                 Log.d(TAG, "Download cancelled: $taskId")
             } catch (e: Exception) {
@@ -81,6 +82,7 @@ class MultiThreadDownloader(
         url: String,
         savePath: String,
         headers: Map<String, String>,
+        threads: Int,
         cancelFlag: AtomicBoolean,
         pauseFlag: AtomicBoolean,
         onProgress: (DownloadProgress) -> Unit
@@ -97,13 +99,13 @@ class MultiThreadDownloader(
             return
         }
 
-        Log.d(TAG, "File size: $fileSize, threads: $threadCount")
+        Log.d(TAG, "File size: $fileSize, threads: $threads")
 
         val file = File(savePath)
         file.parentFile?.mkdirs()
 
         // Calculate chunks - ensure chunk count equals thread count for 115 links
-        val chunkCount = threadCount
+        val chunkCount = threads
         val chunkSize = (fileSize + chunkCount - 1) / chunkCount
         val chunks = mutableListOf<LongRange>()
 

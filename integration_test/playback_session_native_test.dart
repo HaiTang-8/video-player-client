@@ -23,8 +23,11 @@ class _LocalResolver implements PlaybackSourceResolver {
   final PlaybackSource source;
 
   @override
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async =>
-      ResolvedPlayback(source);
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async => ResolvedPlayback(source);
 
   @override
   Future<String?> fetchSubtitleText(SubtitleInfo subtitle) async => null;

@@ -44,7 +44,11 @@ class _FakeResolver implements PlaybackSourceResolver {
   bool disposed = false;
 
   @override
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async {
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async {
     resolveCount++;
     await gate?.future;
     final failure = error;

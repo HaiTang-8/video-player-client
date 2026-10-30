@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:media_player/core/utils/http_utils.dart';
 import 'package:media_player/data/models/storage.dart';
 import 'package:media_player/data/models/stream_info.dart';
+import 'package:media_player/data/models/stream_link.dart';
 import 'package:media_player/data/services/download_service.dart';
 import 'package:media_player/playback/session/playback_item.dart';
 import 'package:media_player/playback/session/playback_source_resolver.dart';
@@ -122,5 +123,98 @@ void main() {
       resolved.source.httpHeaders['Authorization'],
       HttpUtils.basicAuthHeader('u', 'p'),
     );
+  });
+
+  group('direct links', () {
+    const episode = EpisodePlaybackItem(tvShowId: 1, seasonId: 2, episodeId: 3);
+
+    test('uses the link and its headers without a HEAD request', () async {
+      gateway.streamInfo = StreamInfo(
+        url: '/api/v1/stream/source/9',
+        storageId: 4,
+        filePath: '/剧/E01.mkv',
+        sourceId: 9,
+        delivery: StreamDelivery.directLink,
+      );
+      gateway.link =
+          (variant) => StreamLink(
+            url: 'https://cdn.example/e01?auth_key=1',
+            variant: variant ?? StreamLink.originalVariant,
+            headers: const {'Cookie': '__puus=x'},
+            maxConnections: 16,
+          );
+      final adapter = _HeadAdapter();
+      final resolved = await resolver(
+        adapter,
+      ).resolve(episode, variant: 'original', fresh: true);
+
+      expect(adapter.requests, isEmpty);
+      expect(resolved.source.url, 'https://cdn.example/e01?auth_key=1');
+      expect(resolved.source.httpHeaders, {
+        'User-Agent': DownloadService.aria2UserAgent,
+        'Cookie': '__puus=x',
+      });
+      expect(resolved.linkKind, StreamLinkKind.file);
+      expect(resolved.maxConnections, 16);
+      expect(resolved.storageId, 4);
+      expect(resolved.filePath, '/剧/E01.mkv');
+      expect(gateway.linkRequests.single, (
+        sourceId: 9,
+        variant: 'original',
+        fresh: true,
+      ));
+    });
+
+    test('link headers override the default user agent', () async {
+      gateway.streamInfo = StreamInfo(
+        url: '/api/v1/stream/movie/7',
+        delivery: StreamDelivery.directLink,
+      );
+      gateway.link =
+          (_) => const StreamLink(
+            url: 'https://cdn.example/a.m3u8',
+            kind: StreamLinkKind.hls,
+            variant: '4k',
+            headers: {'User-Agent': 'quark', 'Cookie': '__puus=y'},
+          );
+      final resolved = await resolver(_HeadAdapter()).resolve(movie);
+
+      expect(resolved.source.httpHeaders['User-Agent'], 'quark');
+      expect(resolved.linkKind, StreamLinkKind.hls);
+      expect(resolved.variant, '4k');
+      expect(resolved.maxConnections, 1);
+    });
+
+    test('falls back to the stream path when the server serves it', () async {
+      gateway.streamInfo = StreamInfo(
+        url: '/api/v1/stream/movie/7',
+        delivery: StreamDelivery.directLink,
+      );
+      gateway.link =
+          (_) => const StreamLink(
+            url: '/api/v1/stream/3/a.mkv',
+            delivery: StreamDelivery.stream,
+          );
+      final adapter = _HeadAdapter();
+      final resolved = await resolver(adapter).resolve(movie);
+
+      expect(resolved.linkKind, isNull);
+      expect(
+        resolved.source.url,
+        'http://media.local:8080/api/v1/stream/movie/7',
+      );
+      expect(adapter.requests.single.method, 'HEAD');
+    });
+
+    test('a missing link is reported as unavailable', () async {
+      gateway.streamInfo = StreamInfo(
+        url: '/api/v1/stream/movie/7',
+        delivery: StreamDelivery.directLink,
+      );
+      expect(
+        resolver(_HeadAdapter()).resolve(movie),
+        throwsA(isA<PlaybackSourceUnavailable>()),
+      );
+    });
   });
 }

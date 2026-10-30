@@ -19,8 +19,11 @@ class _StaticResolver implements PlaybackSourceResolver {
   bool disposed = false;
 
   @override
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async =>
-      ResolvedPlayback(source, storageId: 3, filePath: '/m/a.mkv');
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async => ResolvedPlayback(source, storageId: 3, filePath: '/m/a.mkv');
 
   @override
   Future<String?> fetchSubtitleText(SubtitleInfo subtitle) async => 'sub';

@@ -1,5 +1,6 @@
 import 'package:media_player/data/models/storage.dart';
 import 'package:media_player/data/models/stream_info.dart';
+import 'package:media_player/data/models/stream_link.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
 import 'package:media_player/playback/session/playback_gateways.dart';
 import 'package:media_player/playback/session/playback_item.dart';
@@ -19,6 +20,10 @@ class FakeSourceGateway implements PlaybackSourceGateway {
   Object? streamInfoError;
   final List<PlaybackItem> streamRequests = [];
 
+  /// 按版本返回直链；为空时返回 null
+  StreamLink? Function(String? variant)? link;
+  final List<({int? sourceId, String? variant, bool fresh})> linkRequests = [];
+
   @override
   Future<String?> findDownloadedFile(PlaybackItem item) async => downloadedFile;
 
@@ -28,6 +33,17 @@ class FakeSourceGateway implements PlaybackSourceGateway {
     final error = streamInfoError;
     if (error != null) throw error;
     return streamInfo;
+  }
+
+  @override
+  Future<StreamLink?> fetchLink(
+    PlaybackItem item, {
+    int? sourceId,
+    String? variant,
+    bool fresh = false,
+  }) async {
+    linkRequests.add((sourceId: sourceId, variant: variant, fresh: fresh));
+    return link?.call(variant);
   }
 
   @override

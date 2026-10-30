@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../core/utils/http_utils.dart';
+import '../../data/models/stream_info.dart';
+import '../../data/models/stream_link.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/download_service.dart';
 import '../../data/services/log_service.dart';
@@ -30,11 +32,21 @@ class ResolvedPlayback {
   final String? filePath;
   final PlaybackSourceObserver? observer;
 
+  /// 网盘直链的类型；为空表示不是直链（服务端流地址或本地文件）
+  final StreamLinkKind? linkKind;
+  final String? variant;
+
+  /// 建议的并发回源连接数（网盘单连接限速时大于 1）
+  final int maxConnections;
+
   const ResolvedPlayback(
     this.source, {
     this.storageId,
     this.filePath,
     this.observer,
+    this.linkKind,
+    this.variant,
+    this.maxConnections = 1,
   });
 }
 
@@ -45,7 +57,7 @@ class PlaybackSourceUnavailable implements Exception {
   String toString() => '无法获取播放地址';
 }
 
-/// 解析播放地址：本地缓存优先，其次是服务端流地址（处理 302 跳转与鉴权头）
+/// 解析播放地址：本地缓存优先；网盘类存储经 /links 拿直链，其余走服务端流地址（处理 302 跳转与鉴权头）
 class PlaybackSourceResolver {
   PlaybackSourceResolver(this._gateway, {Dio? dio})
     : _dio =
@@ -60,7 +72,12 @@ class PlaybackSourceResolver {
   final PlaybackSourceGateway _gateway;
   final Dio _dio;
 
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async {
+  /// [variant] 选择网盘版本（默认原画）；[fresh] 时直链跳过服务端缓存，用于上游拒绝后的刷新
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async {
     final localPath = await _gateway.findDownloadedFile(item);
     if (localPath != null) {
       return ResolvedPlayback(PlaybackSource.localFile(localPath));
@@ -70,6 +87,10 @@ class PlaybackSourceResolver {
     final streamUrl = info?.url;
     if (info == null || streamUrl == null || streamUrl.isEmpty) {
       throw const PlaybackSourceUnavailable();
+    }
+    if (info.delivery == StreamDelivery.directLink) {
+      final direct = await _resolveDirect(item, info, variant, fresh);
+      if (direct != null) return direct;
     }
 
     final fullUrl =
@@ -94,6 +115,39 @@ class PlaybackSourceResolver {
       ),
       storageId: info.storageId,
       filePath: info.filePath,
+    );
+  }
+
+  /// 服务端已改为不允许直连（返回 stream）时返回 null，交给原有流程
+  Future<ResolvedPlayback?> _resolveDirect(
+    PlaybackItem item,
+    StreamInfo info,
+    String? variant,
+    bool fresh,
+  ) async {
+    final link = await _gateway.fetchLink(
+      item,
+      sourceId: info.sourceId,
+      variant: variant,
+      fresh: fresh,
+    );
+    if (link == null || link.url.isEmpty) {
+      throw const PlaybackSourceUnavailable();
+    }
+    if (!link.isDirect) return null;
+    return ResolvedPlayback(
+      PlaybackSource.network(
+        link.url,
+        httpHeaders: {
+          'User-Agent': DownloadService.aria2UserAgent,
+          ...link.headers,
+        },
+      ),
+      storageId: info.storageId,
+      filePath: info.filePath,
+      linkKind: link.kind,
+      variant: link.variant,
+      maxConnections: link.maxConnections ?? 1,
     );
   }
 

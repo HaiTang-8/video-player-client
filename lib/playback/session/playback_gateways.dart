@@ -1,5 +1,6 @@
 import '../../data/models/storage.dart';
 import '../../data/models/stream_info.dart';
+import '../../data/models/stream_link.dart';
 import '../../data/models/subtitle_info.dart';
 import 'playback_item.dart';
 
@@ -11,6 +12,14 @@ abstract interface class PlaybackSourceGateway {
   /// 已下载且文件存在时返回本地路径
   Future<String?> findDownloadedFile(PlaybackItem item);
   Future<StreamInfo?> fetchStreamInfo(PlaybackItem item);
+
+  /// 网盘直链（[StreamInfo.delivery] 为直连时使用）；剧集需要 [sourceId]，[fresh] 时服务端跳过缓存并刷新会话
+  Future<StreamLink?> fetchLink(
+    PlaybackItem item, {
+    int? sourceId,
+    String? variant,
+    bool fresh = false,
+  });
   Future<Storage?> findStorage(int storageId);
   Future<List<SubtitleInfo>> listSubtitles({
     required int storageId,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import '../../data/models/stream_link.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/log_service.dart';
 import '../domain/playback_domain.dart';
@@ -14,28 +15,34 @@ import 'playback_proxy.dart';
 /// 知道服务器地址时按“服务器 + 媒体 + 文件路径”登记为可缓存条目，签名直链变化不影响命中。
 /// 这部片子已有缓存时直接返回代理地址，流地址 API 和 302 解析放到后台，完成后再交给代理。
 /// 登记的条目到 [dispose] 时才注销：切换剧集时上一个片源可能还有预读请求在路上
+///
+/// 网盘原画直链（[StreamLinkKind.file]）始终经过代理，配额为 0 时只透传，以便多连接回源和刷新；
+/// HLS 直链直接交给内核
 class ProxiedSourceResolver implements PlaybackSourceResolver {
   ProxiedSourceResolver(
     this._inner,
     this._proxy, {
+    bool cacheEnabled = true,
     String? Function()? serverUrl,
     Future<String?> Function(PlaybackItem item)? findDownloadedFile,
-  }) : _serverUrl = serverUrl,
+  }) : _cacheEnabled = cacheEnabled,
+       _serverUrl = serverUrl,
        _findDownloadedFile = findDownloadedFile;
 
-  /// 支持的平台上、配额不为 0 时经过本机代理和缓存；否则直连
+  /// 支持的平台上经过本机代理；配额为 0 时只有网盘原画直链经过代理（透传），其余直连
   static PlaybackSourceResolver wrapIfEnabled(
     PlaybackSourceResolver inner, {
     required int quotaGb,
     String? Function()? serverUrl,
     Future<String?> Function(PlaybackItem item)? findDownloadedFile,
   }) {
-    if (!PlaybackCacheConfig.supported || quotaGb <= 0) return inner;
+    if (!PlaybackCacheConfig.supported) return inner;
     final proxy = PlaybackProxy.instance;
-    unawaited(proxy.setQuota(quotaGb << 30));
+    unawaited(proxy.setQuota(quotaGb > 0 ? quotaGb << 30 : 0));
     return ProxiedSourceResolver(
       inner,
       proxy,
+      cacheEnabled: quotaGb > 0,
       serverUrl: serverUrl,
       findDownloadedFile: findDownloadedFile,
     );
@@ -43,33 +50,42 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
 
   final PlaybackSourceResolver _inner;
   final PlaybackProxy _proxy;
+  final bool _cacheEnabled;
   final String? Function()? _serverUrl;
   final Future<String?> Function(PlaybackItem item)? _findDownloadedFile;
   final List<Uri> _registered = [];
 
   @override
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async {
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async {
     final server = _serverUrl?.call();
     final itemKey = _itemKey(item);
-    if (server != null &&
-        server.isNotEmpty &&
+    final hasServer = server != null && server.isNotEmpty;
+    if (_cacheEnabled &&
+        variant == null &&
+        hasServer &&
         await _findDownloadedFile?.call(item) == null) {
       final key = CacheEntryKey.forServer(server, itemKey: itemKey);
       final hit = await _proxy.lookup(key.serverId, itemKey);
       if (hit != null) return _resolveFromCache(item, key, hit);
     }
 
-    final resolved = await _inner.resolve(item);
+    final resolved = await _inner.resolve(item, variant: variant, fresh: fresh);
     final source = resolved.source;
-    if (source.isLocalFile) return resolved;
+    final kind = resolved.linkKind;
+    if (source.isLocalFile || kind == StreamLinkKind.hls) return resolved;
+    if (!_cacheEnabled && kind != StreamLinkKind.file) return resolved;
     final key =
-        server == null || server.isEmpty
-            ? null
-            : CacheEntryKey.forServer(
+        _cacheEnabled && hasServer
+            ? CacheEntryKey.forServer(
               server,
               itemKey: itemKey,
               filePath: resolved.filePath,
-            );
+            )
+            : null;
     final proxied = await _proxy.register(
       Uri.parse(source.url),
       source.httpHeaders,
@@ -78,7 +94,8 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
       storageId: resolved.storageId,
       serverId: key?.serverId,
       itemKey: itemKey,
-      refresh: _refresher(item),
+      refresh: _refresher(item, resolved.variant),
+      maxConnections: resolved.maxConnections,
     );
     final cacheId = key?.id;
     _registered.add(proxied);
@@ -91,6 +108,9 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
       storageId: resolved.storageId,
       filePath: resolved.filePath,
       observer: _ProxyObserver(_proxy, proxied),
+      linkKind: kind,
+      variant: resolved.variant,
+      maxConnections: resolved.maxConnections,
     );
   }
 
@@ -108,7 +128,7 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
       storageId: hit.storageId,
       serverId: key.serverId,
       itemKey: key.itemKey,
-      refresh: _refresher(item),
+      refresh: _refresher(item, null),
     );
     _registered.add(proxied);
     LogService.instance.info(
@@ -156,6 +176,7 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
         proxied,
         Uri.parse(resolved.source.url),
         resolved.source.httpHeaders,
+        maxConnections: resolved.maxConnections,
       );
     } catch (e) {
       LogService.instance.warn(
@@ -166,8 +187,8 @@ class ProxiedSourceResolver implements PlaybackSourceResolver {
     }
   }
 
-  UpstreamRefresher _refresher(PlaybackItem item) => () async {
-    final again = await _inner.resolve(item);
+  UpstreamRefresher _refresher(PlaybackItem item, String? variant) => () async {
+    final again = await _inner.resolve(item, variant: variant, fresh: true);
     if (again.source.isLocalFile) return null;
     return (
       url: Uri.parse(again.source.url),

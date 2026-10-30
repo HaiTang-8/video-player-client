@@ -265,6 +265,26 @@ class MediaService {
     );
   }
 
+  /// 获取播放直链：[movieId] 与 [sourceId] 二选一
+  Future<ApiResponse<StreamLink>> getStreamLink({
+    int? movieId,
+    int? sourceId,
+    String? variant,
+    bool fresh = false,
+  }) {
+    assert((movieId == null) != (sourceId == null));
+    return _client.get<StreamLink>(
+      movieId != null
+          ? ApiConstants.movieLink(movieId)
+          : ApiConstants.sourceLink(sourceId!),
+      queryParameters: {
+        if (variant != null) 'variant': variant,
+        if (fresh) 'fresh': '1',
+      },
+      fromJson: (json) => StreamLink.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
   /// 获取季度播放源分组
   Future<ApiResponse<List<SourceGroup>>> getSeasonSourceGroups(
     int tvShowId,

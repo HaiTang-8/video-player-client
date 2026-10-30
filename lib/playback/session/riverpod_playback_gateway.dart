@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/models/storage.dart';
 import '../../data/models/stream_info.dart';
+import '../../data/models/stream_link.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/media_service.dart';
 import '../../providers/providers.dart';
@@ -92,6 +93,33 @@ class RiverpodPlaybackGateway
         _ref.invalidate(episodeStreamProvider(key));
         return _ref.read(episodeStreamProvider(key).future);
     }
+  }
+
+  @override
+  Future<StreamLink?> fetchLink(
+    PlaybackItem item, {
+    int? sourceId,
+    String? variant,
+    bool fresh = false,
+  }) async {
+    final service = _mediaService;
+    if (service == null) return null;
+    final response = switch (item) {
+      MoviePlaybackItem(:final movieId) => await service.getStreamLink(
+        movieId: movieId,
+        variant: variant,
+        fresh: fresh,
+      ),
+      EpisodePlaybackItem() =>
+        sourceId == null
+            ? null
+            : await service.getStreamLink(
+              sourceId: sourceId,
+              variant: variant,
+              fresh: fresh,
+            ),
+    };
+    return response?.data;
   }
 
   @override

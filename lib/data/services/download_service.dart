@@ -16,6 +16,7 @@ import '../models/download_task.dart';
 import '../models/episode.dart';
 import '../models/movie.dart';
 import '../models/storage.dart';
+import '../models/stream_link.dart';
 import '../models/subtitle_info.dart';
 import 'aria2_manager.dart';
 import 'log_service.dart';
@@ -92,7 +93,8 @@ class DownloadService {
     return downloadDir.path;
   }
 
-  Future<(String?, int?, String?, String?)> _fetchStreamUrl(
+  /// 返回下载地址（网盘类存储为带请求头的直链）、存储源 ID、文件路径与错误信息
+  Future<(StreamLink?, int?, String?, String?)> _fetchStreamUrl(
     int tvShowId,
     int seasonId,
     int episodeId, {
@@ -111,12 +113,12 @@ class DownloadService {
 
           // 优先使用下载直链接口获取带客户端 IP 签名的 URL
           if (sourceId != null) {
-            final downloadUrl = await _fetchDownloadUrl(
+            final downloadLink = await _fetchDownloadUrl(
               ApiConstants.downloadSourceUrl(sourceId),
               userAgent: userAgent,
             );
-            if (downloadUrl != null) {
-              return (downloadUrl, storageId, filePath, null);
+            if (downloadLink != null) {
+              return (downloadLink, storageId, filePath, null);
             }
           }
 
@@ -124,7 +126,7 @@ class DownloadService {
           final url = data['safe_url'] as String? ?? data['url'] as String?;
           if (url != null && url.isNotEmpty) {
             final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
-            return (fullUrl, storageId, filePath, null);
+            return (StreamLink(url: fullUrl, delivery: StreamDelivery.stream), storageId, filePath, null);
           }
         }
       }
@@ -136,13 +138,13 @@ class DownloadService {
     }
   }
 
-  Future<(String?, int?, String?, String?)> _fetchMovieStreamUrl(
+  Future<(StreamLink?, int?, String?, String?)> _fetchMovieStreamUrl(
     int movieId, {
     String? userAgent,
   }) async {
     try {
       // 优先使用下载直链接口获取带客户端 IP 签名的 URL
-      final downloadUrl = await _fetchDownloadUrl(
+      final downloadLink = await _fetchDownloadUrl(
         ApiConstants.downloadMovieUrl(movieId),
         userAgent: userAgent,
       );
@@ -156,15 +158,15 @@ class DownloadService {
           final storageId = data['storage_id'] as int?;
           final filePath = data['file_path'] as String?;
 
-          if (downloadUrl != null) {
-            return (downloadUrl, storageId, filePath, null);
+          if (downloadLink != null) {
+            return (downloadLink, storageId, filePath, null);
           }
 
           // 兜底：使用 safe_url
           final url = data['safe_url'] as String? ?? data['url'] as String?;
           if (url != null && url.isNotEmpty) {
             final fullUrl = url.startsWith('http') ? url : '$_serverUrl$url';
-            return (fullUrl, storageId, filePath, null);
+            return (StreamLink(url: fullUrl, delivery: StreamDelivery.stream), storageId, filePath, null);
           }
         }
       }
@@ -225,20 +227,24 @@ class DownloadService {
   // aria2 使用的 User-Agent，必须与获取下载链接时一致
   static const String aria2UserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.57';
 
-  Future<String?> _fetchDownloadUrl(String apiPath, {String? userAgent}) async {
+  /// 带 direct=1：网盘类存储返回直链与请求头，其余存储与旧服务端只返回地址
+  Future<StreamLink?> _fetchDownloadUrl(String apiPath, {String? userAgent}) async {
     try {
-      final url = '$_serverUrl$apiPath';
-      final queryParams = userAgent != null ? '?user_agent=${Uri.encodeComponent(userAgent)}' : '';
-      final fullUrl = '$url$queryParams';
       if (kDebugMode) {
         LogService.instance.debug('DownloadService', 'requesting download url via apiPath=$apiPath');
       }
-      final response = await _dio.get(fullUrl);
+      final response = await _dio.get(
+        '$_serverUrl$apiPath',
+        queryParameters: {'direct': '1', if (userAgent != null) 'user_agent': userAgent},
+      );
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data['data'] as Map<String, dynamic>?;
         final downloadUrl = data?['url'] as String?;
-        if (downloadUrl != null && downloadUrl.isNotEmpty) {
-          return downloadUrl.startsWith('http') ? downloadUrl : '$_serverUrl$downloadUrl';
+        if (data != null && downloadUrl != null && downloadUrl.isNotEmpty) {
+          final link = StreamLink.fromJson(data);
+          if (link.isDirect) return link;
+          final fullUrl = downloadUrl.startsWith('http') ? downloadUrl : '$_serverUrl$downloadUrl';
+          return StreamLink(url: fullUrl, delivery: StreamDelivery.stream);
         }
       }
     } catch (e) {
@@ -348,7 +354,7 @@ class DownloadService {
     void Function(DownloadTask) onComplete,
     void Function(DownloadTask, String) onError,
   ) async {
-    String? streamUrl;
+    StreamLink? link;
     int? storageId;
     String? fetchError;
 
@@ -357,7 +363,7 @@ class DownloadService {
 
     if (task.isMovie) {
       final result = await _fetchMovieStreamUrl(task.movieId!, userAgent: downloadUserAgent);
-      streamUrl = result.$1;
+      link = result.$1;
       storageId = result.$2;
       fetchError = result.$4;
     } else {
@@ -367,15 +373,16 @@ class DownloadService {
         task.episodeId!,
         userAgent: downloadUserAgent,
       );
-      streamUrl = result.$1;
+      link = result.$1;
       storageId = result.$2;
       fetchError = result.$4;
     }
 
-    if (streamUrl == null) {
+    if (link == null) {
       onError(task, fetchError ?? '无法获取下载地址');
       return;
     }
+    final streamUrl = link.url;
 
     if (kDebugMode) {
       final safeUrl = Uri.tryParse(streamUrl);
@@ -395,30 +402,8 @@ class DownloadService {
 
     var updatedTask = task.copyWith(downloadUrl: streamUrl);
 
-    // 构建 headers，包含 User-Agent
-    final headers = <String, String>{
-      'User-Agent': downloadUserAgent,
-    };
-    if (storageId != null) {
-      final storage = await _getStorageById(storageId);
-      if (storage?.type.toLowerCase() == 'webdav') {
-        final settings = storage?.settings;
-        final webdavUrl = settings?['url'];
-        final username = settings?['username'];
-        final password = settings?['password'];
-        if (webdavUrl != null &&
-            username != null &&
-            password != null &&
-            username.isNotEmpty) {
-          final webdavUri = Uri.tryParse(webdavUrl);
-          final targetUri = Uri.tryParse(streamUrl);
-          if (HttpUtils.sameOrigin(webdavUri, targetUri)) {
-            headers['Authorization'] = HttpUtils.basicAuthHeader(username, password);
-          }
-        }
-      }
-    }
-    _maybeAttachBearerAuth(headers, streamUrl);
+    final headers = await _downloadHeaders(link, storageId, downloadUserAgent);
+    final connections = link.isDirect ? link.maxConnections : null;
 
     // 优先使用原生下载器（iOS/Android）
     if (useNativeDownloader && (Platform.isIOS || Platform.isAndroid)) {
@@ -429,6 +414,7 @@ class DownloadService {
           task: updatedTask,
           url: streamUrl,
           headers: headers,
+          connections: connections,
           onProgress: onProgress,
           onComplete: onComplete,
           onError: onError,
@@ -446,6 +432,7 @@ class DownloadService {
           task: updatedTask,
           url: streamUrl,
           headers: headers,
+          connections: connections,
           onProgress: onProgress,
           onComplete: onComplete,
           onError: onError,
@@ -459,6 +446,7 @@ class DownloadService {
         task: updatedTask,
         url: streamUrl,
         headers: headers,
+        connections: connections,
         onProgress: onProgress,
         onComplete: onComplete,
         onError: onError,
@@ -479,6 +467,7 @@ class DownloadService {
     required DownloadTask task,
     required String url,
     required Map<String, String> headers,
+    int? connections,
     required void Function(DownloadTask) onProgress,
     required void Function(DownloadTask) onComplete,
     required void Function(DownloadTask, String) onError,
@@ -499,7 +488,7 @@ class DownloadService {
       savePath: task.localPath,
       displayName: task.liveActivityTitle,
       headers: headers,
-      threadCount: threadCount,
+      threadCount: connections ?? threadCount,
       onProgress: (progress) {
         final status = progress.status == 'paused'
             ? DownloadStatus.paused
@@ -531,6 +520,7 @@ class DownloadService {
     required DownloadTask task,
     required String url,
     required Map<String, String> headers,
+    int? connections,
     required void Function(DownloadTask) onProgress,
     required void Function(DownloadTask) onComplete,
     required void Function(DownloadTask, String) onError,
@@ -548,7 +538,7 @@ class DownloadService {
     final filename = file.uri.pathSegments.last;
 
     try {
-      final gid = await aria2.addUri(url, dir: dir, filename: filename, headers: headers);
+      final gid = await aria2.addUri(url, dir: dir, filename: filename, headers: headers, connections: connections);
       _aria2Tasks[task.id] = gid;
 
       _aria2ProgressTimer?.cancel();
@@ -626,13 +616,14 @@ class DownloadService {
     required DownloadTask task,
     required String url,
     required Map<String, String> headers,
+    int? connections,
     required void Function(DownloadTask) onProgress,
     required void Function(DownloadTask) onComplete,
     required void Function(DownloadTask, String) onError,
   }) async {
     final downloader = MultiThreadDownloader(
       dio: _dio,
-      threadCount: threadCount,
+      threadCount: connections ?? threadCount,
     );
     _multiThreadDownloaders[task.id] = downloader;
 
@@ -1125,17 +1116,17 @@ class DownloadService {
     }
   }
 
-  Future<({String? url, Map<String, String> headers, String? error})> getDownloadInfo(
+  Future<({String? url, Map<String, String> headers, String? error, int? maxConnections})> getDownloadInfo(
     DownloadTask task, {
     String? userAgent,
   }) async {
-    String? streamUrl;
+    StreamLink? link;
     int? storageId;
     String? fetchError;
 
     if (task.isMovie) {
       final result = await _fetchMovieStreamUrl(task.movieId!, userAgent: userAgent);
-      streamUrl = result.$1;
+      link = result.$1;
       storageId = result.$2;
       fetchError = result.$4;
     } else {
@@ -1145,20 +1136,24 @@ class DownloadService {
         task.episodeId!,
         userAgent: userAgent,
       );
-      streamUrl = result.$1;
+      link = result.$1;
       storageId = result.$2;
       fetchError = result.$4;
     }
 
-    if (streamUrl == null) {
-      return (url: null, headers: <String, String>{}, error: fetchError ?? '无法获取下载地址');
+    if (link == null) {
+      return (url: null, headers: <String, String>{}, error: fetchError ?? '无法获取下载地址', maxConnections: null);
     }
+    final headers = await _downloadHeaders(link, storageId, userAgent);
+    return (url: link.url, headers: headers, error: null, maxConnections: link.isDirect ? link.maxConnections : null);
+  }
 
-    final headers = <String, String>{};
-    // 如果指定了 userAgent，添加到 headers 中
-    if (userAgent != null) {
-      headers['User-Agent'] = userAgent;
-    }
+  /// 下载请求头：网盘直链只附加其自带的请求头（最后合并，优先级最高）；其余地址按存储源附加 WebDAV 或 Bearer 鉴权
+  Future<Map<String, String>> _downloadHeaders(StreamLink link, int? storageId, String? userAgent) async {
+    final headers = <String, String>{
+      if (userAgent != null) 'User-Agent': userAgent,
+    };
+    if (link.isDirect) return headers..addAll(link.headers);
     if (storageId != null) {
       final storage = await _getStorageById(storageId);
       if (storage?.type.toLowerCase() == 'webdav') {
@@ -1171,16 +1166,15 @@ class DownloadService {
             password != null &&
             username.isNotEmpty) {
           final webdavUri = Uri.tryParse(webdavUrl);
-          final targetUri = Uri.tryParse(streamUrl);
+          final targetUri = Uri.tryParse(link.url);
           if (HttpUtils.sameOrigin(webdavUri, targetUri)) {
             headers['Authorization'] = HttpUtils.basicAuthHeader(username, password);
           }
         }
       }
     }
-    _maybeAttachBearerAuth(headers, streamUrl);
-
-    return (url: streamUrl, headers: headers, error: null);
+    _maybeAttachBearerAuth(headers, link.url);
+    return headers;
   }
 
   Future<String> getDownloadDir() => _downloadDir;

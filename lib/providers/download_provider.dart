@@ -319,6 +319,7 @@ class DownloadManagerNotifier extends Notifier<DownloadManagerState> {
         dir: dir,
         filename: filename,
         headers: info.headers,
+        connections: info.maxConnections,
       );
 
       var updatedTask = task.copyWith(

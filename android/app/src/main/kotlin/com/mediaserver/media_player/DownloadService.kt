@@ -164,14 +164,15 @@ class DownloadService : Service() {
         url: String,
         savePath: String,
         headers: Map<String, String>,
-        displayName: String?
+        displayName: String?,
+        threadCount: Int? = null
     ) {
         val name = displayName ?: taskId
         activeTasks[taskId] = TaskInfo(taskId, name)
 
         notificationManager.notify(NOTIFICATION_ID, createNotification())
 
-        downloader.startDownload(taskId, url, savePath, headers) { progress ->
+        downloader.startDownload(taskId, url, savePath, headers, threadCount) { progress ->
             activeTasks[taskId]?.apply {
                 downloadedBytes = progress.downloadedBytes
                 totalBytes = progress.totalBytes

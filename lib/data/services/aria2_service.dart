@@ -51,15 +51,21 @@ class Aria2Service {
     await _call(force ? 'aria2.forceShutdown' : 'aria2.shutdown');
   }
 
+  /// [connections] 大于 1 时覆盖全局的分片与单服务器连接数（aria2 单服务器连接数最多 16）
   Future<String> addUri(
     String url, {
     String? dir,
     String? filename,
     Map<String, String>? headers,
+    int? connections,
   }) async {
     final options = <String, dynamic>{};
     if (dir != null) options['dir'] = dir;
     if (filename != null) options['out'] = filename;
+    if (connections != null && connections > 1) {
+      options['split'] = '$connections';
+      options['max-connection-per-server'] = '${connections.clamp(1, 16)}';
+    }
 
     // 使用传入的 headers，如果没有 User-Agent 则使用默认值
     final allHeaders = <String>[];

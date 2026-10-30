@@ -110,6 +110,10 @@ class ApiConstants {
   static String downloadSourceUrl(int id) =>
       '$apiPrefix/download/source/$id/url';
 
+  // 播放直链（网盘类存储由客户端直连）
+  static String movieLink(int id) => '$apiPrefix/links/movie/$id';
+  static String sourceLink(int id) => '$apiPrefix/links/source/$id';
+
   // 认证
   static const String authStatus = '$apiPrefix/auth/status';
   static const String authSetup = '$apiPrefix/auth/setup';

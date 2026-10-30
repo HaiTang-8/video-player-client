@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:media_player/data/models/stream_link.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
 import 'package:media_player/playback/cache/playback_proxy.dart';
 import 'package:media_player/playback/cache/proxied_source_resolver.dart';
@@ -21,17 +22,29 @@ class _GatedResolver implements PlaybackSourceResolver {
   Object? error;
   Completer<void>? gate;
   int calls = 0;
+  StreamLinkKind? kind;
+  int connections = 1;
+  Map<String, String> Function(int call) headers = (_) => const {};
+  final List<({String? variant, bool fresh})> requests = [];
 
   @override
-  Future<ResolvedPlayback> resolve(PlaybackItem item) async {
+  Future<ResolvedPlayback> resolve(
+    PlaybackItem item, {
+    String? variant,
+    bool fresh = false,
+  }) async {
     calls++;
+    requests.add((variant: variant, fresh: fresh));
     await gate?.future;
     final failure = error;
     if (failure != null) throw failure;
     return ResolvedPlayback(
-      PlaybackSource.network(url.toString(), httpHeaders: const {}),
+      PlaybackSource.network(url.toString(), httpHeaders: headers(calls)),
       storageId: 3,
       filePath: filePath,
+      linkKind: kind,
+      variant: kind == null ? null : variant ?? StreamLink.originalVariant,
+      maxConnections: connections,
     );
   }
 
@@ -168,4 +181,58 @@ void main() {
     expect(inner.calls, 1);
     expect(await read(resolved.source.url, 'bytes=0-9'), bytes.sublist(0, 10));
   });
+
+  test(
+    'with the cache off only direct file links go through the proxy',
+    () async {
+      final noCache = ProxiedSourceResolver(
+        inner,
+        proxy,
+        cacheEnabled: false,
+        serverUrl: () => 'http://media.local:5681',
+      );
+      final plain = await noCache.resolve(movie);
+      expect(plain.source.url, upstream.mediaUri.toString());
+
+      inner
+        ..kind = StreamLinkKind.file
+        ..connections = 4;
+      final direct = await noCache.resolve(movie);
+      expect(Uri.parse(direct.source.url).host, '127.0.0.1');
+      expect(direct.maxConnections, 4);
+      expect(
+        await read(direct.source.url, 'bytes=0-99'),
+        bytes.sublist(0, 100),
+      );
+      expect((await proxy.usage())['bytes'], 0);
+    },
+  );
+
+  test('hls links are handed to the engine directly', () async {
+    inner.kind = StreamLinkKind.hls;
+    final resolved = await resolver().resolve(movie, variant: '4k');
+    expect(resolved.source.url, upstream.mediaUri.toString());
+    expect(inner.requests.single, (variant: '4k', fresh: false));
+  });
+
+  test(
+    'a rejected direct link is refreshed with fresh and its variant',
+    () async {
+      upstream.requiredHeaders = const {'Cookie': '__puus=new'};
+      inner
+        ..kind = StreamLinkKind.file
+        ..connections = 2
+        ..headers =
+            (call) => {'Cookie': call == 1 ? '__puus=old' : '__puus=new'};
+      final resolved = await resolver().resolve(movie);
+      expect(
+        await read(resolved.source.url, 'bytes=0-99'),
+        bytes.sublist(0, 100),
+      );
+      expect(inner.requests.last, (
+        variant: StreamLink.originalVariant,
+        fresh: true,
+      ));
+    },
+  );
 }

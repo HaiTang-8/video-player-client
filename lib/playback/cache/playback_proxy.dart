@@ -69,8 +69,9 @@ class PlaybackProxy implements PlaybackCacheCatalog {
   int _nextId = 0;
 
   /// 登记上游，返回代理地址；登记在代理隔离区确认后才返回，避免播放器的请求先到。
-  /// 给出 [cacheId] 时经过磁盘缓存；[refresh] 用于上游返回 401 / 403 / 410 时重新解析。
-  /// [upstream] 为空时（命中缓存、后台还在解析）已缓存的部分照常读取，回源要等 [provideUpstream]
+  /// 给出 [cacheId] 时经过磁盘缓存；[refresh] 用于上游返回 401 / 403 / 410 / 412 时重新解析。
+  /// [upstream] 为空时（命中缓存、后台还在解析）已缓存的部分照常读取，回源要等 [provideUpstream]。
+  /// [maxConnections] 大于 1 时按块并发回源（网盘单连接限速）
   Future<Uri> register(
     Uri? upstream,
     Map<String, String> headers, {
@@ -80,6 +81,7 @@ class PlaybackProxy implements PlaybackCacheCatalog {
     int? storageId,
     String? serverId,
     String? itemKey,
+    int maxConnections = 1,
   }) async {
     final handle = await _start();
     final id = 'r${++_nextId}';
@@ -95,6 +97,7 @@ class PlaybackProxy implements PlaybackCacheCatalog {
       'storageId': storageId,
       'serverId': serverId,
       'itemKey': itemKey,
+      'connections': maxConnections,
     });
     if (DateTime.now().difference(_limitsSentAt ?? DateTime(2000)) >
         const Duration(minutes: 1)) {
@@ -122,12 +125,17 @@ class PlaybackProxy implements PlaybackCacheCatalog {
   }
 
   /// 补上后台解析出的上游地址，等待中的回源请求随之继续
-  void provideUpstream(Uri proxyUri, Uri url, Map<String, String> headers) =>
-      _post(proxyUri, {
-        'cmd': 'upstream',
-        'url': url.toString(),
-        'headers': headers,
-      });
+  void provideUpstream(
+    Uri proxyUri,
+    Uri url,
+    Map<String, String> headers, {
+    int maxConnections = 1,
+  }) => _post(proxyUri, {
+    'cmd': 'upstream',
+    'url': url.toString(),
+    'headers': headers,
+    'connections': maxConnections,
+  });
 
   /// 后台解析失败：需要回源的请求返回 502，已缓存的部分照常读取
   void failUpstream(Uri proxyUri) => _post(proxyUri, {'cmd': 'upstreamFailed'});

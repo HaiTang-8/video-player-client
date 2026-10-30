@@ -9,6 +9,7 @@ export 'season.dart';
 export 'episode.dart';
 export 'storage.dart';
 export 'stream_info.dart';
+export 'stream_link.dart';
 export 'category.dart';
 export 'ai_tidy.dart';
 export 'playback_settings.dart';

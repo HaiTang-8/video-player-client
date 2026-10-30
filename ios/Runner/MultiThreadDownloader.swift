@@ -276,8 +276,10 @@ class MultiThreadDownloader: NSObject {
         url: String,
         savePath: String,
         headers: [String: String],
-        displayName: String? = nil
+        displayName: String? = nil,
+        threadCount requested: Int? = nil
     ) {
+        let threadCount = requested ?? self.threadCount
         let task = BackgroundDownloadTask(
             taskId: taskId,
             url: url,
