@@ -24,6 +24,18 @@ class StorageService {
     );
   }
 
+  /// 获取驱动声明（按声明渲染表单的存储源类型）
+  Future<ApiResponse<List<DriverMeta>>> getDrivers() async {
+    return _client.get<List<DriverMeta>>(
+      '${ApiConstants.storages}/drivers',
+      fromJson:
+          (json) => [
+            for (final e in json as List? ?? const [])
+              if (e is Map<String, dynamic>) DriverMeta.fromJson(e),
+          ],
+    );
+  }
+
   /// 添加存储源
   Future<ApiResponse<Storage>> addStorage({
     required String name,

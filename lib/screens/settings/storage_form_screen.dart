@@ -8,8 +8,10 @@ import '../../core/theme/app_colors.dart';
 import '../../core/widgets/dialog_utils.dart';
 import '../../core/widgets/form_page.dart';
 import '../../core/widgets/password_text_field.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
+import 'driver_fields_form.dart';
 import 'storage_type.dart';
 
 
@@ -39,8 +41,15 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
   String _streamMode = 'redirect';
   bool _isSubmitting = false;
   bool _isTesting = false;
+  final Map<String, DriverFieldsController> _driverFields = {};
 
   bool get _isEditing => widget.storageId != null;
+
+  /// 按声明渲染时使用的类型：未知类型沿用存储源原始类型
+  String get _declaredType =>
+      _selectedType == StorageType.unknown
+          ? (_storage?.type.trim().toLowerCase() ?? '')
+          : _selectedType.value;
 
   @override
   void initState() {
@@ -90,6 +99,9 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     _proxyUrlController.dispose();
     _publicBaseUrlController.dispose();
     _tokenController.dispose();
+    for (final c in _driverFields.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -111,10 +123,23 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       );
     }
 
+    final drivers =
+        _selectedType.hasHandwrittenForm
+            ? null
+            : ref.watch(storageDriversProvider);
+    final meta =
+        drivers == null
+            ? null
+            : DriverMeta.find(drivers.value ?? const [], _declaredType);
+    final canSubmit = drivers == null || meta != null;
+    final streamModes =
+        drivers == null ? null : meta?.capabilities.streamModes ?? const [];
+
     return FormPageScaffold(
       title: title,
       bottomAction: shadcn.PrimaryButton(
-        onPressed: _isSubmitting ? null : _handleSubmit,
+        onPressed:
+            _isSubmitting || !canSubmit ? null : () => _handleSubmit(meta),
         alignment: Alignment.center,
         child:
             _isSubmitting
@@ -139,47 +164,96 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
             ),
           ],
         ),
-        FormSection(title: '连接', children: _buildConnectionFields()),
-        FormSection(title: '播放', children: _buildPlaybackFields()),
+        FormSection(
+          title: '连接',
+          children:
+              drivers == null
+                  ? _buildConnectionFields()
+                  : _buildDeclaredFields(drivers, meta),
+        ),
+        if (streamModes == null)
+          FormSection(title: '播放', children: _buildPlaybackFields())
+        else if (streamModes.isNotEmpty)
+          FormSection(
+            title: '播放',
+            children: [
+              FormFieldBlock(
+                label: '流媒体模式',
+                child: _buildStreamModeSelector(streamModes),
+              ),
+            ],
+          ),
       ],
     );
   }
 
   Widget _buildTypeSelector() {
-    return Row(
-      children: [
-        for (final type in StorageType.values) ...[
-          if (type != StorageType.values.first) const SizedBox(width: 8),
-          Expanded(
-            child: FormOptionCard(
-              selected: _selectedType == type,
-              color: type.color,
-              onTap: () {
-                if (type == _selectedType) return;
-                setState(() {
-                  _selectedType = type;
-                  _resetTypeDefaults();
-                });
-              },
-              child: Column(
+    final types =
+        _selectedType == StorageType.unknown
+            ? const [StorageType.unknown]
+            : StorageType.selectable;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 8.0;
+        final perRow =
+            types.length > 2 && constraints.maxWidth < types.length * 96
+                ? 2
+                : types.length;
+        final rows = [
+          for (var i = 0; i < types.length; i += perRow)
+            types.sublist(i, (i + perRow).clamp(0, types.length)),
+        ];
+        return Column(
+          children: [
+            for (var r = 0; r < rows.length; r++) ...[
+              if (r > 0) const SizedBox(height: gap),
+              Row(
                 children: [
-                  Icon(type.icon, size: 22, color: type.color),
-                  const SizedBox(height: 6),
-                  Text(
-                    type.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                  for (var i = 0; i < perRow; i++) ...[
+                    if (i > 0) const SizedBox(width: gap),
+                    Expanded(
+                      child:
+                          i < rows[r].length
+                              ? _buildTypeCard(rows[r][i])
+                              : const SizedBox.shrink(),
                     ),
-                  ),
+                  ],
                 ],
               ),
-            ),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTypeCard(StorageType type) {
+    final label =
+        type == StorageType.unknown
+            ? (_storage?.type.isNotEmpty == true ? _storage!.type : type.label)
+            : type.label;
+    return FormOptionCard(
+      selected: _selectedType == type,
+      color: type.color,
+      onTap: () {
+        if (type == _selectedType) return;
+        setState(() {
+          _selectedType = type;
+          _resetTypeDefaults();
+        });
+      },
+      child: Column(
+        children: [
+          Icon(type.icon, size: 22, color: type.color),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
           ),
         ],
-      ],
+      ),
     );
   }
 
@@ -263,9 +337,86 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
               placeholder: const Text('密码'),
             ),
           ),
-          _buildTestConnectionButton(),
+          _buildTestConnectionButton(_handleTestConnection),
         ];
+      case StorageType.quark:
+      case StorageType.unknown:
+        return const [];
     }
+  }
+
+  DriverFieldsController _driverFieldsFor(DriverMeta meta) {
+    return _driverFields.putIfAbsent(meta.type, () {
+      final storage = _storage;
+      final sameType =
+          storage != null &&
+          storage.type.trim().toLowerCase() == meta.type.toLowerCase();
+      return DriverFieldsController(meta, sameType ? storage.settings : null);
+    });
+  }
+
+  List<Widget> _buildDeclaredFields(
+    AsyncValue<List<DriverMeta>> drivers,
+    DriverMeta? meta,
+  ) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    if (meta != null) {
+      if (meta.fields.isEmpty) {
+        return [
+          FormNotice(
+            icon: CupertinoIcons.info_circle,
+            message: '${meta.label}无需额外配置',
+            color: context.appColors.textSecondary,
+          ),
+        ];
+      }
+      final controller = _driverFieldsFor(meta);
+      return [
+        DriverFieldsForm(controller: controller),
+        _buildTestConnectionButton(() => _handleDeclaredTest(controller)),
+      ];
+    }
+    if (drivers.isLoading) {
+      return [
+        SkeletonShimmer(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < 2; i++) ...[
+                if (i > 0) const SizedBox(height: 16),
+                const SkeletonBox(width: 72, height: 14),
+                const SizedBox(height: 8),
+                SkeletonBox(height: i == 0 ? 72 : 36),
+              ],
+            ],
+          ),
+        ),
+      ];
+    }
+    if (drivers.hasError) {
+      return [
+        FormNotice(
+          icon: CupertinoIcons.exclamationmark_circle,
+          message: '加载配置项失败：${drivers.error}',
+          color: errorColor,
+        ),
+        shadcn.OutlineButton(
+          onPressed: () => ref.invalidate(storageDriversProvider),
+          leading: const Icon(CupertinoIcons.refresh, size: 14),
+          child: const Text('重试'),
+        ),
+      ];
+    }
+    return [
+      FormNotice(
+        icon: CupertinoIcons.exclamationmark_circle,
+        message:
+            _selectedType == StorageType.unknown
+                ? '当前客户端不支持类型「$_declaredType」，只能查看，请在新版客户端或 Web 后台中编辑'
+                : '服务器未提供「${_selectedType.label}」的配置项，请升级服务端',
+        color: errorColor,
+      ),
+    ];
   }
 
   List<Widget> _buildPlaybackFields() {
@@ -296,7 +447,10 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     ];
   }
 
-  Widget _buildStreamModeSelector() {
+  Widget _buildStreamModeSelector([
+    List<String> modes = const ['redirect', 'proxy'],
+  ]) {
+    if (!modes.contains(_streamMode)) _streamMode = modes.first;
     Widget option(String mode, String title, String subtitle) {
       final colors = context.appColors;
       final selected = _streamMode == mode;
@@ -331,9 +485,18 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          option('redirect', '直连', '客户端直接访问存储，速度更快'),
-          const SizedBox(width: 8),
-          option('proxy', '代理', '经服务器中转，兼容性更好'),
+          for (var i = 0; i < modes.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            switch (modes[i]) {
+              'redirect' => option(
+                'redirect',
+                '直连',
+                '客户端直接访问存储，速度更快',
+              ),
+              'proxy' => option('proxy', '代理', '经服务器中转，兼容性更好'),
+              final mode => option(mode, mode, ''),
+            },
+          ],
         ],
       ),
     );
@@ -367,9 +530,9 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     );
   }
 
-  Widget _buildTestConnectionButton() {
+  Widget _buildTestConnectionButton(VoidCallback onPressed) {
     return shadcn.OutlineButton(
-      onPressed: _isTesting ? null : _handleTestConnection,
+      onPressed: _isTesting ? null : onPressed,
       leading:
           _isTesting
               ? const SizedBox(
@@ -423,7 +586,37 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     }
   }
 
-  Future<void> _handleSubmit() async {
+  Future<void> _handleDeclaredTest(DriverFieldsController controller) async {
+    final error = controller.validate();
+    if (error != null) {
+      DialogUtils.showToast(context: context, message: error, isError: true);
+      return;
+    }
+    setState(() => _isTesting = true);
+    final (success, message) = await ref
+        .read(storagesProvider.notifier)
+        .testConnection(
+          type: controller.meta.type,
+          settings: _declaredSettings(controller),
+        );
+    if (!mounted) return;
+    setState(() => _isTesting = false);
+    DialogUtils.showToast(
+      context: context,
+      message: success ? '连接成功' : (message ?? '连接失败'),
+      isError: !success,
+    );
+  }
+
+  Map<String, String> _declaredSettings(DriverFieldsController controller) {
+    final settings = controller.values();
+    if (controller.meta.capabilities.streamModes.isNotEmpty) {
+      settings['stream_mode'] = _streamMode;
+    }
+    return settings;
+  }
+
+  Future<void> _handleSubmit(DriverMeta? meta) async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       DialogUtils.showToast(context: context, message: '请输入名称', isError: true);
@@ -431,6 +624,7 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
     }
 
     Map<String, String> settings;
+    var type = _selectedType.value;
     switch (_selectedType) {
       case StorageType.webdav:
         settings = {
@@ -482,6 +676,21 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
           settings['password'] = password;
         }
         break;
+      case StorageType.quark:
+      case StorageType.unknown:
+        if (meta == null) return;
+        final controller = _driverFieldsFor(meta);
+        final error = controller.validate();
+        if (error != null) {
+          DialogUtils.showToast(
+            context: context,
+            message: error,
+            isError: true,
+          );
+          return;
+        }
+        settings = _declaredSettings(controller);
+        type = meta.type;
     }
 
     setState(() => _isSubmitting = true);
@@ -492,12 +701,12 @@ class _StorageFormScreenState extends ConsumerState<StorageFormScreen> {
             ? await notifier.updateStorage(
               id: storage.id,
               name: name,
-              type: _selectedType.value,
+              type: type,
               settings: settings,
             )
             : await notifier.addStorage(
               name: name,
-              type: _selectedType.value,
+              type: type,
               settings: settings,
             );
     if (!mounted) return;

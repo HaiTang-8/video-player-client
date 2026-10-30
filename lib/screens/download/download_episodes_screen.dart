@@ -280,25 +280,15 @@ class _EpisodeDownloadItem extends StatelessWidget {
                 Row(
                   children: [
                     if (storageName != null) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                        child: Text(
-                          'DAV',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.green.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
+                      Icon(Icons.storage, size: 12, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
-                      Text(
-                        storageName!,
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      Flexible(
+                        child: Text(
+                          storageName!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                        ),
                       ),
                       Text(
                         ' | ',

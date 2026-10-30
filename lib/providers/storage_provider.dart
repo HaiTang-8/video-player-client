@@ -15,6 +15,16 @@ final storageServiceProvider = Provider<StorageService?>((ref) {
   return StorageService(client);
 });
 
+final storageDriversProvider = FutureProvider.autoDispose<List<DriverMeta>>((
+  ref,
+) async {
+  final service = ref.watch(storageServiceProvider);
+  if (service == null) throw '服务不可用';
+  final response = await service.getDrivers();
+  if (!response.isSuccess) throw response.error ?? '加载驱动声明失败';
+  return response.data ?? const [];
+}, retry: (count, error) => null);
+
 final storagesProvider =
     NotifierProvider<StoragesNotifier, AsyncValue<List<Storage>>>(
       StoragesNotifier.new,

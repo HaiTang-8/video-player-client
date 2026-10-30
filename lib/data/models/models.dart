@@ -8,6 +8,7 @@ export 'tvshow.dart';
 export 'season.dart';
 export 'episode.dart';
 export 'storage.dart';
+export 'driver_meta.dart';
 export 'stream_info.dart';
 export 'stream_link.dart';
 export 'category.dart';

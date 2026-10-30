@@ -533,9 +533,17 @@ String? _storageAddress(Storage storage) {
   return value.trim();
 }
 
+String _storageMissingAddress(Storage storage) {
+  return switch (StorageType.fromString(storage.type)) {
+    StorageType.unknown => '不支持的类型：${storage.type}',
+    StorageType.quark => '网盘存储源',
+    _ => '未配置地址',
+  };
+}
+
 String _storageShortAddress(Storage storage) {
   final address = _storageAddress(storage);
-  if (address == null) return '未配置地址';
+  if (address == null) return _storageMissingAddress(storage);
   final host = Uri.tryParse(address)?.host ?? '';
   return host.isNotEmpty ? host : address;
 }
@@ -773,7 +781,7 @@ class _StorageMoreButton extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            address ?? '未配置地址',
+                            address ?? _storageMissingAddress(storage),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -943,7 +951,7 @@ class _StorageCardState extends State<_StorageCard> {
     final type = StorageType.fromString(storage.type);
     final address = _storageAddress(storage);
     final addressText = Text(
-      address ?? '未配置地址',
+      address ?? _storageMissingAddress(storage),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary),

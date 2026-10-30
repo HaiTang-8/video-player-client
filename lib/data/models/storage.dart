@@ -76,6 +76,8 @@ class Storage {
         return '本地存储';
       case 'openlist':
         return 'OpenList';
+      case 'quark':
+        return '夸克网盘';
       default:
         return type;
     }

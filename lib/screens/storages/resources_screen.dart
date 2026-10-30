@@ -13,6 +13,7 @@ import '../../core/widgets/dialog_utils.dart';
 import '../../data/models/models.dart';
 import '../../providers/providers.dart';
 import '../../core/widgets/download_indicators.dart';
+import '../settings/storage_type.dart';
 
 class ResourcesScreen extends ConsumerStatefulWidget {
   const ResourcesScreen({super.key});
@@ -353,6 +354,10 @@ class _ResourcesScreenState extends ConsumerState<ResourcesScreen> {
   }
 
   void _editStorage(Storage storage) {
+    if (!StorageType.fromString(storage.type).hasHandwrittenForm) {
+      context.push('/storage-manage/${storage.id}/edit', extra: storage);
+      return;
+    }
     final settings = storage.settings ?? {};
     final nameController = TextEditingController(text: storage.name);
     final urlController = TextEditingController(
@@ -681,7 +686,12 @@ class _StorageTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final iconColor = storage.type == 'webdav' ? Colors.blue : Colors.orange;
+    final type = StorageType.fromString(storage.type);
+    final declared = !type.hasHandwrittenForm;
+    final iconColor =
+        declared
+            ? type.color
+            : (storage.type == 'webdav' ? Colors.blue : Colors.orange);
 
     return Material(
       color: Colors.transparent,
@@ -700,7 +710,9 @@ class _StorageTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  storage.type == 'webdav'
+                  declared
+                      ? type.icon
+                      : storage.type == 'webdav'
                       ? CupertinoIcons.globe
                       : CupertinoIcons.folder,
                   size: 20,
