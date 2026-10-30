@@ -580,6 +580,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
             subtitleDelaySupported: () => _session.subtitleDelaySupported,
             subtitleDelaySharedByShow: _session.subtitleDelaySharedByShow,
             onSubtitleDelayChanged: _session.setSubtitleDelay,
+            variants: _session.variants,
+            currentVariant: _session.currentVariant,
+            onSelectVariant: _session.switchVariant,
             onSeekRequested: _session.seek,
             isPlaybackErrorRecoveryActive:
                 () => _session.isRecoveringFromNetworkError,

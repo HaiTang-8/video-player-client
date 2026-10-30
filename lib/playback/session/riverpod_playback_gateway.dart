@@ -122,6 +122,37 @@ class RiverpodPlaybackGateway
     return response?.data;
   }
 
+  /// 读取起播时已获取的 stream 信息（不再强制刷新），只有直连片源才查询版本
+  @override
+  Future<List<LinkVariant>> fetchVariants(PlaybackItem item) async {
+    final service = _mediaService;
+    if (service == null) return const [];
+    final info = await switch (item) {
+      MoviePlaybackItem(:final movieId) => _ref.read(
+        movieStreamProvider(movieId).future,
+      ),
+      EpisodePlaybackItem() => _ref.read(
+        episodeStreamProvider((
+          tvShowId: item.tvShowId,
+          seasonId: item.seasonId,
+          episodeId: item.episodeId,
+        )).future,
+      ),
+    };
+    if (info?.delivery != StreamDelivery.directLink) return const [];
+    final sourceId = info?.sourceId;
+    final response = switch (item) {
+      MoviePlaybackItem(:final movieId) => await service.getLinkVariants(
+        movieId: movieId,
+      ),
+      EpisodePlaybackItem() =>
+        sourceId == null
+            ? null
+            : await service.getLinkVariants(sourceId: sourceId),
+    };
+    return response?.data ?? const [];
+  }
+
   @override
   Future<Storage?> findStorage(int storageId) async {
     final current = _ref.read(storagesProvider).value;

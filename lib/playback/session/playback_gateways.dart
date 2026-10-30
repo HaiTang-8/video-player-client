@@ -20,6 +20,10 @@ abstract interface class PlaybackSourceGateway {
     String? variant,
     bool fresh = false,
   });
+
+  /// 网盘直链的可选版本；不是直连的片源返回空列表
+  Future<List<LinkVariant>> fetchVariants(PlaybackItem item);
+
   Future<Storage?> findStorage(int storageId);
   Future<List<SubtitleInfo>> listSubtitles({
     required int storageId,

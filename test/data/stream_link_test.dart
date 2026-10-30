@@ -45,4 +45,27 @@ void main() {
       StreamDelivery.directLink,
     );
   });
+
+  test('variants parse the server list', () {
+    final hd = LinkVariant.fromJson({
+      'id': 'super',
+      'label': '超清 转码',
+      'kind': 'hls',
+      'height': 1080,
+      'original': false,
+    });
+    expect(hd.id, 'super');
+    expect(hd.label, '超清 转码');
+    expect(hd.kind, StreamLinkKind.hls);
+    expect(hd.original, isFalse);
+
+    final original = LinkVariant.fromJson({
+      'id': 'original',
+      'label': '原画',
+      'kind': 'file',
+      'original': true,
+    });
+    expect(original.kind, StreamLinkKind.file);
+    expect(original.original, isTrue);
+  });
 }

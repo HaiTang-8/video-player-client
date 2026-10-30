@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:media_player/data/models/stream_info.dart';
+import 'package:media_player/data/models/stream_link.dart';
 import 'package:media_player/data/models/subtitle_info.dart';
 import 'package:media_player/playback/domain/playback_domain.dart';
 import 'package:media_player/playback/engines/playback_engine_factory.dart';
@@ -42,6 +43,9 @@ class _FakeResolver implements PlaybackSourceResolver {
   Completer<void>? gate;
   int resolveCount = 0;
   bool disposed = false;
+  final List<String?> requestedVariants = [];
+  ResolvedPlayback Function(String? variant)? resultFor;
+  Set<String> unavailableVariants = {};
 
   @override
   Future<ResolvedPlayback> resolve(
@@ -50,10 +54,14 @@ class _FakeResolver implements PlaybackSourceResolver {
     bool fresh = false,
   }) async {
     resolveCount++;
+    requestedVariants.add(variant);
     await gate?.future;
     final failure = error;
     if (failure != null) throw failure;
-    return result!;
+    if (unavailableVariants.contains(variant)) {
+      throw Exception('variant $variant not found');
+    }
+    return resultFor?.call(variant) ?? result!;
   }
 
   String? subtitleText;
@@ -795,6 +803,166 @@ void main() {
 
       expect(session.status, isA<PlaybackSessionReady>());
       expect(session.externalSubtitles, isEmpty);
+    });
+  });
+
+  group('variants', () {
+    const original = LinkVariant(id: 'original', label: '原画', original: true);
+    const superHd = LinkVariant(
+      id: 'super',
+      label: '超清 转码',
+      kind: StreamLinkKind.hls,
+    );
+    const episode1 = EpisodePlaybackItem(tvShowId: 7, seasonId: 1, episodeId: 1);
+    const episode2 = EpisodePlaybackItem(tvShowId: 7, seasonId: 1, episodeId: 2);
+    const otherShow = EpisodePlaybackItem(
+      tvShowId: 8,
+      seasonId: 1,
+      episodeId: 1,
+    );
+
+    setUp(() {
+      sourceGateway.variants = const [original, superHd];
+      resolver.resultFor = (variant) {
+        final id = variant ?? 'original';
+        return ResolvedPlayback(
+          PlaybackSource.network('http://cdn.local/$id'),
+          storageId: 1,
+          filePath: '/movies/a.mkv',
+          linkKind: id == 'original' ? StreamLinkKind.file : StreamLinkKind.hls,
+          variant: id,
+        );
+      };
+    });
+
+    Future<void> playAt(PlaybackItem item, Duration position) async {
+      await session.load(item);
+      await pumpEventQueue();
+      engine.hub.update(duration: hour, position: position);
+      await pumpEventQueue();
+    }
+
+    test('are fetched in the background without blocking startup', () async {
+      final gate = sourceGateway.variantsGate = Completer<void>();
+      await session.load(movie);
+
+      expect(session.status, isA<PlaybackSessionReady>());
+      expect(session.variants, isEmpty);
+      expect(session.currentVariant, isNull);
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(session.variants, [original, superHd]);
+      expect(session.currentVariant, original);
+    });
+
+    test('are not fetched for local files', () async {
+      resolver.resultFor = null;
+      resolver.result = const ResolvedPlayback(
+        PlaybackSource.localFile('/downloads/a.mkv'),
+      );
+      await session.load(movie);
+      await pumpEventQueue();
+
+      expect(sourceGateway.variantRequests, 0);
+      expect(session.variants, isEmpty);
+    });
+
+    test('switch saves progress and reopens at the same position', () async {
+      await playAt(movie, const Duration(seconds: 300));
+      engine.calls.clear();
+
+      await session.switchVariant('super');
+
+      expect(resolver.requestedVariants.last, 'super');
+      expect(
+        engine.calls,
+        containsAllInOrder(['pause', 'open http://cdn.local/super @300']),
+      );
+      expect(progressGateway.uploads, contains('300/3600'));
+      expect(session.currentVariant, superHd);
+      expect(session.status, isA<PlaybackSessionReady>());
+      expect(sourceGateway.variantRequests, 1, reason: '同一个片源沿用版本列表');
+    });
+
+    test('switching back to the original resolves without a variant', () async {
+      await playAt(movie, const Duration(seconds: 60));
+      await session.switchVariant('super');
+      engine.hub.update(duration: hour, position: const Duration(seconds: 90));
+      await pumpEventQueue();
+      await session.switchVariant('original');
+
+      expect(resolver.requestedVariants.last, isNull);
+      expect(engine.openedSource?.url, 'http://cdn.local/original');
+      expect(engine.openedStartPosition, const Duration(seconds: 90));
+      expect(session.currentVariant, original);
+    });
+
+    test('current or unknown variant is ignored', () async {
+      await playAt(movie, const Duration(seconds: 60));
+      final before = resolver.resolveCount;
+
+      await session.switchVariant('original');
+      await session.switchVariant('missing');
+
+      expect(resolver.resolveCount, before);
+    });
+
+    test('choice carries over to the same show only', () async {
+      await playAt(episode1, const Duration(seconds: 60));
+      await session.switchVariant('super');
+
+      await session.load(episode2);
+      await pumpEventQueue();
+      expect(resolver.requestedVariants.last, 'super');
+      expect(session.currentVariant, superHd);
+      expect(sourceGateway.variantRequests, 2, reason: '换集后重新获取版本列表');
+
+      await session.load(otherShow);
+      expect(resolver.requestedVariants.last, isNull);
+    });
+
+    test('unavailable remembered variant falls back to the original', () async {
+      await playAt(episode1, const Duration(seconds: 60));
+      await session.switchVariant('super');
+      resolver.unavailableVariants = {'super'};
+      resolver.requestedVariants.clear();
+
+      await session.load(episode2);
+      await pumpEventQueue();
+      expect(resolver.requestedVariants, ['super', null]);
+      expect(session.status, isA<PlaybackSessionReady>());
+      expect(session.currentVariant, original);
+      expect(notices.last, contains('已改用原画'));
+
+      await session.load(
+        const EpisodePlaybackItem(tvShowId: 7, seasonId: 1, episodeId: 3),
+      );
+      expect(resolver.requestedVariants.last, isNull);
+    });
+
+    test('keeps the selected external subtitle across a switch', () async {
+      final chs = subtitleInfo('chs', 95);
+      final eng = subtitleInfo('eng', 40);
+      sourceGateway.subtitles = [chs, eng];
+      await playAt(movie, const Duration(seconds: 60));
+      await session.selectExternalSubtitle(eng);
+      engine.hub.update(
+        selectedTracks: SelectedTracks(
+          subtitle: SubtitleTrackInfo(id: 'ext', title: eng.displayName),
+        ),
+      );
+      await pumpEventQueue();
+      engine.calls.clear();
+      notices.clear();
+
+      await session.switchVariant('super');
+      await pumpEventQueue();
+
+      expect(engine.calls.where((c) => c.startsWith('external')), [
+        'external ${eng.displayName}',
+      ]);
+      expect(notices, isEmpty);
     });
   });
 

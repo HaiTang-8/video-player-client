@@ -43,6 +43,8 @@ dependencies {
     val media3 = "1.10.1"
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-ui:$media3")
+    // 网盘转码版本是 HLS（D8），DefaultMediaSourceFactory 检测到该模块后按 .m3u8 地址创建 HlsMediaSource
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
     // 系统没有 AC3 / E-AC3 / DTS / TrueHD 解码器时使用，版本必须与 Media3 一致
     implementation("com.mediaserver.media3:decoder-ffmpeg:$media3")
     // libass 渲染 ASS / SSA（MIT）；它依赖 media3-effect 1.8.0，这里对齐到当前 Media3 版本

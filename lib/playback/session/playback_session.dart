@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../data/models/stream_link.dart';
 import '../../data/models/subtitle_info.dart';
 import '../../data/services/log_service.dart';
 import '../domain/playback_domain.dart';
@@ -108,6 +109,14 @@ class PlaybackSession extends ChangeNotifier {
   String? _currentUrl;
   String? _filePath;
   List<SubtitleInfo> _externalSubtitles = const [];
+  List<LinkVariant> _variants = const [];
+  String? _activeVariant;
+
+  /// 用户选的非原画版本，只对同一部电影 / 同一部剧生效
+  ({String scope, String id})? _variantChoice;
+
+  /// 切换版本前选中的外挂字幕，重新打开后恢复
+  SubtitleInfo? _restoreSubtitle;
   double? _sessionRate;
   double? _sessionVolume;
   SubtitleStyle _subtitleStyle;
@@ -134,6 +143,14 @@ class PlaybackSession extends ChangeNotifier {
   String? get filePath => _filePath;
 
   List<SubtitleInfo> get externalSubtitles => _externalSubtitles;
+
+  /// 网盘直链的可选版本（原画 / 各档转码），起播后在后台获取
+  List<LinkVariant> get variants => _variants;
+
+  LinkVariant? get currentVariant {
+    final id = _activeVariant ?? StreamLink.originalVariant;
+    return _variants.where((v) => v.id == id).firstOrNull;
+  }
 
   /// 用户在本次会话中调整过的音量，切换剧集时沿用
   double? get sessionVolume => _sessionVolume;
@@ -192,9 +209,13 @@ class PlaybackSession extends ChangeNotifier {
     await _seek.awaitActive();
     final generation = ++_loadGeneration;
     _cancelPendingStart();
-    if (!identical(item, _item)) {
+    final sameItem = identical(item, _item);
+    final restoreSubtitle = sameItem ? _restoreSubtitle : null;
+    _restoreSubtitle = null;
+    if (!sameItem) {
       _flushDelaySave();
       _subtitleDelay.value = _subtitleDelayStore?.read(item) ?? Duration.zero;
+      _variants = const [];
     }
     _delayReload?.cancel();
     _externalSubtitle = null;
@@ -210,6 +231,7 @@ class PlaybackSession extends ChangeNotifier {
     _currentUrl = null;
     _filePath = null;
     _externalSubtitles = const [];
+    _activeVariant = null;
     _observer = null;
     _firstFrameNotified = false;
     _lastProgressReport = null;
@@ -217,8 +239,9 @@ class PlaybackSession extends ChangeNotifier {
     _setStatus(const PlaybackSessionLoading(resolvingSource: true));
 
     try {
-      final resolved = await _resolver.resolve(item);
+      final resolved = await _resolve(item);
       if (_isStale(generation)) return;
+      _activeVariant = resolved.variant;
       _startup?.markResolved(localFile: resolved.source.isLocalFile);
       _observer = resolved.observer?..onOpening(start);
       _currentUrl = resolved.source.url;
@@ -248,7 +271,12 @@ class PlaybackSession extends ChangeNotifier {
       _tracker.start(item);
       if (start != null) _tracker.markControlledSeek(start);
       if (resolved.source.isLocalFile) _notify('正在使用本地缓存播放');
-      unawaited(_loadExternalSubtitles(item, resolved, generation));
+      unawaited(
+        _loadExternalSubtitles(item, resolved, generation, restoreSubtitle),
+      );
+      if (_variants.isEmpty && !resolved.source.isLocalFile) {
+        unawaited(_loadVariants(item, generation));
+      }
       if (waitForView) _armPendingStart();
       _setStatus(const PlaybackSessionReady());
     } on PlaybackSourceUnavailable catch (e) {
@@ -267,6 +295,60 @@ class PlaybackSession extends ChangeNotifier {
     if (item == null) return;
     await load(item, startAt: _startAt);
   }
+
+  /// 切换网盘版本：保存进度后用新版本从当前位置重新打开
+  Future<void> switchVariant(String id) async {
+    final item = _item;
+    if (_disposed || item == null || id == currentVariant?.id) return;
+    final target = _variants.where((v) => v.id == id).firstOrNull;
+    if (target == null) return;
+    _variantChoice =
+        target.original ? null : (scope: _variantScope(item), id: id);
+    final external = _externalSubtitle;
+    final keepSubtitle = external != null && _externalSelected;
+    await prepareSwitch();
+    if (_disposed || !identical(item, _item)) return;
+    _restoreSubtitle = keepSubtitle ? external.info : null;
+    await load(item, startAt: _startAt ?? engine.state.position);
+  }
+
+  /// 记住的版本取不到时（例如下一集没有这一档）改用原画
+  Future<ResolvedPlayback> _resolve(PlaybackItem item) async {
+    final choice = _variantChoice;
+    if (choice == null || choice.scope != _variantScope(item)) {
+      return _resolver.resolve(item);
+    }
+    try {
+      return await _resolver.resolve(item, variant: choice.id);
+    } catch (e) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'variant ${choice.id} unavailable, falling back to original: $e',
+      );
+      _variantChoice = null;
+      _notify('该画质暂不可用，已改用原画');
+      return _resolver.resolve(item);
+    }
+  }
+
+  Future<void> _loadVariants(PlaybackItem item, int generation) async {
+    try {
+      final variants = await _sourceGateway.fetchVariants(item);
+      if (_isStale(generation) || variants.isEmpty) return;
+      _variants = variants;
+      notifyListeners();
+    } catch (e) {
+      LogService.instance.warn(
+        'PlaybackSession',
+        'Failed to load variants: $e',
+      );
+    }
+  }
+
+  static String _variantScope(PlaybackItem item) => switch (item) {
+    MoviePlaybackItem(:final movieId) => 'movie:$movieId',
+    EpisodePlaybackItem(:final tvShowId) => 'tv:$tvShowId',
+  };
 
   /// 页面层的前置校验失败时调用
   void fail(String message) => _setStatus(PlaybackSessionFailed(message));
@@ -620,6 +702,7 @@ class PlaybackSession extends ChangeNotifier {
     PlaybackItem item,
     ResolvedPlayback resolved,
     int generation,
+    SubtitleInfo? restore,
   ) async {
     try {
       final subtitles = await _listExternalSubtitles(item, resolved);
@@ -627,12 +710,16 @@ class PlaybackSession extends ChangeNotifier {
       _externalSubtitles = subtitles;
       notifyListeners();
 
-      final best = _subtitleSelector.bestExternal(subtitles);
+      final kept =
+          restore == null
+              ? null
+              : subtitles.where((s) => s.path == restore.path).firstOrNull;
+      final best = kept ?? _subtitleSelector.bestExternal(subtitles);
       if (best == null) return;
       await selectExternalSubtitle(best);
       if (_isStale(generation)) return;
       _subtitleSelector.markDone();
-      _notify('已自动加载字幕: ${best.displayName}');
+      if (kept == null) _notify('已自动加载字幕: ${best.displayName}');
     } catch (e) {
       LogService.instance.warn(
         'PlaybackSession',

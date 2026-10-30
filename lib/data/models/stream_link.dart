@@ -56,3 +56,28 @@ class StreamLink {
     );
   }
 }
+
+/// 网盘文件的可选版本（原画 / 各档转码），由 /links/*/variants 返回
+class LinkVariant {
+  const LinkVariant({
+    required this.id,
+    required this.label,
+    this.kind = StreamLinkKind.file,
+    this.original = false,
+  });
+
+  final String id;
+  final String label;
+  final StreamLinkKind kind;
+  final bool original;
+
+  factory LinkVariant.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String? ?? StreamLink.originalVariant;
+    return LinkVariant(
+      id: id,
+      label: json['label'] as String? ?? id,
+      kind: StreamLinkKind.fromJson(json['kind']),
+      original: json['original'] as bool? ?? false,
+    );
+  }
+}

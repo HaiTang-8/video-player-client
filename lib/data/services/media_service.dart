@@ -285,6 +285,24 @@ class MediaService {
     );
   }
 
+  /// 获取直链的可选版本：[movieId] 与 [sourceId] 二选一
+  Future<ApiResponse<List<LinkVariant>>> getLinkVariants({
+    int? movieId,
+    int? sourceId,
+  }) {
+    assert((movieId == null) != (sourceId == null));
+    return _client.get<List<LinkVariant>>(
+      movieId != null
+          ? ApiConstants.movieLinkVariants(movieId)
+          : ApiConstants.sourceLinkVariants(sourceId!),
+      fromJson:
+          (json) =>
+              (json as List)
+                  .map((e) => LinkVariant.fromJson(e as Map<String, dynamic>))
+                  .toList(),
+    );
+  }
+
   /// 获取季度播放源分组
   Future<ApiResponse<List<SourceGroup>>> getSeasonSourceGroups(
     int tvShowId,

@@ -113,6 +113,8 @@ class ApiConstants {
   // 播放直链（网盘类存储由客户端直连）
   static String movieLink(int id) => '$apiPrefix/links/movie/$id';
   static String sourceLink(int id) => '$apiPrefix/links/source/$id';
+  static String movieLinkVariants(int id) => '${movieLink(id)}/variants';
+  static String sourceLinkVariants(int id) => '${sourceLink(id)}/variants';
 
   // 认证
   static const String authStatus = '$apiPrefix/auth/status';

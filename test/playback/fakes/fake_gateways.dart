@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:media_player/data/models/storage.dart';
 import 'package:media_player/data/models/stream_info.dart';
 import 'package:media_player/data/models/stream_link.dart';
@@ -44,6 +46,17 @@ class FakeSourceGateway implements PlaybackSourceGateway {
   }) async {
     linkRequests.add((sourceId: sourceId, variant: variant, fresh: fresh));
     return link?.call(variant);
+  }
+
+  List<LinkVariant> variants = const [];
+  Completer<void>? variantsGate;
+  int variantRequests = 0;
+
+  @override
+  Future<List<LinkVariant>> fetchVariants(PlaybackItem item) async {
+    variantRequests++;
+    await variantsGate?.future;
+    return variants;
   }
 
   @override

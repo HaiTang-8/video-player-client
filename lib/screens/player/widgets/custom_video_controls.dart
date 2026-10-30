@@ -14,6 +14,7 @@ import '../../../core/device/device_status.dart';
 import '../../../core/widgets/dialog_utils.dart';
 import '../../../core/window/window_controls.dart';
 import '../../../data/models/episode.dart';
+import '../../../data/models/stream_link.dart';
 import '../../../data/models/subtitle_info.dart';
 import '../../../data/services/log_service.dart';
 import '../../../playback/domain/playback_domain.dart';
@@ -68,6 +69,11 @@ class CustomVideoControls extends StatefulWidget {
   final ValueChanged<Duration>? onSubtitleDelayChanged;
   final bool subtitleDelaySharedByShow;
 
+  /// 片源的可选版本（原画 / 转码），多于一个时显示画质菜单
+  final List<LinkVariant> variants;
+  final LinkVariant? currentVariant;
+  final ValueChanged<String>? onSelectVariant;
+
   const CustomVideoControls({
     super.key,
     required this.engine,
@@ -99,6 +105,9 @@ class CustomVideoControls extends StatefulWidget {
     this.subtitleDelaySupported,
     this.onSubtitleDelayChanged,
     this.subtitleDelaySharedByShow = false,
+    this.variants = const [],
+    this.currentVariant,
+    this.onSelectVariant,
   });
 
   @override
@@ -1510,6 +1519,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                   children: [
                     if (WindowControls.isDesktop) _buildVolumeControl(),
                     _buildSpeedButton(),
+                    if (widget.variants.length > 1) _buildVariantButton(),
                     _buildFillModeButton(),
                   ],
                 ),
@@ -1614,6 +1624,16 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
           2.0,
           3.0,
         ].where((s) => s <= maxRate).toList();
+    return _buildTextMenuButton(
+      '${_playbackSpeed}x',
+      (menuContext) => _showSpeedMenu(menuContext, speeds),
+    );
+  }
+
+  Widget _buildTextMenuButton(
+    String text,
+    void Function(BuildContext menuContext) onTap,
+  ) {
     final isDesktop = WindowControls.isDesktop;
     return Builder(
       builder:
@@ -1621,7 +1641,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             behavior: HitTestBehavior.opaque,
             onTap: () {
               _hideTimer?.cancel();
-              _showSpeedMenu(menuContext, speeds);
+              onTap(menuContext);
             },
             child: Padding(
               padding: EdgeInsets.only(right: isDesktop ? 0 : 8),
@@ -1631,7 +1651,7 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                 height: PlayerUiMetrics.hit,
                 alignment: isDesktop ? Alignment.center : Alignment.centerLeft,
                 child: Text(
-                  '${_playbackSpeed}x',
+                  text,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: PlayerUiMetrics.speedSize,
@@ -1643,6 +1663,28 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             ),
           ),
     );
+  }
+
+  Widget _buildVariantButton() => _buildTextMenuButton(
+    widget.currentVariant?.label ?? '画质',
+    _showVariantMenu,
+  );
+
+  Future<void> _showVariantMenu(BuildContext context) async {
+    final current = widget.currentVariant?.id;
+    await showPlayerPopoverMenu(context, [
+      [
+        for (final v in widget.variants)
+          PlayerMenuItem.option(
+            v.label,
+            selected: v.id == current,
+            onSelected: () {
+              if (v.id != current) widget.onSelectVariant?.call(v.id);
+            },
+          ),
+      ],
+    ]);
+    if (mounted) _startHideTimer();
   }
 
   Future<void> _showSpeedMenu(BuildContext context, List<double> speeds) async {
