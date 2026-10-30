@@ -1514,21 +1514,25 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
             // 左右两侧控件
             Row(
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (WindowControls.isDesktop) _buildVolumeControl(),
-                    _buildSpeedButton(),
-                    if (widget.variants.length > 1) _buildVariantButton(),
-                    _buildFillModeButton(),
-                  ],
+                Transform.translate(
+                  offset: Offset(-PlayerUiMetrics.toolInset, 0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isDesktop) ...[_buildVolumeControl(), gap],
+                      _buildSpeedButton(),
+                      gap,
+                      if (widget.variants.length > 1) ...[
+                        _buildVariantButton(),
+                        gap,
+                      ],
+                      _buildFillModeButton(),
+                    ],
+                  ),
                 ),
                 const Spacer(),
                 Transform.translate(
-                  offset: Offset(
-                    (PlayerUiMetrics.hit - PlayerUiMetrics.toolIcon) / 2,
-                    0,
-                  ),
+                  offset: Offset(PlayerUiMetrics.toolInset, 0),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1542,13 +1546,15 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
                           _showPlaylistMenu,
                         ),
                       ],
-                      if (isDesktop)
+                      if (isDesktop) ...[
+                        gap,
                         _buildToolButton(
                           widget.isFullscreen
                               ? PlayerGlyphType.fullscreenExit
                               : PlayerGlyphType.fullscreenEnter,
                           widget.onToggleFullscreen,
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -1564,19 +1570,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        GestureDetector(
-          onTap: () {
-            _toggleMute();
-          },
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: PlayerGlyph(
-              _volume == 0
-                  ? PlayerGlyphType.volumeMute
-                  : PlayerGlyphType.volume,
-              size: PlayerUiMetrics.toolIcon,
-            ),
-          ),
+        _buildToolButton(
+          _volume == 0 ? PlayerGlyphType.volumeMute : PlayerGlyphType.volume,
+          _toggleMute,
         ),
         SizedBox(
           width: 80,
@@ -1634,7 +1630,6 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
     String text,
     void Function(BuildContext menuContext) onTap,
   ) {
-    final isDesktop = WindowControls.isDesktop;
     return Builder(
       builder:
           (menuContext) => GestureDetector(
@@ -1643,21 +1638,20 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
               _hideTimer?.cancel();
               onTap(menuContext);
             },
-            child: Padding(
-              padding: EdgeInsets.only(right: isDesktop ? 0 : 8),
-              child: Container(
-                constraints:
-                    isDesktop ? const BoxConstraints(minWidth: 48) : null,
-                height: PlayerUiMetrics.hit,
-                alignment: isDesktop ? Alignment.center : Alignment.centerLeft,
-                child: Text(
-                  text,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: PlayerUiMetrics.speedSize,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+            child: Container(
+              constraints: BoxConstraints(minWidth: PlayerUiMetrics.hit),
+              height: PlayerUiMetrics.hit,
+              padding: EdgeInsets.symmetric(
+                horizontal: PlayerUiMetrics.toolInset,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: PlayerUiMetrics.speedSize,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ),
@@ -1893,6 +1887,9 @@ class _CustomVideoControlsState extends State<CustomVideoControls>
       alignment: alignment,
       padding: EdgeInsets.zero,
       constraints: BoxConstraints.tightFor(width: hit, height: hit),
+      style: const ButtonStyle(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
     );
   }
 

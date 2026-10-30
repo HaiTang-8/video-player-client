@@ -15,6 +15,9 @@ abstract final class PlayerUiMetrics {
 
   static double get hit => WindowControls.isDesktop ? 48 : 44;
 
+  /// 工具按钮内容两侧的留白，文字按钮与图标按钮共用，保证相邻间距一致
+  static double get toolInset => (hit - toolIcon) / 2;
+
   static bool isCompact(BuildContext context) =>
       MediaQuery.sizeOf(context).shortestSide < 600;
 }
